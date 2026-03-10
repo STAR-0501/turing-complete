@@ -1,0 +1,150 @@
+/* 全局样式重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 主容器样式 */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #0a0a0a;
+    color: #00ffff;
+    overflow: hidden;
+    height: 100vh;
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+}
+
+/* 画布样式 */
+#canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+}
+
+/* 工具栏样式 */
+.toolbar {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+}
+
+.toolbar button {
+    background-color: rgba(0, 255, 255, 0.2);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    color: #00ffff;
+    padding: 8px 12px;
+    margin: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.toolbar button:hover {
+    background-color: rgba(0, 255, 255, 0.4);
+}
+
+.toolbar button.active {
+    background-color: rgba(0, 255, 255, 0.6);
+}
+
+/* 元件样式 */
+.element {
+    position: absolute;
+    cursor: move;
+    background-color: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    border-radius: 4px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+}
+
+.input-block {
+    width: 60px;
+    height: 60px;
+}
+
+.output-block {
+    width: 60px;
+    height: 60px;
+}
+
+.gate {
+    width: 80px;
+    height: 60px;
+}
+
+/* 端口样式 */
+.port {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: #00ffff;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.port:hover {
+    box-shadow: 0 0 10px #00ffff;
+}
+
+.port.selected {
+    box-shadow: 0 0 15px #00ffff, 0 0 20px #00ffff;
+}
+
+/* 导线样式 */
+.wire {
+    stroke: #00ffff;
+    stroke-width: 2;
+    fill: none;
+}
+
+.wire.selected {
+    stroke: #ff00ff;
+    stroke-width: 3;
+}
+
+/* 网格样式 - 无限延伸 */
+.grid {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background-image: linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: 0 0;
+    pointer-events: none;
+    transform: translate(0, 0);
+}
+
+/* 状态栏样式 */
+.status-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background-color: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 5px 10px;
+    backdrop-filter: blur(10px);
+    font-size: 12px;
+}
