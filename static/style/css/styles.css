@@ -33,14 +33,20 @@ body {
 /* 工具栏样式 */
 .toolbar {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
     background-color: rgba(0, 255, 255, 0.1);
     border: 1px solid rgba(0, 255, 255, 0.3);
     border-radius: 8px;
     padding: 10px;
     backdrop-filter: blur(10px);
     z-index: 1000;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
 .toolbar button {
@@ -52,6 +58,22 @@ body {
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 60px;
+    text-align: center;
+}
+
+.toolbar button span:first-child {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.toolbar button span:last-child {
+    font-size: 12px;
+    opacity: 0.8;
 }
 
 .toolbar button:hover {

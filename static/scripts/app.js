@@ -42,21 +42,36 @@ async function init() {
     // 从服务器加载电路状态
     await loadFromServer();
     
+    // 初始化历史记录
+    saveState();
+    
     // 事件监听
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
+    // 阻止右键菜单
+    canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
     // 阻止中键默认的滚动行为
     canvas.addEventListener('mousedown', (e) => {
         if (e.button === 1) {
             e.preventDefault();
         }
     });
+    // 添加滚轮缩放功能
+    canvas.addEventListener('wheel', handleWheel);
     window.addEventListener('resize', resizeCanvas);
     
     // 辅助函数：设置工具状态
     function setTool(toolName, buttonId, statusText) {
+        // 取消当前正在放置的元件
+        if (isPlacingElement) {
+            isPlacingElement = false;
+            currentElementToPlace = null;
+        }
+        
         currentTool = toolName;
         document.getElementById('status-bar').textContent = statusText;
         // 重置所有按钮状态
@@ -67,7 +82,32 @@ async function init() {
     // 辅助函数：添加元件
     function addElementButtonHandler(type) {
         return function() {
+            // 取消当前正在放置的元件
+            if (isPlacingElement) {
+                isPlacingElement = false;
+                currentElementToPlace = null;
+            }
+            
             addElement(type);
+            // 保持对应的工具栏按钮高亮
+            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+            switch(type) {
+                case 'AND':
+                    document.getElementById('btn-and').classList.add('active');
+                    break;
+                case 'OR':
+                    document.getElementById('btn-or').classList.add('active');
+                    break;
+                case 'NOT':
+                    document.getElementById('btn-not').classList.add('active');
+                    break;
+                case 'INPUT':
+                    document.getElementById('btn-input').classList.add('active');
+                    break;
+                case 'OUTPUT':
+                    document.getElementById('btn-output').classList.add('active');
+                    break;
+            }
         };
     }
     
@@ -89,6 +129,56 @@ async function init() {
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCircuit);
+    
+    // 添加键盘事件监听器
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // 处理键盘按下事件
+    function handleKeyDown(e) {
+        // 检查是否按下了数字键
+        switch(e.key) {
+            case '1':
+                document.getElementById('btn-select').click();
+                break;
+            case '2':
+                document.getElementById('btn-input-toggle').click();
+                break;
+            case '3':
+                document.getElementById('btn-and').click();
+                break;
+            case '4':
+                document.getElementById('btn-or').click();
+                break;
+            case '5':
+                document.getElementById('btn-not').click();
+                break;
+            case '6':
+                document.getElementById('btn-input').click();
+                break;
+            case '7':
+                document.getElementById('btn-output').click();
+                break;
+            case '8':
+                document.getElementById('btn-delete').click();
+                break;
+            case '9':
+                document.getElementById('btn-clear').click();
+                break;
+            case '0':
+                document.getElementById('btn-grid').click();
+                break;
+            case 'z':
+                if (e.ctrlKey) {
+                    undo();
+                }
+                break;
+            case 'y':
+                if (e.ctrlKey) {
+                    redo();
+                }
+                break;
+        }
+    }
     
     // 保存初始状态
     saveState();
@@ -193,6 +283,25 @@ function handleMouseDown(e) {
         if (mouseX >= element.x && mouseX <= element.x + element.width &&
             mouseY >= element.y && mouseY <= element.y + element.height) {
             
+            // 右键点击删除元素
+            if (e.button === 2) {
+                e.preventDefault(); // 阻止默认的右键菜单
+                e.stopPropagation(); // 阻止事件冒泡
+                // 删除连接到该元件的所有导线
+                wires = wires.filter(wire => 
+                    wire.start.elementId !== element.id && 
+                    wire.end.elementId !== element.id
+                );
+                // 删除元件
+                elements = elements.filter(el => el.id !== element.id);
+                selectedElement = null;
+                saveState();
+                elements = calculateCircuit(elements, wires);
+                document.getElementById('status-bar').textContent = '元件已删除';
+                render(ctx, elements, wires, selectedElement, selectedWire);
+                return;
+            }
+            
             // 中键点击复制元素（auxclick事件，button === 1 表示中键）
             if (e.type === 'auxclick' && e.button === 1) {
                 e.preventDefault(); // 阻止默认的中键行为
@@ -241,6 +350,20 @@ function handleMouseDown(e) {
     // 检查是否点击了导线
     for (const wire of wires) {
         if (isPointOnWire(mouseX, mouseY, wire)) {
+            // 右键点击删除导线
+            if (e.button === 2) {
+                e.preventDefault(); // 阻止默认的右键菜单
+                e.stopPropagation(); // 阻止事件冒泡
+                // 删除导线
+                wires = wires.filter(w => w.id !== wire.id);
+                selectedWire = null;
+                saveState();
+                elements = calculateCircuit(elements, wires);
+                document.getElementById('status-bar').textContent = '导线已删除';
+                render(ctx, elements, wires, selectedElement, selectedWire);
+                return;
+            }
+            
             if (currentTool === 'delete') {
                 // 删除工具：删除导线
                 wires = wires.filter(w => w.id !== wire.id);
@@ -261,14 +384,16 @@ function handleMouseDown(e) {
     }
     
     // 点击空白处
-    if (currentTool === 'select') {
+    if (currentTool === 'select' && e.button === 0) { // 只允许左键拖动屏幕
         // 开始拖动屏幕
         isPanning = true;
         panOffset = { x: mouseX, y: mouseY };
         document.getElementById('status-bar').textContent = '正在拖动屏幕...';
     } else {
+        // 重置所有状态
         selectedElement = null;
         selectedWire = null;
+        isPanning = false;
         document.getElementById('status-bar').textContent = '就绪';
     }
 }
@@ -370,7 +495,7 @@ function handleMouseMove(e) {
             }
             
             // 更新背景位置（与拖动方向相反，产生视差效果）
-            grid.style.backgroundPosition = `${bgX - deltaX}px ${bgY - deltaY}px`;
+            grid.style.backgroundPosition = `${bgX + deltaX}px ${bgY + deltaY}px`;
         }
         
         // 更新偏移量
@@ -666,6 +791,32 @@ function saveToLocalStorage() {
     try {
         localStorage.setItem('circuitElements', JSON.stringify(elements));
         localStorage.setItem('circuitWires', JSON.stringify(wires));
+        
+        // 保存网格大小
+        let gridSize = 20;
+        const grid = document.getElementById('grid');
+        if (grid) {
+            const currentBgSize = getComputedStyle(grid).backgroundSize;
+            const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+            if (sizeMatch) {
+                gridSize = parseInt(sizeMatch[1]);
+            }
+        }
+        localStorage.setItem('circuitGridSize', gridSize);
+        
+        // 保存网格位置（屏幕位置）
+        let gridPosition = { x: 0, y: 0 };
+        if (grid) {
+            const currentBgPos = grid.style.backgroundPosition || '0px 0px';
+            const posMatch = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+            if (posMatch) {
+                gridPosition = {
+                    x: parseFloat(posMatch[1]),
+                    y: parseFloat(posMatch[2])
+                };
+            }
+        }
+        localStorage.setItem('circuitGridPosition', JSON.stringify(gridPosition));
     } catch (error) {
         console.error('保存到本地存储失败:', error);
     }
@@ -676,6 +827,30 @@ function saveToLocalStorage() {
  */
 async function saveToServer() {
     try {
+        // 获取网格大小
+        let gridSize = 20;
+        const grid = document.getElementById('grid');
+        if (grid) {
+            const currentBgSize = getComputedStyle(grid).backgroundSize;
+            const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+            if (sizeMatch) {
+                gridSize = parseInt(sizeMatch[1]);
+            }
+        }
+        
+        // 获取网格背景位置（屏幕位置）
+        let gridPosition = { x: 0, y: 0 };
+        if (grid) {
+            const currentBgPos = grid.style.backgroundPosition || '0px 0px';
+            const posMatch = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+            if (posMatch) {
+                gridPosition = {
+                    x: parseFloat(posMatch[1]),
+                    y: parseFloat(posMatch[2])
+                };
+            }
+        }
+        
         const response = await fetch('http://localhost:5000/api/save-circuit', {
             method: 'POST',
             headers: {
@@ -683,7 +858,9 @@ async function saveToServer() {
             },
             body: JSON.stringify({
                 elements: elements,
-                wires: wires
+                wires: wires,
+                gridSize: gridSize,
+                gridPosition: gridPosition
             })
         });
         const result = await response.json();
@@ -706,6 +883,23 @@ async function loadFromServer() {
         if (result.wires) {
             wires = result.wires;
         }
+        
+        // 加载网格大小
+        if (result.gridSize) {
+            const grid = document.getElementById('grid');
+            if (grid) {
+                grid.style.backgroundSize = `${result.gridSize}px ${result.gridSize}px`;
+            }
+        }
+        
+        // 加载网格位置（屏幕位置）
+        if (result.gridPosition) {
+            const grid = document.getElementById('grid');
+            if (grid) {
+                grid.style.backgroundPosition = `${result.gridPosition.x}px ${result.gridPosition.y}px`;
+            }
+        }
+        
         console.log('从服务器加载:', result);
     } catch (error) {
         console.error('从服务器加载失败:', error);
@@ -726,8 +920,136 @@ function loadFromLocalStorage() {
         if (savedWires) {
             wires = JSON.parse(savedWires);
         }
+        
+        // 加载网格大小
+        const savedGridSize = localStorage.getItem('circuitGridSize');
+        if (savedGridSize) {
+            const grid = document.getElementById('grid');
+            if (grid) {
+                grid.style.backgroundSize = `${parseInt(savedGridSize)}px ${parseInt(savedGridSize)}px`;
+            }
+        }
+        
+        // 加载网格位置（屏幕位置）
+        const savedGridPosition = localStorage.getItem('circuitGridPosition');
+        if (savedGridPosition) {
+            const grid = document.getElementById('grid');
+            if (grid) {
+                const gridPosition = JSON.parse(savedGridPosition);
+                grid.style.backgroundPosition = `${gridPosition.x}px ${gridPosition.y}px`;
+            }
+        }
     } catch (error) {
         console.error('从本地存储加载失败:', error);
+    }
+}
+
+/**
+ * 处理鼠标滚轮事件，实现缩放功能
+ * @param {WheelEvent} e - 鼠标滚轮事件
+ */
+function handleWheel(e) {
+    e.preventDefault();
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 计算缩放因子
+    const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    
+    // 保存当前状态
+    saveState();
+    
+    // 缩放所有元件
+    for (const element of elements) {
+        // 计算元件相对于鼠标的位置
+        const relX = element.x - mouseX;
+        const relY = element.y - mouseY;
+        
+        // 缩放元件位置
+        element.x = mouseX + relX * scaleFactor;
+        element.y = mouseY + relY * scaleFactor;
+        
+        // 缩放元件大小
+        element.width *= scaleFactor;
+        element.height *= scaleFactor;
+        
+        // 缩放端口位置
+        for (const input of element.inputs) {
+            input.x *= scaleFactor;
+            input.y *= scaleFactor;
+        }
+        for (const output of element.outputs) {
+            output.x *= scaleFactor;
+            output.y *= scaleFactor;
+        }
+    }
+    
+    // 缩放所有导线
+    for (const wire of wires) {
+        // 计算导线相对于鼠标的位置
+        const relStartX = wire.start.x - mouseX;
+        const relStartY = wire.start.y - mouseY;
+        const relEndX = wire.end.x - mouseX;
+        const relEndY = wire.end.y - mouseY;
+        
+        // 缩放导线位置
+        wire.start.x = mouseX + relStartX * scaleFactor;
+        wire.start.y = mouseY + relStartY * scaleFactor;
+        wire.end.x = mouseX + relEndX * scaleFactor;
+        wire.end.y = mouseY + relEndY * scaleFactor;
+    }
+    
+    // 缩放临时元素
+    if (currentElementToPlace) {
+        // 计算临时元素相对于鼠标的位置
+        const relX = currentElementToPlace.x - mouseX;
+        const relY = currentElementToPlace.y - mouseY;
+        
+        // 缩放临时元素位置
+        currentElementToPlace.x = mouseX + relX * scaleFactor;
+        currentElementToPlace.y = mouseY + relY * scaleFactor;
+        
+        // 缩放临时元素大小
+        currentElementToPlace.width *= scaleFactor;
+        currentElementToPlace.height *= scaleFactor;
+        
+        // 缩放临时元素端口位置
+        for (const input of currentElementToPlace.inputs) {
+            input.x *= scaleFactor;
+            input.y *= scaleFactor;
+        }
+        for (const output of currentElementToPlace.outputs) {
+            output.x *= scaleFactor;
+            output.y *= scaleFactor;
+        }
+    }
+    
+    // 调整网格大小
+    const grid = document.getElementById('grid');
+    if (grid) {
+        // 获取当前网格大小
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        let gridSize = 20; // 默认网格大小
+        if (sizeMatch) {
+            gridSize = parseInt(sizeMatch[1]);
+        }
+        
+        // 计算新的网格大小
+        const newGridSize = Math.max(5, Math.min(100, gridSize * scaleFactor));
+        
+        // 更新网格大小
+        grid.style.backgroundSize = `${newGridSize}px ${newGridSize}px`;
+    }
+    
+    // 重新渲染
+    render(ctx, elements, wires, selectedElement, selectedWire);
+    
+    // 绘制临时元素
+    if (isPlacingElement && currentElementToPlace) {
+        drawTemporaryElement(ctx, currentElementToPlace);
     }
 }
 

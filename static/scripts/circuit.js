@@ -82,19 +82,21 @@ export function calculateCircuit(elements, wires) {
             if (element.type === 'AND') {
                 // 与门：所有输入为true时输出为true
                 let allTrue = true;
-                let hasInput = false;
+                let allConnected = true;
                 for (const input of element.inputs) {
                     if (hasInputConnection(wires, element.id, input.id)) {
-                        hasInput = true;
                         const inputState = getInputSourceState(elements, wires, element.id, input.id);
                         if (inputState !== true) {
                             allTrue = false;
                             break;
                         }
+                    } else {
+                        allConnected = false;
+                        break;
                     }
                 }
-                // 如果没有输入连接，与门输出false
-                newState = hasInput ? allTrue : false;
+                // 如果不是所有输入都有连接，或有输入为false，与门输出false
+                newState = allConnected && allTrue;
             } else if (element.type === 'OR') {
                 // 或门：任何输入为true时输出为true
                 let anyTrue = false;
@@ -125,8 +127,8 @@ export function calculateCircuit(elements, wires) {
                         }
                     }
                 }
-                // 如果没有输入连接，非门输出true（默认输入为false）
-                newState = hasInput ? !inputTrue : true;
+                // 如果没有输入连接，非门输出false
+                newState = hasInput ? !inputTrue : false;
             } else if (element.type === 'OUTPUT') {
                 // 输出元件：显示输入状态
                 let inputTrue = false;
@@ -148,6 +150,32 @@ export function calculateCircuit(elements, wires) {
                 changed = true;
             }
         }
+    }
+    
+    // 更新导线状态
+    for (const wire of wires) {
+        // 确定导线状态：如果连接的是输出端口，使用源元件的状态
+        let wireState = false;
+        
+        // 查找连接到导线起点的元件
+        const startElement = elements.find(e => e.id === wire.start.elementId);
+        if (startElement) {
+            // 如果起点是输出端口，使用源元件的状态
+            if (!wire.start.isInput) {
+                wireState = startElement.state;
+            }
+        }
+        
+        // 查找连接到导线终点的元件
+        const endElement = elements.find(e => e.id === wire.end.elementId);
+        if (endElement) {
+            // 如果终点是输出端口，使用目标元件的状态
+            if (!wire.end.isInput) {
+                wireState = endElement.state;
+            }
+        }
+        
+        wire.state = wireState;
     }
     
     return elements;
