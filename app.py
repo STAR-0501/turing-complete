@@ -1,6 +1,12 @@
 from flask import Flask, request, jsonify, render_template
 import json
 import os
+import logging
+import sys
+
+# 关闭Flask的HTTP请求日志
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 
@@ -70,5 +76,10 @@ def load_circuit():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"Flask应用启动，电路数据文件路径: {CIRCUIT_DATA_FILE}")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print(f"电路设计应用启动中...")
+    print(f"电路数据文件路径: {CIRCUIT_DATA_FILE}")
+    print(f"打开软件: http://localhost:5000")
+    # 禁用Flask的开发服务器banner
+    cli = sys.modules['flask.cli']
+    cli.show_server_banner = lambda *x: None
+    app.run(debug=False, host='0.0.0.0', port=5000)
