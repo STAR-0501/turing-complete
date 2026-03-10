@@ -193,8 +193,8 @@ function handleMouseDown(e) {
         if (mouseX >= element.x && mouseX <= element.x + element.width &&
             mouseY >= element.y && mouseY <= element.y + element.height) {
             
-            // 中键点击复制元素（button === 1 表示中键）
-            if (e.button === 1 || e.button === 2) {
+            // 中键点击复制元素（auxclick事件，button === 1 表示中键）
+            if (e.type === 'auxclick' && e.button === 1) {
                 e.preventDefault(); // 阻止默认的中键行为
                 e.stopPropagation(); // 阻止事件冒泡
                 console.log('中键点击元素:', element.type);
@@ -547,6 +547,12 @@ function handleMouseUp(e) {
         render(ctx, elements, wires, selectedElement, selectedWire);
     }
     
+    // 如果刚刚完成了拖拽操作，保存状态（记录元素最终位置）
+    if (isDragging) {
+        saveState();
+        document.getElementById('status-bar').textContent = '元素移动完成';
+    }
+    
     isDragging = false;
     
     if (isPanning) {
@@ -594,6 +600,14 @@ function redo() {
         selectedElement = null;
         selectedWire = null;
         document.getElementById('status-bar').textContent = '已重做';
+        
+        // 清除当前索引之后的历史记录（分支历史）
+        history = history.slice(0, historyIndex + 1);
+        
+        // 保存到本地存储和服务器
+        saveToLocalStorage();
+        saveToServer();
+        
         render(ctx, elements, wires, selectedElement, selectedWire);
     }
 }
