@@ -535,33 +535,63 @@ function drawTemporaryElement(ctx, element) {
     switch (element.type) {
         case 'AND':
             // 绘制与门符号
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            // 简化与门：使用更小的尺寸，居中绘制
+            const andCenterX = element.x + element.width / 2;
+            const andCenterY = element.y + element.height / 2;
+            const andSize = Math.min(element.width, element.height) * 0.7;
+            
             ctx.beginPath();
-            ctx.moveTo(element.x + 20, element.y + 10);
-            ctx.lineTo(element.x + 20, element.y + 50);
-            ctx.arc(element.x + 60, element.y + 30, 20, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.moveTo(andCenterX - andSize/2, andCenterY - andSize/3);
+            ctx.lineTo(andCenterX - andSize/2, andCenterY + andSize/3);
+            ctx.arc(andCenterX + andSize/4, andCenterY, andSize/3, Math.PI * 1.5, Math.PI * 0.5);
             ctx.closePath();
             ctx.stroke();
             break;
         case 'OR':
             // 绘制或门符号
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            // 简化或门：使用更小的尺寸，居中绘制
+            const orCenterX = element.x + element.width / 2;
+            const orCenterY = element.y + element.height / 2;
+            const orSize = Math.min(element.width, element.height) * 0.7;
+            
             ctx.beginPath();
-            ctx.moveTo(element.x + 20, element.y + 10);
-            ctx.lineTo(element.x + 20, element.y + 50);
-            ctx.arc(element.x + 60, element.y + 30, 20, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.moveTo(orCenterX - orSize/2, orCenterY - orSize/3);
+            ctx.lineTo(orCenterX - orSize/2, orCenterY + orSize/3);
+            ctx.arc(orCenterX + orSize/4, orCenterY, orSize/3, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.closePath();
             ctx.stroke();
+            // 绘制或门的弯曲输入
             ctx.beginPath();
-            ctx.arc(element.x + 20, element.y + 30, 10, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.arc(orCenterX - orSize/2, orCenterY, orSize/6, Math.PI * 0.5, Math.PI * 1.5);
             ctx.stroke();
             break;
         case 'NOT':
             // 绘制非门符号
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            // 简化非门：使用更小的尺寸，居中绘制
+            const notCenterX = element.x + element.width / 2;
+            const notCenterY = element.y + element.height / 2;
+            const notSize = Math.min(element.width, element.height) * 0.7;
+            
+            // 绘制主体矩形
             ctx.beginPath();
-            ctx.moveTo(element.x + 20, element.y + 10);
-            ctx.lineTo(element.x + 20, element.y + 50);
-            ctx.arc(element.x + 50, element.y + 30, 10, Math.PI * 1.5, Math.PI * 0.5);
-            ctx.lineTo(element.x + 70, element.y + 30);
-            ctx.arc(element.x + 75, element.y + 30, 5, 0, Math.PI * 2);
+            ctx.rect(notCenterX - notSize/3, notCenterY - notSize/4, notSize/2, notSize/2);
             ctx.stroke();
+            // 绘制输出线和圆圈
+            ctx.beginPath();
+            ctx.moveTo(notCenterX + notSize/6, notCenterY);
+            ctx.lineTo(notCenterX + notSize/3, notCenterY);
+            ctx.stroke();
+            // 绘制非门的圆圈
+            ctx.beginPath();
+            ctx.arc(notCenterX + notSize/3 + notSize/12, notCenterY, notSize/12, 0, Math.PI * 2);
+            ctx.fillStyle = '#00ffff';
+            ctx.fill();
             break;
         case 'INPUT':
             // 绘制输入块
