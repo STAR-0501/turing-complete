@@ -930,6 +930,9 @@ async function loadFromServer() {
             }
         }
         
+        // 重新计算电路状态，确保导线颜色正确
+        elements = calculateCircuit(elements, wires);
+        
         console.log('从服务器加载:', result);
     } catch (error) {
         console.error('从服务器加载失败:', error);
@@ -969,6 +972,9 @@ function loadFromLocalStorage() {
                 grid.style.backgroundPosition = `${gridPosition.x}px ${gridPosition.y}px`;
             }
         }
+        
+        // 重新计算电路状态，确保导线颜色正确
+        elements = calculateCircuit(elements, wires);
     } catch (error) {
         console.error('从本地存储加载失败:', error);
     }
