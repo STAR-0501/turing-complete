@@ -1062,7 +1062,7 @@ function handleWheel(e) {
         }
     }
     
-    // 调整网格大小
+    // 调整网格大小和位置
     const grid = document.getElementById('grid');
     if (grid) {
         // 获取当前网格大小
@@ -1076,8 +1076,25 @@ function handleWheel(e) {
         // 计算新的网格大小
         const newGridSize = Math.max(5, Math.min(100, gridSize * scaleFactor));
         
-        // 更新网格大小
+        // 获取当前网格位置
+        const currentBgPos = grid.style.backgroundPosition || '0px 0px';
+        const posMatch = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+        let bgX = 0, bgY = 0;
+        if (posMatch) {
+            bgX = parseFloat(posMatch[1]);
+            bgY = parseFloat(posMatch[2]);
+        }
+        
+        // 计算新的网格位置，确保网格与元件保持对齐
+        // 鼠标位置相对于网格的偏移应该保持不变
+        const gridOffsetX = (mouseX - bgX) / gridSize;
+        const gridOffsetY = (mouseY - bgY) / gridSize;
+        const newBgX = mouseX - gridOffsetX * newGridSize;
+        const newBgY = mouseY - gridOffsetY * newGridSize;
+        
+        // 更新网格大小和位置
         grid.style.backgroundSize = `${newGridSize}px ${newGridSize}px`;
+        grid.style.backgroundPosition = `${newBgX}px ${newBgY}px`;
     }
     
     // 重新渲染
