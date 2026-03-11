@@ -639,6 +639,12 @@ function handleMouseUp(e) {
         isPlacingElement = false;
         currentElementToPlace = null;
         document.getElementById('status-bar').textContent = '元件放置成功';
+        
+        // 切换回选择工具状态
+        currentTool = 'select';
+        document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('btn-1').classList.add('active');
+        
         render(ctx, elements, wires, selectedElement, selectedWire);
         return;
     }

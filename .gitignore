@@ -1,0 +1,5 @@
+circuit_data.json
+build/
+dist/
+venv/
+.venv/
