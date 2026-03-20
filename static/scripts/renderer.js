@@ -10,8 +10,13 @@
  * @param {Array} wires - 导线数组
  * @param {object} selectedElement - 选中的元件
  * @param {object} selectedWire - 选中的导线
+ * @param {object} selectionRect - 框选矩形
+ * @param {Array} selectedElements - 多选状态下的选中元件数组
+ * @param {Array} clipboardElements - 剪贴板中的元件（粘贴预览）
+ * @param {object} pasteOffset - 粘贴位置偏移量
+ * @param {boolean} isPasting - 是否正在粘贴模式
  */
-export function render(ctx, elements, wires, selectedElement, selectedWire) {
+export function render(ctx, elements, wires, selectedElement, selectedWire, selectionRect = null, selectedElements = [], clipboardElements = [], pasteOffset = null, isPasting = false) {
     // 清空画布
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     
@@ -46,14 +51,35 @@ export function render(ctx, elements, wires, selectedElement, selectedWire) {
         const elementState = element.state || false;
         const elementColor = elementState ? '#00ff00' : '#ff0000';
         
+        // 检查是否被多选选中
+        const isMultiSelected = selectedElements.includes(element);
+        
         // 绘制元件背景
-        ctx.fillStyle = `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.1)`;
-        ctx.strokeStyle = elementColor;
-        ctx.lineWidth = 1;
+        if (isMultiSelected) {
+            // 多选高亮 - 使用青色边框
+            ctx.fillStyle = `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.2)`;
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 3;
+        } else {
+            ctx.fillStyle = `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.1)`;
+            ctx.strokeStyle = elementColor;
+            ctx.lineWidth = 1;
+        }
         ctx.beginPath();
         ctx.rect(element.x, element.y, element.width, element.height);
         ctx.fill();
         ctx.stroke();
+        
+        // 如果是多选选中，绘制额外的选中标记
+        if (isMultiSelected) {
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.rect(element.x - 3, element.y - 3, element.width + 6, element.height + 6);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
         
         // 绘制元件符号
         ctx.fillStyle = elementColor;
@@ -152,5 +178,141 @@ export function render(ctx, elements, wires, selectedElement, selectedWire) {
             ctx.arc(portX, portY, 5, 0, Math.PI * 2);
             ctx.fill();
         }
+    }
+    
+    // 绘制框选矩形
+    if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height);
+        ctx.setLineDash([]);
+        
+        // 填充半透明背景
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+        ctx.fillRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height);
+    }
+    
+    // 绘制粘贴预览
+    if (isPasting && clipboardElements.length > 0 && pasteOffset) {
+        // 获取当前缩放比例
+        let gridSize = 20;
+        const grid = document.getElementById('grid');
+        if (grid) {
+            const currentBgSize = getComputedStyle(grid).backgroundSize;
+            const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+            if (sizeMatch) {
+                gridSize = parseInt(sizeMatch[1]);
+            }
+        }
+        const currentScale = gridSize / 20;
+        
+        for (const template of clipboardElements) {
+            // 计算缩放比例
+            const copyScale = template._scaleFactor || 1;
+            const scaleRatio = currentScale / copyScale;
+            
+            const x = pasteOffset.x + template._copyOffsetX * scaleRatio;
+            const y = pasteOffset.y + template._copyOffsetY * scaleRatio;
+            const width = template.width * scaleRatio;
+            const height = template.height * scaleRatio;
+            
+            // 绘制预览元件（半透明虚线）
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            // 绘制元件背景
+            ctx.beginPath();
+            ctx.rect(x, y, width, height);
+            ctx.fill();
+            ctx.stroke();
+            
+            // 绘制元件符号
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+            ctx.font = `${14 * scaleRatio}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            switch (template.type) {
+                case 'AND':
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.lineWidth = 2;
+                    const andCenterX = x + width / 2;
+                    const andCenterY = y + height / 2;
+                    const andSize = Math.min(width, height) * 0.7;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(andCenterX - andSize/2, andCenterY - andSize/3);
+                    ctx.lineTo(andCenterX - andSize/2, andCenterY + andSize/3);
+                    ctx.arc(andCenterX + andSize/4, andCenterY, andSize/3, Math.PI * 1.5, Math.PI * 0.5);
+                    ctx.closePath();
+                    ctx.stroke();
+                    break;
+                case 'OR':
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.lineWidth = 2;
+                    const orCenterX = x + width / 2;
+                    const orCenterY = y + height / 2;
+                    const orSize = Math.min(width, height) * 0.7;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(orCenterX - orSize/2, orCenterY - orSize/3);
+                    ctx.lineTo(orCenterX - orSize/2, orCenterY + orSize/3);
+                    ctx.arc(orCenterX + orSize/4, orCenterY, orSize/3, Math.PI * 1.5, Math.PI * 0.5);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(orCenterX - orSize/2, orCenterY, orSize/6, Math.PI * 0.5, Math.PI * 1.5);
+                    ctx.stroke();
+                    break;
+                case 'NOT':
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.lineWidth = 2;
+                    const notCenterX = x + width / 2;
+                    const notCenterY = y + height / 2;
+                    const notSize = Math.min(width, height) * 0.7;
+                    
+                    ctx.beginPath();
+                    ctx.rect(notCenterX - notSize/3, notCenterY - notSize/4, notSize/2, notSize/2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(notCenterX + notSize/6, notCenterY);
+                    ctx.lineTo(notCenterX + notSize/3, notCenterY);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(notCenterX + notSize/3 + notSize/12, notCenterY, notSize/12, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.fill();
+                    break;
+                case 'INPUT':
+                    ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+                    break;
+                case 'OUTPUT':
+                    ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+                    break;
+            }
+            
+            // 绘制端口
+            for (const input of template.inputs) {
+                const portX = x + input.x * scaleRatio;
+                const portY = y + input.y * scaleRatio;
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                ctx.beginPath();
+                ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            for (const output of template.outputs) {
+                const portX = x + output.x * scaleRatio;
+                const portY = y + output.y * scaleRatio;
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                ctx.beginPath();
+                ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.setLineDash([]);
     }
 }
