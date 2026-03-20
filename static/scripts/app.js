@@ -13,6 +13,7 @@ let elements = [];
 let wires = [];
 let selectedElement = null;
 let selectedWire = null;
+let selectedElements = []; // 多选状态下的选中元件数组
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 let isDrawingWire = false;
@@ -28,6 +29,22 @@ let isPanning = false;
 let panOffset = { x: 0, y: 0 };
 let canvasOffset = { x: 0, y: 0 };
 
+// 框选相关变量
+let isSelecting = false; // 是否正在进行框选
+let selectionStart = { x: 0, y: 0 }; // 框选起始位置
+let selectionEnd = { x: 0, y: 0 }; // 框选结束位置
+
+// 复制粘贴相关变量
+let clipboardElements = []; // 剪贴板中的元件
+let clipboardWires = []; // 剪贴板中的导线
+let isPasting = false; // 是否正在粘贴模式
+let pasteOffset = { x: 0, y: 0 }; // 粘贴偏移量
+
+// 集体拖动相关变量
+let isGroupDragging = false; // 是否正在集体拖动
+let groupDragStart = { x: 0, y: 0 }; // 集体拖动起始位置
+let groupDragOffsets = []; // 每个元件的拖动偏移量
+
 /**
  * 初始化应用
  */
@@ -36,7 +53,7 @@ async function init() {
     ctx = canvas.getContext('2d');
     resizeCanvas();
     
-    // 从本地存储加载电路状态
+    // 从本地存储加载电路状态          
     loadFromLocalStorage();
     
     // 从服务器加载电路状态
@@ -49,6 +66,7 @@ async function init() {
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
     // 阻止右键菜单
     canvas.addEventListener('contextmenu', (e) => {
@@ -135,6 +153,33 @@ async function init() {
     
     // 处理键盘按下事件
     function handleKeyDown(e) {
+        // Ctrl+D 删除选中的元件
+        if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+            e.preventDefault();
+            deleteSelected();
+            return;
+        }
+        
+        // Ctrl+C 复制选中的元件
+        if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            copySelected();
+            return;
+        }
+        
+        // Ctrl+V 粘贴元件
+        if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+            e.preventDefault();
+            startPaste();
+            return;
+        }
+        
+        // Esc 取消粘贴模式
+        if (e.key === 'Escape') {
+            cancelPaste();
+            return;
+        }
+        
         // 检查是否按下了数字键
         switch(e.key) {
             case '1':
@@ -250,6 +295,12 @@ function handleMouseDown(e) {
         return;
     }
     
+    // 如果正在粘贴模式，左键点击执行粘贴
+    if (isPasting && e.button === 0) {
+        executePaste();
+        return;
+    }
+    
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -283,22 +334,16 @@ function handleMouseDown(e) {
         if (mouseX >= element.x && mouseX <= element.x + element.width &&
             mouseY >= element.y && mouseY <= element.y + element.height) {
             
-            // 右键点击删除元素
+            console.log('点击元件: button=', e.button, 'type=', e.type);
+            
+            // 右键点击元件 - 开始拖动屏幕
             if (e.button === 2) {
                 e.preventDefault(); // 阻止默认的右键菜单
-                e.stopPropagation(); // 阻止事件冒泡
-                // 删除连接到该元件的所有导线
-                wires = wires.filter(wire => 
-                    wire.start.elementId !== element.id && 
-                    wire.end.elementId !== element.id
-                );
-                // 删除元件
-                elements = elements.filter(el => el.id !== element.id);
-                selectedElement = null;
-                saveState();
-                elements = calculateCircuit(elements, wires);
-                document.getElementById('status-bar').textContent = '元件已删除';
-                render(ctx, elements, wires, selectedElement, selectedWire);
+                // 开始拖动屏幕
+                isPanning = true;
+                panOffset = { x: mouseX, y: mouseY };
+                document.getElementById('status-bar').textContent = '正在拖动屏幕...';
+                console.log('右键点击元件, 设置 isPanning=true');
                 return;
             }
             
@@ -336,12 +381,28 @@ function handleMouseDown(e) {
                 return;
             } else {
                 // 选择工具：选择并准备拖拽
-                selectedElement = element;
-                selectedWire = null;
-                dragOffset.x = mouseX - element.x;
-                dragOffset.y = mouseY - element.y;
-                isDragging = true;
-                document.getElementById('status-bar').textContent = `选中元件: ${element.type}`;
+                // 检查是否点击了已选中的多选元件之一
+                if (selectedElements.length > 1 && selectedElements.includes(element)) {
+                    // 开始集体拖动
+                    isGroupDragging = true;
+                    groupDragStart = { x: mouseX, y: mouseY };
+                    groupDragOffsets = selectedElements.map(el => ({
+                        element: el,
+                        offsetX: mouseX - el.x,
+                        offsetY: mouseY - el.y
+                    }));
+                    document.getElementById('status-bar').textContent = `集体拖动 ${selectedElements.length} 个元件`;
+                } else {
+                    // 单选模式
+                    selectedElement = element;
+                    selectedWire = null;
+                    selectedElements = []; // 清除多选状态
+                    dragOffset.x = mouseX - element.x;
+                    dragOffset.y = mouseY - element.y;
+                    isDragging = true;
+                    document.getElementById('status-bar').textContent = `选中元件: ${element.type}`;
+                }
+                render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
                 return;
             }
         }
@@ -350,17 +411,13 @@ function handleMouseDown(e) {
     // 检查是否点击了导线
     for (const wire of wires) {
         if (isPointOnWire(mouseX, mouseY, wire)) {
-            // 右键点击删除导线
+            // 右键点击导线 - 开始拖动屏幕
             if (e.button === 2) {
                 e.preventDefault(); // 阻止默认的右键菜单
-                e.stopPropagation(); // 阻止事件冒泡
-                // 删除导线
-                wires = wires.filter(w => w.id !== wire.id);
-                selectedWire = null;
-                saveState();
-                elements = calculateCircuit(elements, wires);
-                document.getElementById('status-bar').textContent = '导线已删除';
-                render(ctx, elements, wires, selectedElement, selectedWire);
+                // 开始拖动屏幕
+                isPanning = true;
+                panOffset = { x: mouseX, y: mouseY };
+                document.getElementById('status-bar').textContent = '正在拖动屏幕...';
                 return;
             }
             
@@ -384,16 +441,33 @@ function handleMouseDown(e) {
     }
     
     // 点击空白处
-    if (currentTool === 'select' && e.button === 0) { // 只允许左键拖动屏幕
+    console.log('点击空白处: currentTool=', currentTool, 'button=', e.button);
+    if (currentTool === 'select' && e.button === 0) { // 左键 - 框选
+        // 开始框选
+        isSelecting = true;
+        isPanning = false; // 确保不会同时触发
+        selectionStart = { x: mouseX, y: mouseY };
+        selectionEnd = { x: mouseX, y: mouseY };
+        // 清除之前的单选状态
+        selectedElement = null;
+        selectedWire = null;
+        selectedElements = [];
+        document.getElementById('status-bar').textContent = '框选模式：拖动鼠标选择多个元件';
+        console.log('开始框选, isSelecting=', isSelecting);
+    } else if (currentTool === 'select' && e.button === 2) { // 右键 - 拖动屏幕
         // 开始拖动屏幕
         isPanning = true;
+        isSelecting = false; // 确保不会同时触发
         panOffset = { x: mouseX, y: mouseY };
         document.getElementById('status-bar').textContent = '正在拖动屏幕...';
+        console.log('开始拖动屏幕, isPanning=', isPanning);
     } else {
         // 重置所有状态
         selectedElement = null;
         selectedWire = null;
+        selectedElements = [];
         isPanning = false;
+        isSelecting = false;
         document.getElementById('status-bar').textContent = '就绪';
     }
 }
@@ -407,6 +481,54 @@ function handleMouseMove(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     mousePos = { x: mouseX, y: mouseY };
+    
+    // 更新框选区域
+    if (isSelecting) {
+        selectionEnd = { x: mouseX, y: mouseY };
+        updateSelection();
+        render(ctx, elements, wires, selectedElement, selectedWire, getSelectionRect(), selectedElements);
+        return;
+    }
+    
+    // 处理集体拖动
+    if (isGroupDragging && selectedElements.length > 0) {
+        for (const item of groupDragOffsets) {
+            const el = item.element;
+            el.x = mouseX - item.offsetX;
+            el.y = mouseY - item.offsetY;
+            
+            // 更新连接到该元件的导线
+            for (const wire of wires) {
+                if (wire.start.elementId === el.id) {
+                    const port = wire.start.isInput ? 
+                        el.inputs.find(p => p.id === wire.start.portId) :
+                        el.outputs.find(p => p.id === wire.start.portId);
+                    if (port) {
+                        wire.start.x = el.x + port.x;
+                        wire.start.y = el.y + port.y;
+                    }
+                }
+                if (wire.end.elementId === el.id) {
+                    const port = wire.end.isInput ? 
+                        el.inputs.find(p => p.id === wire.end.portId) :
+                        el.outputs.find(p => p.id === wire.end.portId);
+                    if (port) {
+                        wire.end.x = el.x + port.x;
+                        wire.end.y = el.y + port.y;
+                    }
+                }
+            }
+        }
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        return;
+    }
+    
+    // 更新粘贴预览位置
+    if (isPasting) {
+        pasteOffset = { x: mouseX, y: mouseY };
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+        return;
+    }
     
     if (isDragging && selectedElement) {
         selectedElement.x = mouseX - dragOffset.x;
@@ -624,6 +746,282 @@ function drawTemporaryElement(ctx, element) {
 }
 
 /**
+ * 获取框选矩形
+ * @returns {object|null} 框选矩形或null
+ */
+function getSelectionRect() {
+    if (!isSelecting) return null;
+    return {
+        x: Math.min(selectionStart.x, selectionEnd.x),
+        y: Math.min(selectionStart.y, selectionEnd.y),
+        width: Math.abs(selectionEnd.x - selectionStart.x),
+        height: Math.abs(selectionEnd.y - selectionStart.y)
+    };
+}
+
+/**
+ * 更新选中的元件列表
+ */
+function updateSelection() {
+    const rect = getSelectionRect();
+    if (!rect || rect.width < 5 || rect.height < 5) return; // 太小的框选忽略
+    
+    selectedElements = [];
+    for (const element of elements) {
+        // 检查元件是否在框选区域内
+        const elementCenterX = element.x + element.width / 2;
+        const elementCenterY = element.y + element.height / 2;
+        
+        if (elementCenterX >= rect.x && 
+            elementCenterX <= rect.x + rect.width &&
+            elementCenterY >= rect.y && 
+            elementCenterY <= rect.y + rect.height) {
+            selectedElements.push(element);
+        }
+    }
+}
+
+/**
+ * 删除选中的元件和导线
+ */
+function deleteSelected() {
+    if (selectedElements.length === 0) return;
+    
+    const elementIds = selectedElements.map(el => el.id);
+    
+    // 删除连接到选中元件的所有导线
+    wires = wires.filter(wire => 
+        !elementIds.includes(wire.start.elementId) && 
+        !elementIds.includes(wire.end.elementId)
+    );
+    
+    // 删除选中的元件
+    elements = elements.filter(el => !elementIds.includes(el.id));
+    
+    // 清除选中状态
+    selectedElements = [];
+    selectedElement = null;
+    selectedWire = null;
+    
+    saveState();
+    elements = calculateCircuit(elements, wires);
+    document.getElementById('status-bar').textContent = `已删除 ${elementIds.length} 个元件`;
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+}
+
+/**
+ * 复制选中的元件到剪贴板
+ */
+function copySelected() {
+    if (selectedElements.length === 0) {
+        document.getElementById('status-bar').textContent = '没有选中的元件可复制';
+        return;
+    }
+    
+    // 获取当前网格大小作为缩放参考
+    let gridSize = 20;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            gridSize = parseInt(sizeMatch[1]);
+        }
+    }
+    const scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
+    
+    // 深拷贝选中的元件
+    clipboardElements = selectedElements.map(el => ({
+        ...el,
+        _originalId: el.id, // 保存原始ID用于导线映射
+        id: generateId(), // 生成新ID
+        inputs: el.inputs.map(input => ({ ...input })),
+        outputs: el.outputs.map(output => ({ ...output }))
+    }));
+    
+    // 复制选中元件之间的导线
+    const selectedIds = selectedElements.map(el => el.id);
+    clipboardWires = wires.filter(wire => 
+        selectedIds.includes(wire.start.elementId) && 
+        selectedIds.includes(wire.end.elementId)
+    ).map(wire => ({
+        ...wire,
+        id: generateId(),
+        start: { ...wire.start },
+        end: { ...wire.end }
+    }));
+    
+    // 计算选中元件的中心点
+    const centerX = selectedElements.reduce((sum, el) => sum + el.x + el.width / 2, 0) / selectedElements.length;
+    const centerY = selectedElements.reduce((sum, el) => sum + el.y + el.height / 2, 0) / selectedElements.length;
+    
+    // 保存相对偏移量和缩放比例
+    clipboardElements.forEach(el => {
+        el._copyOffsetX = el.x - centerX;
+        el._copyOffsetY = el.y - centerY;
+        el._scaleFactor = scaleFactor;
+    });
+    
+    document.getElementById('status-bar').textContent = `已复制 ${clipboardElements.length} 个元件和 ${clipboardWires.length} 条导线，按 Ctrl+V 粘贴`;
+}
+
+/**
+ * 开始粘贴模式
+ */
+function startPaste() {
+    if (clipboardElements.length === 0) {
+        document.getElementById('status-bar').textContent = '剪贴板为空，先复制一些元件';
+        return;
+    }
+    
+    isPasting = true;
+    pasteOffset = { x: mousePos.x, y: mousePos.y };
+    document.getElementById('status-bar').textContent = '粘贴模式：点击鼠标左键放置，按 Esc 取消';
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+}
+
+/**
+ * 执行粘贴
+ */
+function executePaste() {
+    if (!isPasting || clipboardElements.length === 0) return;
+    
+    // 获取当前缩放比例
+    let gridSize = 20;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            gridSize = parseInt(sizeMatch[1]);
+        }
+    }
+    const currentScale = gridSize / 20;
+    
+    const newElements = [];
+    const idMapping = {}; // 旧ID到新ID的映射
+    
+    // 创建新元件
+    for (const template of clipboardElements) {
+        const newElement = createElement(template.type, 0, 0);
+        if (newElement) {
+            // 计算缩放比例（当前缩放 / 复制时的缩放）
+            const copyScale = template._scaleFactor || 1;
+            const scaleRatio = currentScale / copyScale;
+            
+            // 复制属性，应用缩放
+            newElement.x = pasteOffset.x + template._copyOffsetX * scaleRatio;
+            newElement.y = pasteOffset.y + template._copyOffsetY * scaleRatio;
+            newElement.state = template.state;
+            
+            // 缩放元件大小
+            newElement.width = template.width * scaleRatio;
+            newElement.height = template.height * scaleRatio;
+            
+            // 缩放端口位置
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                if (template.inputs[i]) {
+                    newElement.inputs[i].x = template.inputs[i].x * scaleRatio;
+                    newElement.inputs[i].y = template.inputs[i].y * scaleRatio;
+                }
+            }
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                if (template.outputs[i]) {
+                    newElement.outputs[i].x = template.outputs[i].x * scaleRatio;
+                    newElement.outputs[i].y = template.outputs[i].y * scaleRatio;
+                }
+            }
+            
+            // 保存ID映射（用于后续连接导线）
+            idMapping[template._originalId] = newElement.id;
+            
+            elements.push(newElement);
+            newElements.push(newElement);
+        }
+    }
+    
+    // 创建导线连接
+    for (const wireTemplate of clipboardWires) {
+        const newStartElementId = idMapping[wireTemplate.start.elementId];
+        const newEndElementId = idMapping[wireTemplate.end.elementId];
+        
+        if (newStartElementId && newEndElementId) {
+            // 找到对应的元件
+            const startElement = newElements.find(el => el.id === newStartElementId);
+            const endElement = newElements.find(el => el.id === newEndElementId);
+            
+            if (startElement && endElement) {
+                // 通过索引找到对应的端口（createElement创建的端口ID不同，但索引相同）
+                const startElementTemplate = clipboardElements.find(el => el._originalId === wireTemplate.start.elementId);
+                const endElementTemplate = clipboardElements.find(el => el._originalId === wireTemplate.end.elementId);
+                
+                if (startElementTemplate && endElementTemplate) {
+                    // 找到端口索引
+                    const startPortIndex = wireTemplate.start.isInput ?
+                        startElementTemplate.inputs.findIndex(p => p.id === wireTemplate.start.portId) :
+                        startElementTemplate.outputs.findIndex(p => p.id === wireTemplate.start.portId);
+                    const endPortIndex = wireTemplate.end.isInput ?
+                        endElementTemplate.inputs.findIndex(p => p.id === wireTemplate.end.portId) :
+                        endElementTemplate.outputs.findIndex(p => p.id === wireTemplate.end.portId);
+                    
+                    // 通过索引获取新元件的端口
+                    const startPort = wireTemplate.start.isInput ?
+                        startElement.inputs[startPortIndex] :
+                        startElement.outputs[startPortIndex];
+                    const endPort = wireTemplate.end.isInput ?
+                        endElement.inputs[endPortIndex] :
+                        endElement.outputs[endPortIndex];
+                    
+                    if (startPort && endPort) {
+                        const newWire = {
+                            id: generateId(),
+                            start: {
+                                elementId: newStartElementId,
+                                portId: startPort.id,
+                                x: startElement.x + startPort.x,
+                                y: startElement.y + startPort.y,
+                                isInput: wireTemplate.start.isInput
+                            },
+                            end: {
+                                elementId: newEndElementId,
+                                portId: endPort.id,
+                                x: endElement.x + endPort.x,
+                                y: endElement.y + endPort.y,
+                                isInput: wireTemplate.end.isInput
+                            },
+                            state: wireTemplate.state
+                        };
+                        wires.push(newWire);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 清除选中状态，选中新粘贴的元件
+    selectedElements = newElements;
+    selectedElement = null;
+    selectedWire = null;
+    
+    isPasting = false;
+    saveState();
+    elements = calculateCircuit(elements, wires);
+    document.getElementById('status-bar').textContent = `已粘贴 ${newElements.length} 个元件和 ${clipboardWires.length} 条导线`;
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+}
+
+/**
+ * 取消粘贴模式
+ */
+function cancelPaste() {
+    if (isPasting) {
+        isPasting = false;
+        document.getElementById('status-bar').textContent = '已取消粘贴';
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+    }
+}
+
+/**
  * 处理鼠标释放事件
  * @param {MouseEvent} e - 鼠标事件
  */
@@ -631,6 +1029,54 @@ function handleMouseUp(e) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
+    
+    console.log('鼠标释放: button=', e.button, 'isPanning=', isPanning);
+    
+    // 处理右键释放 - 结束拖动屏幕
+    if (e.button === 2) {
+        console.log('检测到右键释放, isPanning=', isPanning);
+        if (isPanning) {
+            isPanning = false;
+            saveState();
+            document.getElementById('status-bar').textContent = '屏幕拖动完成';
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        }
+        return;
+    }
+    
+    // 处理左键释放 - 处理框选结束、单选拖动结束、集体拖动结束
+    if (e.button === 0) {
+        // 处理框选结束
+        if (isSelecting) {
+            isSelecting = false;
+            const rect = getSelectionRect();
+            if (rect && rect.width >= 5 && rect.height >= 5) {
+                updateSelection();
+                if (selectedElements.length > 0) {
+                    document.getElementById('status-bar').textContent = `已选中 ${selectedElements.length} 个元件，按 Ctrl+D 删除，Ctrl+C 复制`;
+                } else {
+                    document.getElementById('status-bar').textContent = '就绪';
+                }
+            }
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        }
+        
+        // 处理单选拖动结束
+        if (isDragging) {
+            saveState();
+            document.getElementById('status-bar').textContent = '元素移动完成';
+            isDragging = false;
+        }
+        
+        // 处理集体拖动结束
+        if (isGroupDragging) {
+            isGroupDragging = false;
+            saveState();
+            document.getElementById('status-bar').textContent = `集体移动完成，共 ${selectedElements.length} 个元件`;
+        }
+        
+        return;
+    }
     
     if (isPlacingElement && currentElementToPlace) {
         // 放置元素
@@ -706,20 +1152,6 @@ function handleMouseUp(e) {
         wireStart = null;
         document.getElementById('status-bar').textContent = '取消绘制导线';
         render(ctx, elements, wires, selectedElement, selectedWire);
-    }
-    
-    // 如果刚刚完成了拖拽操作，保存状态（记录元素最终位置）
-    if (isDragging) {
-        saveState();
-        document.getElementById('status-bar').textContent = '元素移动完成';
-    }
-    
-    isDragging = false;
-    
-    if (isPanning) {
-        isPanning = false;
-        saveState();
-        document.getElementById('status-bar').textContent = '屏幕拖动完成';
     }
 }
 
