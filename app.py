@@ -117,6 +117,107 @@ def execute_circuit_command(cmd, params):
     else:
         raise ValueError(f'Unknown command: {cmd}')
 
+def _parse_commands_payload(commands_str):
+    content = commands_str.strip()
+    if content.startswith("```"):
+        content = re.sub(r'^```(?:json)?\s*', '', content, flags=re.IGNORECASE)
+        content = re.sub(r'\s*```$', '', content)
+        content = content.strip()
+    parsed = json.loads(content)
+    if isinstance(parsed, dict):
+        return [parsed]
+    if isinstance(parsed, list):
+        return parsed
+    raise ValueError("commands payload must be a JSON object or array")
+
+def _resolve_element_ref(value, alias_map):
+    if not isinstance(value, str):
+        return value
+    if value in alias_map:
+        return alias_map[value]
+    if value.startswith("$") and value[1:] in alias_map:
+        return alias_map[value[1:]]
+    return value
+
+def _execute_commands_with_alias(commands):
+    alias_map = {}
+    last_element_id = None
+    for cmd_data in commands:
+        cmd = cmd_data.get('command')
+        params = dict(cmd_data.get('params', {}) or {})
+
+        if cmd == 'add_element':
+            alias = params.pop('alias', None) or params.pop('ref', None) or params.pop('name', None)
+            result = execute_circuit_command(cmd, params)
+            if isinstance(result, dict) and result.get('id'):
+                last_element_id = result['id']
+                alias_map['$last'] = last_element_id
+                # 即使没有显式提供 alias，我们也允许用它的 type 作为默认 alias，这样诸如 from_ref: "INPUT" 就能被解析
+                # 但如果有多个同类型的，后创建的会覆盖前面的，AI如果能提供具体alias更好
+                if not alias:
+                    alias = params.get('type')
+                if alias:
+                    alias_map[alias] = last_element_id
+                    alias_map[f'${alias}'] = last_element_id
+            continue
+
+        if cmd == 'add_wire':
+            from_ref = params.pop('from_ref', None) or params.pop('from_alias', None)
+            to_ref = params.pop('to_ref', None) or params.pop('to_alias', None)
+
+            if from_ref and not params.get('from_id'):
+                params['from_id'] = _resolve_element_ref(from_ref, alias_map)
+            else:
+                params['from_id'] = _resolve_element_ref(params.get('from_id'), alias_map)
+
+            if to_ref and not params.get('to_id'):
+                params['to_id'] = _resolve_element_ref(to_ref, alias_map)
+            else:
+                params['to_id'] = _resolve_element_ref(params.get('to_id'), alias_map)
+
+            if params.get('from_id') == '$last' and last_element_id:
+                params['from_id'] = last_element_id
+            if params.get('to_id') == '$last' and last_element_id:
+                params['to_id'] = last_element_id
+
+            execute_circuit_command(cmd, params)
+            continue
+
+        execute_circuit_command(cmd, params)
+
+def _build_compact_state(state):
+    elements = state.get('elements', [])
+    wires = state.get('wires', [])
+    compact_elements = []
+    for e in elements:
+        compact_elements.append({
+            'id': e.get('id'),
+            'type': e.get('type'),
+            'x': e.get('x'),
+            'y': e.get('y'),
+            'inputs': len(e.get('inputs', [])),
+            'outputs': len(e.get('outputs', [])),
+            'state': e.get('state', False)
+        })
+    compact_wires = []
+    for w in wires:
+        if 'start' in w and 'end' in w:
+            compact_wires.append({
+                'id': w.get('id'),
+                'from': w.get('start', {}).get('elementId'),
+                'to': w.get('end', {}).get('elementId')
+            })
+        elif 'from' in w and 'to' in w:
+            compact_wires.append({
+                'id': w.get('id'),
+                'from': w.get('from', {}).get('elementId'),
+                'to': w.get('to', {}).get('elementId')
+            })
+    return {
+        'elements': compact_elements,
+        'wires': compact_wires
+    }
+
 def call_llm_stream(user_message):
     """
     调用大语言模型 API，流式返回
@@ -126,26 +227,30 @@ def call_llm_stream(user_message):
         return
 
     current_state = circuit_manager.get_state()
+    compact_state = _build_compact_state(current_state)
+    compact_state_json = json.dumps(compact_state, ensure_ascii=False, separators=(',', ':'))
     system_prompt = """你是一个电路模拟器助手。你可以通过调用指令来操作电路。
     
 可用指令集 (JSON 格式):
-1. {"command": "add_element", "params": {"type": "AND|OR|NOT|INPUT|OUTPUT", "x": number, "y": number}}
+1. {"command": "add_element", "params": {"type": "AND|OR|NOT|INPUT|OUTPUT", "x": number, "y": number, "alias": "可选别名"}}
 2. {"command": "add_wire", "params": {"from_id": string, "from_port_idx": number, "to_id": string, "to_port_idx": number}}
+   或 {"command": "add_wire", "params": {"from_ref": "别名", "from_port_idx": number, "to_ref": "别名", "to_port_idx": number}}
 3. {"command": "remove_element", "params": {"id": string}}
 4. {"command": "clear_circuit", "params": {}}
 5. {"command": "toggle_input", "params": {"id": string}}
 
 当前电路状态:
-""" + json.dumps(current_state) + """
+""" + compact_state_json + """
 
 请根据用户需求进行操作。
 **回复格式要求**:
-1. 先直接输出你对用户说的话（回复文字）。
+1. 先直接输出你对用户说的话（回复文字，尽量1句）。
 2. 在回复的最后，用 <commands>[JSON_LIST]</commands> 标签包含你要执行的指令列表。
 示例:
 好的，为您添加了一个与门。<commands>[{"command": "add_element", "params": {"type": "AND", "x": 100, "y": 100}}]</commands>
 
-注意：确保指令 JSON 格式完全正确。只在最后输出一次 <commands> 标签。"""
+注意：确保指令 JSON 格式完全正确。只在最后输出一次 <commands> 标签。
+优先输出最少必要文字，避免冗长解释。"""
 
     try:
         response = requests.post(
@@ -160,7 +265,8 @@ def call_llm_stream(user_message):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
                 ],
-                "temperature": 0.7,
+                "temperature": 0.2,
+                "max_tokens": 500,
                 "stream": True
             },
             timeout=30,
@@ -168,6 +274,7 @@ def call_llm_stream(user_message):
         )
         
         full_content = ""
+        commands_executed = False
         for line in response.iter_lines():
             if line:
                 line_str = line.decode('utf-8')
@@ -181,21 +288,36 @@ def call_llm_stream(user_message):
                         chunk_text = chunk_json['choices'][0]['delta'].get('content', '')
                         if chunk_text:
                             full_content += chunk_text
+                            
+                            # 尝试实时执行指令
+                            if not commands_executed and '</commands>' in full_content:
+                                match = re.search(r'<commands>(.*?)</commands>', full_content, re.DOTALL)
+                                if match:
+                                    try:
+                                        commands_str = match.group(1).strip()
+                                        commands = _parse_commands_payload(commands_str)
+                                        _execute_commands_with_alias(commands)
+                                        commands_executed = True
+                                    except Exception as e:
+                                        import traceback
+                                        print(f"执行流式指令失败: {e}\n{traceback.format_exc()}")
+                            
                             # 实时返回文字内容给前端
                             yield chunk_text
                     except:
                         continue
         
-        # 提取并执行指令
-        match = re.search(r'<commands>(.*?)</commands>', full_content, re.DOTALL)
-        if match:
-            try:
-                commands_str = match.group(1).strip()
-                commands = json.loads(commands_str)
-                for cmd_data in commands:
-                    execute_circuit_command(cmd_data['command'], cmd_data.get('params', {}))
-            except Exception as e:
-                print(f"执行流式指令失败: {e}")
+        # 兜底：如果循环结束还没执行
+        if not commands_executed:
+            match = re.search(r'<commands>(.*?)</commands>', full_content, re.DOTALL)
+            if match:
+                try:
+                    commands_str = match.group(1).strip()
+                    commands = _parse_commands_payload(commands_str)
+                    _execute_commands_with_alias(commands)
+                except Exception as e:
+                    import traceback
+                    print(f"执行流式指令失败: {e}\n{traceback.format_exc()}")
                 
     except Exception as e:
         yield f"调用 AI 失败: {str(e)}"

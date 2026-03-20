@@ -87,6 +87,13 @@ async function sendMessage() {
     // 创建 AI 消息容器
     const aiMsgDiv = addMessage('', 'ai');
     let fullContent = '';
+    let lastRenderTime = 0;
+    const renderInterval = 50;
+    const renderContent = () => {
+        const displayContent = fullContent.replace(/<commands>[\s\S]*?<\/commands>/g, '').trim();
+        aiMsgDiv.textContent = displayContent || '正在思考...';
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    };
 
     try {
         const response = await fetch('/api/chat', {
@@ -106,12 +113,13 @@ async function sendMessage() {
             
             const chunk = decoder.decode(value, { stream: true });
             fullContent += chunk;
-            
-            // 实时更新界面，隐藏 <commands> 标签内容
-            const displayContent = fullContent.replace(/<commands>[\s\S]*?<\/commands>/g, '').trim();
-            aiMsgDiv.textContent = displayContent || '正在思考...';
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            const now = performance.now();
+            if (now - lastRenderTime >= renderInterval) {
+                renderContent();
+                lastRenderTime = now;
+            }
         }
+        renderContent();
 
         // 检查是否执行了指令（提取标签内容并检查是否为空列表）
         const match = fullContent.match(/<commands>([\s\S]*?)<\/commands>/);

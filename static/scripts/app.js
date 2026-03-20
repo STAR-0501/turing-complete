@@ -1083,83 +1083,86 @@ function handleMouseUp(e) {
             document.getElementById('status-bar').textContent = `集体移动完成，共 ${selectedElements.length} 个元件`;
         }
         
-        return;
-    }
-    
-    if (isPlacingElement && currentElementToPlace) {
-        // 放置元素
-        elements.push(currentElementToPlace);
-        saveState();
-        isPlacingElement = false;
-        currentElementToPlace = null;
-        document.getElementById('status-bar').textContent = '元件放置成功';
-        
-        // 切换回选择工具状态
-        currentTool = 'select';
-        document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
-        document.getElementById('btn-1').classList.add('active');
-        
-        render(ctx, elements, wires, selectedElement, selectedWire);
-        return;
-    }
-    
-    if (isDrawingWire) {
-        // 检查是否点击了目标端口
-        for (const element of elements) {
-            if (element.id === wireStart.elementId) continue;
+        // 处理放置元素
+        if (isPlacingElement && currentElementToPlace) {
+            // 放置元素
+            elements.push(currentElementToPlace);
+            saveState();
+            isPlacingElement = false;
+            currentElementToPlace = null;
+            document.getElementById('status-bar').textContent = '元件放置成功';
             
-            for (const input of element.inputs) {
-                const portX = element.x + input.x;
-                const portY = element.y + input.y;
-                if (distance(mouseX, mouseY, portX, portY) < 10) {
-                    // 确保不会将输入端口连接到输入端口
-                    if (!wireStart.isInput) {
-                        const wire = {
-                            id: generateId(),
-                            start: wireStart,
-                            end: { elementId: element.id, portId: input.id, x: portX, y: portY, isInput: true }
-                        };
-                        wires.push(wire);
-                        saveState();
-                        elements = calculateCircuit(elements, wires);
-                    }
-                    isDrawingWire = false;
-                    wireStart = null;
-                    document.getElementById('status-bar').textContent = '导线连接成功';
-                    render(ctx, elements, wires, selectedElement, selectedWire);
-                    return;
-                }
-            }
+            // 切换回选择工具状态
+            currentTool = 'select';
+            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-1').classList.add('active');
             
-            for (const output of element.outputs) {
-                const portX = element.x + output.x;
-                const portY = element.y + output.y;
-                if (distance(mouseX, mouseY, portX, portY) < 10) {
-                    // 确保不会将输出端口连接到输出端口
-                    if (wireStart.isInput) {
-                        const wire = {
-                            id: generateId(),
-                            start: wireStart,
-                            end: { elementId: element.id, portId: output.id, x: portX, y: portY, isInput: false }
-                        };
-                        wires.push(wire);
-                        saveState();
-                        elements = calculateCircuit(elements, wires);
-                    }
-                    isDrawingWire = false;
-                    wireStart = null;
-                    document.getElementById('status-bar').textContent = '导线连接成功';
-                    render(ctx, elements, wires, selectedElement, selectedWire);
-                    return;
-                }
-            }
+            render(ctx, elements, wires, selectedElement, selectedWire);
+            return;
         }
         
-        // 取消绘制导线
-        isDrawingWire = false;
-        wireStart = null;
-        document.getElementById('status-bar').textContent = '取消绘制导线';
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        // 处理绘制导线
+        if (isDrawingWire) {
+            // 检查是否点击了目标端口
+            for (const element of elements) {
+                if (element.id === wireStart.elementId) continue;
+                
+                for (const input of element.inputs) {
+                    const portX = element.x + input.x;
+                    const portY = element.y + input.y;
+                    if (distance(mouseX, mouseY, portX, portY) < 10) {
+                        // 确保不会将输入端口连接到输入端口
+                        if (!wireStart.isInput) {
+                            const wire = {
+                                id: generateId(),
+                                start: wireStart,
+                                end: { elementId: element.id, portId: input.id, x: portX, y: portY, isInput: true }
+                            };
+                            wires.push(wire);
+                            saveState();
+                            elements = calculateCircuit(elements, wires);
+                        }
+                        isDrawingWire = false;
+                        wireStart = null;
+                        document.getElementById('status-bar').textContent = '导线连接成功';
+                        render(ctx, elements, wires, selectedElement, selectedWire);
+                        return;
+                    }
+                }
+                
+                for (const output of element.outputs) {
+                    const portX = element.x + output.x;
+                    const portY = element.y + output.y;
+                    if (distance(mouseX, mouseY, portX, portY) < 10) {
+                        // 确保不会将输出端口连接到输出端口
+                        if (wireStart.isInput) {
+                            const wire = {
+                                id: generateId(),
+                                start: wireStart,
+                                end: { elementId: element.id, portId: output.id, x: portX, y: portY, isInput: false }
+                            };
+                            wires.push(wire);
+                            saveState();
+                            elements = calculateCircuit(elements, wires);
+                        }
+                        isDrawingWire = false;
+                        wireStart = null;
+                        document.getElementById('status-bar').textContent = '导线连接成功';
+                        render(ctx, elements, wires, selectedElement, selectedWire);
+                        return;
+                    }
+                }
+            }
+            
+            // 取消绘制导线
+            isDrawingWire = false;
+            wireStart = null;
+            document.getElementById('status-bar').textContent = '取消绘制导线';
+            render(ctx, elements, wires, selectedElement, selectedWire);
+            return;
+        }
+        
+        return;
     }
 }
 
