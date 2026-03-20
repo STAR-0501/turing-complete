@@ -25,7 +25,23 @@
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
         </div>
         <div class="status-bar" id="status-bar">就绪</div>
+
+        <!-- AI 聊天窗口 -->
+        <div id="chat-container" class="chat-container">
+            <div class="chat-header">
+                <h3>AI 助手</h3>
+                <button id="toggle-chat">_</button>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="message ai">你好！我是电路助手。你可以让我帮你构建电路，例如：“帮我放一个与门”或“连接这两个元件”。</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="输入指令..." autocomplete="off">
+                <button id="send-chat">发送</button>
+            </div>
+        </div>
     </div>
     <script type="module" src="{{ url_for('static', filename='scripts/app.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='scripts/chat.js') }}"></script>
 </body>
 </html>

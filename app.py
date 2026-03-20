@@ -1,8 +1,19 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 import json
 import os
 import logging
 import sys
+from ai_commands import CircuitManager
+import re
+import requests
+import time
+
+# AI 配置 (请在此填入您的 API Key)
+AI_CONFIG = {
+    "api_key": "sk-38d03b2f9c8d44f886f9e146d179d933",
+    "base_url": "https://api.deepseek.com", # 或者您的代理地址，例如 https://api.deepseek.com
+    "model": "deepseek-chat" # 或 deepseek-chat 等
+}
 
 # 关闭Flask的HTTP请求日志
 log = logging.getLogger('werkzeug')
@@ -14,6 +25,9 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 存储电路数据的文件
 CIRCUIT_DATA_FILE = os.path.join(BASE_DIR, 'circuit_data.json')
+
+# 初始化电路管理器
+circuit_manager = CircuitManager(CIRCUIT_DATA_FILE)
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
 def init_circuit_file():
@@ -63,17 +77,177 @@ def load_circuit():
         return '', 200
     try:
         print(f"尝试加载电路数据 from: {CIRCUIT_DATA_FILE}")
-        if os.path.exists(CIRCUIT_DATA_FILE):
-            with open(CIRCUIT_DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            print(f"电路数据已加载，包含 {len(data.get('elements', []))} 个元件")
-            return jsonify(data)
-        else:
-            print("电路数据文件不存在，返回空数据")
-            return jsonify({'elements': [], 'wires': []})
+        data = circuit_manager.get_state()
+        print(f"电路数据已加载，包含 {len(data.get('elements', []))} 个元件")
+        return jsonify(data)
     except Exception as e:
         print(f"加载电路数据失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/ai/execute', methods=['POST'])
+def ai_execute():
+    try:
+        data = request.json
+        cmd = data.get('command')
+        params = data.get('params', {})
+        
+        result = execute_circuit_command(cmd, params)
+        return jsonify({'status': 'success', 'result': result})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+def execute_circuit_command(cmd, params):
+    """
+    Helper to execute commands and return result
+    """
+    if cmd == 'add_element':
+        return circuit_manager.add_element(params['type'], params['x'], params['y'])
+    elif cmd == 'remove_element':
+        return circuit_manager.remove_element(params['id'])
+    elif cmd == 'add_wire':
+        return circuit_manager.add_wire(params['from_id'], params['from_port_idx'], params['to_id'], params['to_port_idx'])
+    elif cmd == 'remove_wire':
+        return circuit_manager.remove_wire(params['id'])
+    elif cmd == 'clear_circuit':
+        return circuit_manager.clear_circuit()
+    elif cmd == 'toggle_input':
+        return circuit_manager.toggle_input(params['id'])
+    elif cmd == 'get_state':
+        return circuit_manager.get_state()
+    else:
+        raise ValueError(f'Unknown command: {cmd}')
+
+def call_llm_stream(user_message):
+    """
+    调用大语言模型 API，流式返回
+    """
+    if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+        yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
+        return
+
+    current_state = circuit_manager.get_state()
+    system_prompt = """你是一个电路模拟器助手。你可以通过调用指令来操作电路。
+    
+可用指令集 (JSON 格式):
+1. {"command": "add_element", "params": {"type": "AND|OR|NOT|INPUT|OUTPUT", "x": number, "y": number}}
+2. {"command": "add_wire", "params": {"from_id": string, "from_port_idx": number, "to_id": string, "to_port_idx": number}}
+3. {"command": "remove_element", "params": {"id": string}}
+4. {"command": "clear_circuit", "params": {}}
+5. {"command": "toggle_input", "params": {"id": string}}
+
+当前电路状态:
+""" + json.dumps(current_state) + """
+
+请根据用户需求进行操作。
+**回复格式要求**:
+1. 先直接输出你对用户说的话（回复文字）。
+2. 在回复的最后，用 <commands>[JSON_LIST]</commands> 标签包含你要执行的指令列表。
+示例:
+好的，为您添加了一个与门。<commands>[{"command": "add_element", "params": {"type": "AND", "x": 100, "y": 100}}]</commands>
+
+注意：确保指令 JSON 格式完全正确。只在最后输出一次 <commands> 标签。"""
+
+    try:
+        response = requests.post(
+            f"{AI_CONFIG['base_url']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": AI_CONFIG["model"],
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                "temperature": 0.7,
+                "stream": True
+            },
+            timeout=30,
+            stream=True
+        )
+        
+        full_content = ""
+        for line in response.iter_lines():
+            if line:
+                line_str = line.decode('utf-8')
+                if line_str.startswith('data: '):
+                    data_content = line_str[6:]
+                    if data_content == '[DONE]':
+                        break
+                    
+                    try:
+                        chunk_json = json.loads(data_content)
+                        chunk_text = chunk_json['choices'][0]['delta'].get('content', '')
+                        if chunk_text:
+                            full_content += chunk_text
+                            # 实时返回文字内容给前端
+                            yield chunk_text
+                    except:
+                        continue
+        
+        # 提取并执行指令
+        match = re.search(r'<commands>(.*?)</commands>', full_content, re.DOTALL)
+        if match:
+            try:
+                commands_str = match.group(1).strip()
+                commands = json.loads(commands_str)
+                for cmd_data in commands:
+                    execute_circuit_command(cmd_data['command'], cmd_data.get('params', {}))
+            except Exception as e:
+                print(f"执行流式指令失败: {e}")
+                
+    except Exception as e:
+        yield f"调用 AI 失败: {str(e)}"
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """
+    聊天接口：流式输出
+    """
+    try:
+        data = request.json
+        message = data.get('message', '')
+        
+        def generate():
+            for chunk in call_llm_stream(message):
+                yield chunk
+                
+        return Response(generate(), mimetype='text/plain')
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+def fallback_chat(message, error_msg):
+    """
+    回退逻辑：当 LLM 不可用时，使用关键词匹配或报错
+    """
+    message = message.lower()
+    commands_executed = []
+    reply = ""
+    
+    # 如果 API Key 没填，提示用户，但仍然尝试处理简单指令
+    is_config_error = "YOUR_API_KEY_HERE" in error_msg
+    
+    if "清空" in message or "clear" in message:
+        execute_circuit_command('clear_circuit', {})
+        reply = "好的，我已经清空了所有电路。"
+        commands_executed.append({'command': 'clear_circuit'})
+    elif "与门" in message:
+        res = execute_circuit_command('add_element', {'type': 'AND', 'x': 100, 'y': 100})
+        reply = f"已为您添加了一个与门。"
+        commands_executed.append({'command': 'add_element', 'type': 'AND'})
+    else:
+        if is_config_error:
+            reply = "⚠️ 您尚未在 app.py 中配置 AI_CONFIG['api_key']。目前我只能处理简单的指令如“添加与门”、“清空画布”。"
+        else:
+            reply = f"抱歉，调用 AI 时遇到了错误: {error_msg}。"
+
+    return jsonify({
+        'status': 'success',
+        'reply': reply,
+        'commands_executed': commands_executed,
+        'config_needed': is_config_error
+    })
 
 if __name__ == '__main__':
     print(f"电路设计应用启动中...")

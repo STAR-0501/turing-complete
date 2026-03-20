@@ -64,6 +64,13 @@ async function init() {
     canvas.addEventListener('wheel', handleWheel);
     window.addEventListener('resize', resizeCanvas);
     
+    // 定期从服务器同步状态 (为了AI指令系统的实时性)
+    setInterval(async () => {
+        if (!isDragging && !isDrawingWire && !isPlacingElement) {
+            await loadFromServer();
+        }
+    }, 2000);
+
     // 辅助函数：设置工具状态
     function setTool(toolName, buttonId, statusText) {
         // 取消当前正在放置的元件
@@ -909,7 +916,7 @@ async function saveToServer() {
 /**
  * 从服务器加载
  */
-async function loadFromServer() {
+export async function loadFromServer() {
     try {
         const response = await fetch('http://localhost:5000/api/load-circuit');
         const result = await response.json();
@@ -938,6 +945,9 @@ async function loadFromServer() {
         
         // 重新计算电路状态，确保导线颜色正确
         elements = calculateCircuit(elements, wires);
+        
+        // 渲染更新
+        render(ctx, elements, wires, selectedElement, selectedWire);
         
         console.log('从服务器加载:', result);
     } catch (error) {
