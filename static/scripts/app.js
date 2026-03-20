@@ -45,6 +45,8 @@ let isGroupDragging = false; // 是否正在集体拖动
 let groupDragStart = { x: 0, y: 0 }; // 集体拖动起始位置
 let groupDragOffsets = []; // 每个元件的拖动偏移量
 
+let lastSaveTime = 0; // 上次保存到服务器的时间戳
+
 /**
  * 初始化应用
  */
@@ -84,7 +86,9 @@ async function init() {
     
     // 定期从服务器同步状态 (为了AI指令系统的实时性)
     setInterval(async () => {
-        if (!isDragging && !isDrawingWire && !isPlacingElement) {
+        // 如果正在操作中，或者刚保存完（防止覆盖最新的本地改动），不从服务器加载
+        const now = Date.now();
+        if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && (now - lastSaveTime > 3000)) {
             await loadFromServer();
         }
     }, 2000);
@@ -297,7 +301,33 @@ function duplicateElement(sourceElement) {
  * @param {MouseEvent} e - 鼠标事件
  */
 function handleMouseDown(e) {
-    // 如果正在放置元素，不处理其他事件
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 右键点击 - 始终启动拖动屏幕（无论点击哪里）
+    // 只有 mousedown 事件会触发 panning，auxclick 不会
+    if (e.button === 2 && e.type === 'mousedown') {
+        e.preventDefault();
+        isPanning = true;
+        isSelecting = false; // 确保不会同时触发框选
+        panOffset = { x: mouseX, y: mouseY };
+        document.getElementById('status-bar').textContent = '正在拖动屏幕...';
+        console.log('右键按下, 启动拖动屏幕, isPanning=true');
+        return;
+    }
+    
+    // 如果是 auxclick 事件且是右键，不执行后续逻辑（防止 panning 被重新触发）
+    if (e.type === 'auxclick' && e.button === 2) {
+        return;
+    }
+    
+    // 如果不是左键且不是 auxclick（用于中键点击），则不处理后续逻辑
+    if (e.button !== 0 && e.type !== 'auxclick') {
+        return;
+    }
+    
+    // 如果正在放置元素，不处理其他左键事件
     if (isPlacingElement) {
         return;
     }
@@ -307,10 +337,6 @@ function handleMouseDown(e) {
         executePaste();
         return;
     }
-    
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
     
     // 检查是否点击了端口
     for (const element of elements) {
@@ -342,17 +368,6 @@ function handleMouseDown(e) {
             mouseY >= element.y && mouseY <= element.y + element.height) {
             
             console.log('点击元件: button=', e.button, 'type=', e.type);
-            
-            // 右键点击元件 - 开始拖动屏幕
-            if (e.button === 2) {
-                e.preventDefault(); // 阻止默认的右键菜单
-                // 开始拖动屏幕
-                isPanning = true;
-                panOffset = { x: mouseX, y: mouseY };
-                document.getElementById('status-bar').textContent = '正在拖动屏幕...';
-                console.log('右键点击元件, 设置 isPanning=true');
-                return;
-            }
             
             // 中键点击复制元素（auxclick事件，button === 1 表示中键）
             if (e.type === 'auxclick' && e.button === 1) {
@@ -418,16 +433,6 @@ function handleMouseDown(e) {
     // 检查是否点击了导线
     for (const wire of wires) {
         if (isPointOnWire(mouseX, mouseY, wire)) {
-            // 右键点击导线 - 开始拖动屏幕
-            if (e.button === 2) {
-                e.preventDefault(); // 阻止默认的右键菜单
-                // 开始拖动屏幕
-                isPanning = true;
-                panOffset = { x: mouseX, y: mouseY };
-                document.getElementById('status-bar').textContent = '正在拖动屏幕...';
-                return;
-            }
-            
             if (currentTool === 'delete') {
                 // 删除工具：删除导线
                 wires = wires.filter(w => w.id !== wire.id);
@@ -461,13 +466,6 @@ function handleMouseDown(e) {
         selectedElements = [];
         document.getElementById('status-bar').textContent = '框选模式：拖动鼠标选择多个元件';
         console.log('开始框选, isSelecting=', isSelecting);
-    } else if (currentTool === 'select' && e.button === 2) { // 右键 - 拖动屏幕
-        // 开始拖动屏幕
-        isPanning = true;
-        isSelecting = false; // 确保不会同时触发
-        panOffset = { x: mouseX, y: mouseY };
-        document.getElementById('status-bar').textContent = '正在拖动屏幕...';
-        console.log('开始拖动屏幕, isPanning=', isPanning);
     } else {
         // 重置所有状态
         selectedElement = null;
@@ -488,6 +486,62 @@ function handleMouseMove(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     mousePos = { x: mouseX, y: mouseY };
+    
+    // 处理拖动屏幕 (Panning)
+    if (isPanning) {
+        // 计算偏移量
+        const deltaX = mouseX - panOffset.x;
+        const deltaY = mouseY - panOffset.y;
+        
+        // 更新所有元件的位置
+        for (const element of elements) {
+            element.x += deltaX;
+            element.y += deltaY;
+        }
+        
+        // 更新所有导线的位置
+        for (const wire of wires) {
+            wire.start.x += deltaX;
+            wire.start.y += deltaY;
+            wire.end.x += deltaX;
+            wire.end.y += deltaY;
+        }
+        
+        // 更新临时元素的位置
+        if (currentElementToPlace) {
+            currentElementToPlace.x += deltaX;
+            currentElementToPlace.y += deltaY;
+        }
+        
+        // 更新网格背景位置，实现无限延伸效果
+        const grid = document.getElementById('grid');
+        if (grid) {
+            // 获取当前的背景位置
+            const currentBgPos = grid.style.backgroundPosition || '0px 0px';
+            const matches = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
+            let bgX = 0, bgY = 0;
+            if (matches) {
+                bgX = parseFloat(matches[1]);
+                bgY = parseFloat(matches[2]);
+            }
+            
+            // 更新背景位置
+            grid.style.backgroundPosition = `${bgX + deltaX}px ${bgY + deltaY}px`;
+        }
+        
+        // 更新偏移量
+        panOffset = { x: mouseX, y: mouseY };
+        
+        // 重新渲染并返回
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        
+        // 如果正在放置元件，也要绘制预览
+        if (isPlacingElement && currentElementToPlace) {
+            drawTemporaryElement(ctx, currentElementToPlace);
+        }
+        
+        return;
+    }
     
     // 更新框选区域
     if (isSelecting) {
@@ -584,59 +638,6 @@ function handleMouseMove(e) {
         render(ctx, elements, wires, selectedElement, selectedWire);
         // 绘制临时元素
         drawTemporaryElement(ctx, currentElementToPlace);
-    }
-    
-    if (isPanning) {
-        // 计算偏移量
-        const deltaX = mouseX - panOffset.x;
-        const deltaY = mouseY - panOffset.y;
-        
-        // 更新所有元件的位置
-        for (const element of elements) {
-            element.x += deltaX;
-            element.y += deltaY;
-        }
-        
-        // 更新所有导线的位置
-        for (const wire of wires) {
-            wire.start.x += deltaX;
-            wire.start.y += deltaY;
-            wire.end.x += deltaX;
-            wire.end.y += deltaY;
-        }
-        
-        // 更新临时元素的位置
-        if (currentElementToPlace) {
-            currentElementToPlace.x += deltaX;
-            currentElementToPlace.y += deltaY;
-        }
-        
-        // 更新网格背景位置，实现无限延伸效果
-        const grid = document.getElementById('grid');
-        if (grid) {
-            // 获取当前的背景位置
-            const currentBgPos = grid.style.backgroundPosition || '0px 0px';
-            const matches = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
-            let bgX = 0, bgY = 0;
-            if (matches) {
-                bgX = parseFloat(matches[1]);
-                bgY = parseFloat(matches[2]);
-            }
-            
-            // 更新背景位置（与拖动方向相反，产生视差效果）
-            grid.style.backgroundPosition = `${bgX + deltaX}px ${bgY + deltaY}px`;
-        }
-        
-        // 更新偏移量
-        panOffset = { x: mouseX, y: mouseY };
-        
-        // 重新渲染
-        render(ctx, elements, wires, selectedElement, selectedWire);
-        
-        // 绘制临时元素
-        if (isPlacingElement && currentElementToPlace) {
-            drawTemporaryElement(ctx, currentElementToPlace);
-        }
     }
 }
 
@@ -1301,6 +1302,7 @@ function saveToLocalStorage() {
  * 保存到服务器
  */
 async function saveToServer() {
+    lastSaveTime = Date.now(); // 更新保存时间戳
     try {
         // 获取网格大小
         let gridSize = 20;
