@@ -59,6 +59,136 @@ function hasInputConnection(wires, targetElementId, targetPortId) {
 }
 
 /**
+ * 计算函数元件的内部电路（支持递归嵌套函数）
+ * @param {object} functionElement - 函数元件
+ * @param {Array} elements - 主电路元件数组
+ * @param {Array} wires - 主电路导线数组
+ * @param {Map} functionCache - 函数计算缓存，避免重复计算
+ * @returns {Array} 函数元件各输出端口的状态数组
+ */
+function calculateFunctionElement(functionElement, elements, wires, functionCache = new Map()) {
+    if (!functionElement.functionData) {
+        return [];
+    }
+    
+    // 深拷贝函数内部的元件和导线
+    const funcElements = JSON.parse(JSON.stringify(functionElement.functionData.elements));
+    const funcWires = JSON.parse(JSON.stringify(functionElement.functionData.wires));
+    const inputElementIds = functionElement.functionData.inputElementIds;
+    const outputElementIds = functionElement.functionData.outputElementIds || [];
+    
+    // 将函数元件的输入端口值赋给内部的 INPUT 元件
+    for (let i = 0; i < functionElement.inputs.length; i++) {
+        const inputPort = functionElement.inputs[i];
+        const inputState = getInputSourceState(elements, wires, functionElement.id, inputPort.id);
+        
+        if (i < inputElementIds.length) {
+            const inputElement = funcElements.find(el => el.id === inputElementIds[i]);
+            if (inputElement) {
+                inputElement.state = inputState !== null ? inputState : false;
+            }
+        }
+    }
+    
+    // 计算函数内部电路（支持递归嵌套函数）
+    let changed = true;
+    while (changed) {
+        changed = false;
+        
+        for (const element of funcElements) {
+            if (element.type === 'INPUT') {
+                continue;
+            }
+            
+            let newState = element.state;
+            
+            if (element.type === 'AND') {
+                let allTrue = true;
+                let allConnected = true;
+                for (const input of element.inputs) {
+                    if (hasInputConnection(funcWires, element.id, input.id)) {
+                        const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+                        if (inputState !== true) {
+                            allTrue = false;
+                            break;
+                        }
+                    } else {
+                        allConnected = false;
+                        break;
+                    }
+                }
+                newState = allConnected && allTrue;
+            } else if (element.type === 'OR') {
+                let anyTrue = false;
+                let hasInput = false;
+                for (const input of element.inputs) {
+                    if (hasInputConnection(funcWires, element.id, input.id)) {
+                        hasInput = true;
+                        const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+                        if (inputState === true) {
+                            anyTrue = true;
+                            break;
+                        }
+                    }
+                }
+                newState = hasInput ? anyTrue : false;
+            } else if (element.type === 'NOT') {
+                let inputTrue = false;
+                let hasInput = false;
+                for (const input of element.inputs) {
+                    if (hasInputConnection(funcWires, element.id, input.id)) {
+                        hasInput = true;
+                        const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+                        if (inputState === true) {
+                            inputTrue = true;
+                            break;
+                        }
+                    }
+                }
+                newState = hasInput ? !inputTrue : false;
+            } else if (element.type === 'OUTPUT') {
+                let inputTrue = false;
+                for (const input of element.inputs) {
+                    if (hasInputConnection(funcWires, element.id, input.id)) {
+                        const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+                        if (inputState === true) {
+                            inputTrue = true;
+                            break;
+                        }
+                    }
+                }
+                newState = inputTrue;
+            } else if (element.type === 'FUNCTION') {
+                // 递归计算嵌套的函数元件
+                const cachedResult = functionCache.get(element.id);
+                if (cachedResult !== undefined) {
+                    newState = cachedResult.length > 0 ? cachedResult[0] : false;
+                    element.outputStates = cachedResult;
+                } else {
+                    const nestedOutputStates = calculateFunctionElement(element, funcElements, funcWires, functionCache);
+                    newState = nestedOutputStates.length > 0 ? nestedOutputStates[0] : false;
+                    element.outputStates = nestedOutputStates;
+                    functionCache.set(element.id, nestedOutputStates);
+                }
+            }
+            
+            if (element.state !== newState) {
+                element.state = newState;
+                changed = true;
+            }
+        }
+    }
+    
+    // 获取所有输出元件的状态
+    const outputStates = outputElementIds.map(outputId => {
+        const outputElement = funcElements.find(el => el.id === outputId);
+        return outputElement ? outputElement.state : false;
+    });
+    
+    return outputStates;
+}
+
+/**
  * 计算电路
  * @param {Array} elements - 元件数组
  * @param {Array} wires - 导线数组
@@ -142,6 +272,11 @@ export function calculateCircuit(elements, wires) {
                     }
                 }
                 newState = inputTrue;
+            } else if (element.type === 'FUNCTION') {
+                // 函数元件：计算内部电路
+                const outputStates = calculateFunctionElement(element, elements, wires);
+                newState = outputStates.length > 0 ? outputStates[0] : false;
+                element.outputStates = outputStates;
             }
             
             // 检查状态是否改变
@@ -162,7 +297,15 @@ export function calculateCircuit(elements, wires) {
         if (startElement) {
             // 如果起点是输出端口，使用源元件的状态
             if (!wire.start.isInput) {
-                wireState = startElement.state;
+                if (startElement.type === 'FUNCTION') {
+                    // 函数元件需要根据输出端口索引获取状态
+                    const outputStates = startElement.outputStates || [];
+                    wireState = wire.start.portIndex !== undefined && wire.start.portIndex < outputStates.length 
+                        ? outputStates[wire.start.portIndex] 
+                        : (outputStates[0] || false);
+                } else {
+                    wireState = startElement.state;
+                }
             }
         }
         
@@ -171,7 +314,14 @@ export function calculateCircuit(elements, wires) {
         if (endElement) {
             // 如果终点是输出端口，使用目标元件的状态
             if (!wire.end.isInput) {
-                wireState = endElement.state;
+                if (endElement.type === 'FUNCTION') {
+                    const outputStates = endElement.outputStates || [];
+                    wireState = wire.end.portIndex !== undefined && wire.end.portIndex < outputStates.length 
+                        ? outputStates[wire.end.portIndex] 
+                        : (outputStates[0] || false);
+                } else {
+                    wireState = endElement.state;
+                }
             }
         }
         

@@ -156,6 +156,18 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
                 // 绘制输出块
                 ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
                 break;
+            case 'FUNCTION':
+                // 绘制函数块边框
+                ctx.strokeStyle = elementColor;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(element.x, element.y, element.width, element.height);
+                // 绘制函数名称
+                ctx.fillStyle = elementColor;
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(element.name || 'Func', element.x + element.width / 2, element.y + element.height / 2);
+                break;
         }
         
         // 绘制端口
@@ -291,6 +303,10 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
                     break;
                 case 'OUTPUT':
                     ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+                    break;
+                case 'FUNCTION':
+                    ctx.font = `${12 * scaleRatio}px Arial`;
+                    ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
                     break;
             }
             

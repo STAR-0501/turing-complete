@@ -294,3 +294,155 @@ body {
 .collapsed .chat-input-area {
     display: none;
 }
+
+/* 函数面板样式 */
+.function-panel {
+    position: absolute;
+    right: 20px;
+    top: 80px;
+    width: 220px;
+    max-height: 400px;
+    background-color: rgba(10, 10, 10, 0.9);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 1500;
+    backdrop-filter: blur(15px);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none; /* 让鼠标事件穿透面板传递到画布 */
+}
+
+.function-panel-header {
+    padding: 10px 15px;
+    background-color: rgba(0, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.function-panel-header h3 {
+    font-size: 14px;
+    color: #00ffff;
+    margin: 0;
+}
+
+.function-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto; /* 恢复内部元素的点击事件 */
+}
+
+.function-item {
+    padding: 10px 12px;
+    background-color: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #00ffff;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: auto; /* 恢复点击事件 */
+}
+
+.function-item:hover {
+    background-color: rgba(0, 255, 255, 0.25);
+    border-color: rgba(0, 255, 255, 0.5);
+}
+
+.function-item:active {
+    transform: scale(0.98);
+}
+
+/* 模态框样式 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 3000;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background-color: rgba(10, 10, 10, 0.95);
+    border: 1px solid rgba(0, 255, 255, 0.4);
+    border-radius: 12px;
+    padding: 25px 30px;
+    min-width: 320px;
+    backdrop-filter: blur(15px);
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+}
+
+.modal-content h3 {
+    color: #00ffff;
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    text-align: center;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 10px 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    margin-bottom: 20px;
+}
+
+.modal-content input:focus {
+    border-color: #00ffff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modal-buttons button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid rgba(255, 0, 0, 0.4) !important;
+    color: #ff6666;
+}
+
+.btn-cancel:hover {
+    background-color: rgba(255, 0, 0, 0.35);
+}
+
+.btn-confirm {
+    background-color: rgba(0, 255, 255, 0.2);
+    border: 1px solid rgba(0, 255, 255, 0.4) !important;
+    color: #00ffff;
+}
+
+.btn-confirm:hover {
+    background-color: rgba(0, 255, 255, 0.35);
+}
