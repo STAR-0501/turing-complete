@@ -10,6 +10,8 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-chat');
 const toggleBtn = document.getElementById('toggle-chat');
 const chatHeader = document.querySelector('.chat-header');
+const THINKING_MARKER = '__TC_THINKING__';
+const ANSWER_MARKER = '__TC_ANSWER__';
 
 // 初始化聊天窗口
 export function initChat() {
@@ -89,9 +91,57 @@ async function sendMessage() {
     let fullContent = '';
     let lastRenderTime = 0;
     const renderInterval = 50;
+    const escapeHtml = (text) => String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const splitThinkingAndAnswer = (raw) => {
+        const cleaned = raw.replace(/<commands>[\s\S]*?<\/commands>/g, '');
+        const thinkIdx = cleaned.indexOf(THINKING_MARKER);
+        const answerIdx = cleaned.indexOf(ANSWER_MARKER);
+        let thinking = '';
+        let answer = '';
+        if (thinkIdx === -1 && answerIdx === -1) {
+            answer = cleaned.trim();
+            return { thinking, answer };
+        }
+        if (thinkIdx !== -1) {
+            const fromThink = cleaned.slice(thinkIdx + THINKING_MARKER.length);
+            const answerPosInThink = fromThink.indexOf(ANSWER_MARKER);
+            if (answerPosInThink === -1) {
+                thinking = fromThink.trim();
+            } else {
+                thinking = fromThink.slice(0, answerPosInThink).trim();
+                answer = fromThink.slice(answerPosInThink + ANSWER_MARKER.length).trim();
+            }
+            return { thinking, answer };
+        }
+        answer = cleaned.slice(answerIdx + ANSWER_MARKER.length).trim();
+        return { thinking, answer };
+    };
+
     const renderContent = () => {
-        const displayContent = fullContent.replace(/<commands>[\s\S]*?<\/commands>/g, '').trim();
-        aiMsgDiv.textContent = displayContent || '正在思考...';
+        const { thinking, answer } = splitThinkingAndAnswer(fullContent);
+        if (!thinking && !answer) {
+            aiMsgDiv.textContent = '正在思考...';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return;
+        }
+        const sections = [];
+        if (thinking) {
+            sections.push(
+                `<div style="margin-bottom:8px;"><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">思考过程</div><div style="white-space:pre-wrap;">${escapeHtml(thinking)}</div></div>`
+            );
+        }
+        if (answer) {
+            sections.push(
+                `<div><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">正式输出</div><div style="white-space:pre-wrap;">${escapeHtml(answer)}</div></div>`
+            );
+        }
+        aiMsgDiv.innerHTML = sections.join('');
         chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
