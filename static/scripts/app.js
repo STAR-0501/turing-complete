@@ -47,6 +47,12 @@ let groupDragOffsets = []; // 每个元件的拖动偏移量
 
 let lastSaveTime = 0; // 上次保存到服务器的时间戳
 
+// 函数保存相关
+let savedFunctions = []; // 保存的函数列表
+let isPlacingFunction = false; // 是否正在放置函数元件
+let currentFunctionToPlace = null; // 当前要放置的函数
+let isNameModalOpen = false; // 命名弹窗是否打开
+
 /**
  * 初始化应用
  */
@@ -66,7 +72,7 @@ async function init() {
     
     // 事件监听
     canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove); // 改为 window 监听，以支持鼠标在任何位置（包括覆盖层）
     canvas.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
@@ -159,11 +165,38 @@ async function init() {
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCircuit);
     
+    // 初始化函数相关功能
+    initFunctionPanel();
+    
     // 添加键盘事件监听器
     window.addEventListener('keydown', handleKeyDown);
     
     // 处理键盘按下事件
     function handleKeyDown(e) {
+        // 如果命名弹窗打开，只允许 Esc 关闭弹窗
+        if (isNameModalOpen) {
+            if (e.key === 'Escape') {
+                document.getElementById('name-modal').classList.remove('show');
+                document.getElementById('function-name-input').value = '';
+                isNameModalOpen = false;
+            }
+            return; // 屏蔽其他所有快捷键
+        }
+        
+        // Ctrl+S 保存选中为函数
+        if (e.ctrlKey && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            if (selectedElements.length > 0) {
+                document.getElementById('name-modal').classList.add('show');
+                document.getElementById('function-name-input').value = '';
+                document.getElementById('function-name-input').focus();
+                isNameModalOpen = true;
+            } else {
+                document.getElementById('status-bar').textContent = '请先选中包含输入输出的模块';
+            }
+            return;
+        }
+        
         // Ctrl+D 删除选中的元件
         if (e.ctrlKey && e.key.toLowerCase() === 'd') {
             e.preventDefault();
@@ -185,9 +218,16 @@ async function init() {
             return;
         }
         
-        // Esc 取消粘贴模式
+        // Esc 取消粘贴模式或函数放置
         if (e.key === 'Escape') {
             cancelPaste();
+            if (isPlacingFunction) {
+                isPlacingFunction = false;
+                currentFunctionToPlace = null;
+                // 恢复函数面板的点击事件
+                restoreFunctionPanelEvents();
+                document.getElementById('status-bar').textContent = '已取消放置函数';
+            }
             return;
         }
         
@@ -275,13 +315,57 @@ function addElement(type) {
  */
 function duplicateElement(sourceElement) {
     // 创建临时元素，位置在鼠标附近
-    const newElement = createElement(sourceElement.type, mousePos.x, mousePos.y);
-    if (newElement) {
-        // 复制状态（对于INPUT元件）
-        if (sourceElement.type === 'INPUT') {
-            newElement.state = sourceElement.state;
-        }
+    let newElement;
+    if (sourceElement.type === 'FUNCTION') {
+        // 函数元件需要特殊处理
+        newElement = createElement('FUNCTION', mousePos.x, mousePos.y, {
+            name: sourceElement.name,
+            functionElements: JSON.parse(JSON.stringify(sourceElement.functionData.elements)),
+            functionWires: JSON.parse(JSON.stringify(sourceElement.functionData.wires)),
+            inputElements: JSON.parse(JSON.stringify(sourceElement.functionData.inputElementIds)),
+            outputElements: JSON.parse(JSON.stringify(sourceElement.functionData.outputElementIds))
+        });
         
+        if (newElement) {
+            // 复制源元件的尺寸和端口位置（已经是当前缩放比例）
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
+            
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                newElement.inputs[i].x = sourceElement.inputs[i].x;
+                newElement.inputs[i].y = sourceElement.inputs[i].y;
+            }
+            
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                newElement.outputs[i].x = sourceElement.outputs[i].x;
+                newElement.outputs[i].y = sourceElement.outputs[i].y;
+            }
+        }
+    } else {
+        newElement = createElement(sourceElement.type, mousePos.x, mousePos.y);
+        
+        if (newElement) {
+            // 复制状态（对于INPUT元件）
+            if (sourceElement.type === 'INPUT') {
+                newElement.state = sourceElement.state;
+            }
+            
+            // 复制源元件的尺寸和端口位置
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
+            
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                newElement.inputs[i].x = sourceElement.inputs[i].x;
+                newElement.inputs[i].y = sourceElement.inputs[i].y;
+            }
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                newElement.outputs[i].x = sourceElement.outputs[i].x;
+                newElement.outputs[i].y = sourceElement.outputs[i].y;
+            }
+        }
+    }
+    
+    if (newElement) {
         // 设置元素位置为鼠标位置（居中）
         newElement.x = mousePos.x - newElement.width / 2;
         newElement.y = mousePos.y - newElement.height / 2;
@@ -324,6 +408,21 @@ function handleMouseDown(e) {
     
     // 如果不是左键且不是 auxclick（用于中键点击），则不处理后续逻辑
     if (e.button !== 0 && e.type !== 'auxclick') {
+        return;
+    }
+    
+    // 如果正在放置函数元件
+    if (isPlacingFunction && currentFunctionToPlace && e.button === 0) {
+        // 放置函数元件
+        elements.push(currentFunctionToPlace);
+        saveState();
+        isPlacingFunction = false;
+        currentFunctionToPlace = null;
+        // 恢复函数面板的点击事件
+        restoreFunctionPanelEvents();
+        document.getElementById('status-bar').textContent = '函数元件已放置';
+        elements = calculateCircuit(elements, wires);
+        render(ctx, elements, wires, selectedElement, selectedWire);
         return;
     }
     
@@ -486,6 +585,17 @@ function handleMouseMove(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     mousePos = { x: mouseX, y: mouseY };
+    
+    // 如果正在放置函数元件
+    if (isPlacingFunction && currentFunctionToPlace) {
+        // 更新函数元件位置
+        currentFunctionToPlace.x = mouseX - currentFunctionToPlace.width / 2;
+        currentFunctionToPlace.y = mouseY - currentFunctionToPlace.height / 2;
+        render(ctx, elements, wires, selectedElement, selectedWire);
+        // 绘制临时函数元件
+        drawTemporaryElement(ctx, currentFunctionToPlace);
+        return;
+    }
     
     // 处理拖动屏幕 (Panning)
     if (isPanning) {
@@ -731,6 +841,20 @@ function drawTemporaryElement(ctx, element) {
             // 绘制输出块
             ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
             break;
+        case 'FUNCTION':
+            // 绘制函数块边框
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(element.x, element.y, element.width, element.height);
+            ctx.setLineDash([]);
+            // 绘制函数名称
+            ctx.fillStyle = '#00ffff';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(element.name || 'Func', element.x + element.width / 2, element.y + element.height / 2);
+            break;
     }
     
     // 绘制端口
@@ -839,13 +963,22 @@ function copySelected() {
     const scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
     
     // 深拷贝选中的元件
-    clipboardElements = selectedElements.map(el => ({
-        ...el,
-        _originalId: el.id, // 保存原始ID用于导线映射
-        id: generateId(), // 生成新ID
-        inputs: el.inputs.map(input => ({ ...input })),
-        outputs: el.outputs.map(output => ({ ...output }))
-    }));
+    clipboardElements = selectedElements.map(el => {
+        const newEl = {
+            ...el,
+            _originalId: el.id, // 保存原始ID用于导线映射
+            id: generateId(), // 生成新ID
+            inputs: el.inputs.map(input => ({ ...input })),
+            outputs: el.outputs.map(output => ({ ...output }))
+        };
+        
+        // 如果是函数元件，需要深拷贝 functionData
+        if (el.type === 'FUNCTION' && el.functionData) {
+            newEl.functionData = JSON.parse(JSON.stringify(el.functionData));
+        }
+        
+        return newEl;
+    });
     
     // 复制选中元件之间的导线
     const selectedIds = selectedElements.map(el => el.id);
@@ -1027,6 +1160,18 @@ function cancelPaste() {
         document.getElementById('status-bar').textContent = '已取消粘贴';
         render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
     }
+}
+
+/**
+ * 恢复函数面板的点击事件
+ */
+function restoreFunctionPanelEvents() {
+    const functionPanel = document.getElementById('function-panel');
+    const functionList = document.getElementById('function-list');
+    const functionItems = document.querySelectorAll('.function-item');
+    functionPanel.style.pointerEvents = 'none';
+    functionList.style.pointerEvents = 'auto';
+    functionItems.forEach(item => item.style.pointerEvents = 'auto');
 }
 
 /**
@@ -1559,7 +1704,461 @@ function handleWheel(e) {
     }
 }
 
+/**
+ * 初始化函数面板
+ */
+async function initFunctionPanel() {
+    // 从服务器加载保存的函数
+    await loadFunctionsFromServer();
+    
+    // 绑定命名弹窗事件
+    document.getElementById('confirm-save-function').addEventListener('click', async () => {
+        const nameInput = document.getElementById('function-name-input');
+        const name = nameInput.value.trim();
+        if (!name) {
+            alert('请输入函数名称');
+            nameInput.focus();
+            return;
+        }
+        
+        const success = await saveSelectedAsFunction(name);
+        if (success) {
+            document.getElementById('name-modal').classList.remove('show');
+            nameInput.value = '';
+            isNameModalOpen = false;
+        } else {
+            // 保存失败时用 alert 提示
+            const statusText = document.getElementById('status-bar').textContent;
+            alert(statusText);
+            nameInput.focus();
+            nameInput.select();
+        }
+    });
+    
+    document.getElementById('cancel-save-function').addEventListener('click', () => {
+        document.getElementById('name-modal').classList.remove('show');
+        document.getElementById('function-name-input').value = '';
+        isNameModalOpen = false;
+    });
+    
+    document.getElementById('function-name-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('confirm-save-function').click();
+        }
+    });
+}
+
+/**
+ * 保存选中的元件为函数
+ * @returns {boolean} 是否保存成功
+ */
+async function saveSelectedAsFunction(name) {
+    // 检查名字是否为空
+    if (!name || name.trim() === '') {
+        document.getElementById('status-bar').textContent = '函数名称不能为空';
+        return false;
+    }
+    
+    // 检查名字是否已存在
+    const nameExists = savedFunctions.some(func => func.name === name);
+    if (nameExists) {
+        document.getElementById('status-bar').textContent = `函数 "${name}" 已存在，请使用其他名称`;
+        return false;
+    }
+    
+    // 检查选中的元件中是否有输入和输出
+    const hasInput = selectedElements.some(el => el.type === 'INPUT');
+    const hasOutput = selectedElements.some(el => el.type === 'OUTPUT');
+    
+    if (!hasInput || !hasOutput) {
+        document.getElementById('status-bar').textContent = '选中的模块需要包含至少一个输入和一个输出';
+        return false;
+    }
+    
+    // 获取选中元件之间的导线
+    const selectedIds = selectedElements.map(el => el.id);
+    const selectedWires = wires.filter(wire => 
+        selectedIds.includes(wire.start.elementId) && 
+        selectedIds.includes(wire.end.elementId)
+    );
+    
+    // 获取输入和输出元件ID列表
+    const inputElementIds = selectedElements
+        .filter(el => el.type === 'INPUT')
+        .map(el => el.id);
+    const outputElementIds = selectedElements
+        .filter(el => el.type === 'OUTPUT')
+        .map(el => el.id);
+    
+    if (outputElementIds.length === 0) {
+        document.getElementById('status-bar').textContent = '需要一个输出元件';
+        return false;
+    }
+    
+    // 创建函数数据
+    const functionData = {
+        id: generateId(),
+        name: name,
+        elements: JSON.parse(JSON.stringify(selectedElements)),
+        wires: JSON.parse(JSON.stringify(selectedWires)),
+        inputElementIds: inputElementIds,
+        outputElementIds: outputElementIds
+    };
+    
+    // 保存到本地数组
+    savedFunctions.push(functionData);
+    
+    // 保存到服务器
+    await saveFunctionToServer(functionData);
+    
+    // 更新函数面板
+    updateFunctionPanel();
+    
+    document.getElementById('status-bar').textContent = `函数 "${name}" 已保存`;
+    return true;
+}
+
+/**
+ * 更新函数面板显示
+ */
+function updateFunctionPanel() {
+    const listContainer = document.getElementById('function-list');
+    listContainer.innerHTML = '';
+    
+    savedFunctions.forEach((func, index) => {
+        const item = document.createElement('div');
+        item.className = 'function-item';
+        
+        // 左侧名称区域（点击放置函数）
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = func.name;
+        nameSpan.style.cssText = 'flex: 1; cursor: pointer;';
+        nameSpan.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startPlaceFunction(func);
+        });
+        
+        // 右侧删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.className = 'function-delete-btn';
+        deleteBtn.style.cssText = 'background: rgba(255,0,0,0.2); border: 1px solid rgba(255,0,0,0.4); color: #ff6666; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 14px; line-height: 1;';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteFunction(index);
+        });
+        
+        item.appendChild(nameSpan);
+        item.appendChild(deleteBtn);
+        item.style.cssText = 'display: flex; align-items: center; justify-content: space-between;';
+        listContainer.appendChild(item);
+    });
+}
+
+/**
+ * 删除函数
+ */
+async function deleteFunction(index) {
+    if (index >= 0 && index < savedFunctions.length) {
+        const funcName = savedFunctions[index].name;
+        savedFunctions.splice(index, 1);
+        await saveFunctionsToServer();
+        updateFunctionPanel();
+        document.getElementById('status-bar').textContent = `函数 "${funcName}" 已删除`;
+    }
+}
+
+/**
+ * 保存所有函数到服务器
+ */
+async function saveFunctionsToServer() {
+    try {
+        const response = await fetch('http://localhost:5000/api/save-functions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ functions: savedFunctions })
+        });
+        const result = await response.json();
+        console.log('函数列表保存到服务器:', result);
+    } catch (error) {
+        console.error('保存函数列表到服务器失败:', error);
+    }
+}
+
+/**
+ * 开始放置函数元件
+ */
+function startPlaceFunction(funcData) {
+    console.log('startPlaceFunction called with:', funcData.name);
+    
+    // 获取当前缩放比例
+    let gridSize = 20;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            gridSize = parseInt(sizeMatch[1]);
+        }
+    }
+    const currentScale = gridSize / 20;
+    console.log('currentScale:', currentScale);
+    
+    // 获取画布中心位置（作为默认放置位置）
+    const canvasCenterX = canvas.width / 2;
+    const canvasCenterY = canvas.height / 2;
+    
+    // 创建函数元件
+    const funcElement = createElement('FUNCTION', canvasCenterX, canvasCenterY, {
+        name: funcData.name,
+        functionElements: JSON.parse(JSON.stringify(funcData.elements)),
+        functionWires: JSON.parse(JSON.stringify(funcData.wires)),
+        inputElements: JSON.parse(JSON.stringify(funcData.inputElementIds)),
+        outputElements: JSON.parse(JSON.stringify(funcData.outputElementIds))
+    });
+    console.log('funcElement created:', funcElement);
+    
+    if (funcElement) {
+        // 根据缩放比例调整函数元件大小
+        funcElement.width = 100 * currentScale;
+        funcElement.height = Math.max(60, Math.max(funcElement.inputs.length, funcElement.outputs.length) * 25 + 20) * currentScale;
+        
+        // 调整输入端口位置
+        for (let i = 0; i < funcElement.inputs.length; i++) {
+            funcElement.inputs[i].x = -5 * currentScale;
+            funcElement.inputs[i].y = (20 + i * 25) * currentScale;
+        }
+        
+        // 调整输出端口位置
+        for (let i = 0; i < funcElement.outputs.length; i++) {
+            funcElement.outputs[i].x = 105 * currentScale;
+            funcElement.outputs[i].y = (20 + i * 25) * currentScale;
+        }
+        
+        currentFunctionToPlace = funcElement;
+        isPlacingFunction = true;
+        console.log('isPlacingFunction set to true');
+        
+        // 禁用函数面板的点击事件，让点击可以传到 canvas
+        const functionPanel = document.getElementById('function-panel');
+        const functionList = document.getElementById('function-list');
+        const functionItems = document.querySelectorAll('.function-item');
+        functionPanel.style.pointerEvents = 'none';
+        functionList.style.pointerEvents = 'none';
+        functionItems.forEach(item => item.style.pointerEvents = 'none');
+        
+        document.getElementById('status-bar').textContent = `请点击放置函数 "${funcData.name}"（ESC取消）`;
+    }
+}
+
+/**
+ * 保存函数到服务器
+ */
+async function saveFunctionToServer(funcData) {
+    try {
+        const response = await fetch('http://localhost:5000/api/save-function', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(funcData)
+        });
+        const result = await response.json();
+        console.log('函数保存到服务器:', result);
+    } catch (error) {
+        console.error('保存函数到服务器失败:', error);
+    }
+}
+
+/**
+ * 从服务器加载函数
+ */
+async function loadFunctionsFromServer() {
+    try {
+        const response = await fetch('http://localhost:5000/api/load-functions');
+        const result = await response.json();
+        if (result.functions) {
+            savedFunctions = result.functions;
+            updateFunctionPanel();
+        }
+        console.log('从服务器加载函数:', savedFunctions);
+    } catch (error) {
+        console.error('从服务器加载函数失败:', error);
+    }
+}
+
+// 持续渲染循环（帧率刷新）
+function startRenderLoop() {
+    function loop() {
+        // 根据当前状态确定框选矩形
+        let selectionRect = null;
+        if (isSelecting) {
+            selectionRect = {
+                x: Math.min(selectionStart.x, selectionEnd.x),
+                y: Math.min(selectionStart.y, selectionEnd.y),
+                width: Math.abs(selectionEnd.x - selectionStart.x),
+                height: Math.abs(selectionEnd.y - selectionStart.y)
+            };
+        }
+        
+        // 根据当前状态确定临时元素（放置中或粘贴中）
+        let tempElement = null;
+        if (isPlacingElement && currentElementToPlace) {
+            tempElement = currentElementToPlace;
+        } else if (isPlacingFunction && currentFunctionToPlace) {
+            tempElement = currentFunctionToPlace;
+        }
+        
+        // 基础渲染
+        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements);
+        
+        // 绘制临时元素（正在放置的元件）
+        if (tempElement) {
+            drawTemporaryElement(ctx, tempElement);
+        }
+        
+        // 绘制粘贴预览
+        if (isPasting && clipboardElements.length > 0 && pasteOffset) {
+            // 获取当前缩放比例
+            let gridSize = 20;
+            const grid = document.getElementById('grid');
+            if (grid) {
+                const currentBgSize = getComputedStyle(grid).backgroundSize;
+                const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+                if (sizeMatch) {
+                    gridSize = parseInt(sizeMatch[1]);
+                }
+            }
+            const currentScale = gridSize / 20;
+            
+            for (const template of clipboardElements) {
+                const copyScale = template._scaleFactor || 1;
+                const scaleRatio = currentScale / copyScale;
+                
+                const x = pasteOffset.x + template._copyOffsetX * scaleRatio;
+                const y = pasteOffset.y + template._copyOffsetY * scaleRatio;
+                const width = template.width * scaleRatio;
+                const height = template.height * scaleRatio;
+                
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                
+                ctx.beginPath();
+                ctx.rect(x, y, width, height);
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                ctx.font = `${14 * scaleRatio}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                switch (template.type) {
+                    case 'AND':
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                        ctx.lineWidth = 2;
+                        const andCenterX = x + width / 2;
+                        const andCenterY = y + height / 2;
+                        const andSize = Math.min(width, height) * 0.7;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(andCenterX - andSize/2, andCenterY - andSize/3);
+                        ctx.lineTo(andCenterX - andSize/2, andCenterY + andSize/3);
+                        ctx.arc(andCenterX + andSize/4, andCenterY, andSize/3, Math.PI * 1.5, Math.PI * 0.5);
+                        ctx.closePath();
+                        ctx.stroke();
+                        break;
+                    case 'OR':
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                        ctx.lineWidth = 2;
+                        const orCenterX = x + width / 2;
+                        const orCenterY = y + height / 2;
+                        const orSize = Math.min(width, height) * 0.7;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(orCenterX - orSize/2, orCenterY - orSize/3);
+                        ctx.lineTo(orCenterX - orSize/2, orCenterY + orSize/3);
+                        ctx.arc(orCenterX + orSize/4, orCenterY, orSize/3, Math.PI * 1.5, Math.PI * 0.5);
+                        ctx.closePath();
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(orCenterX - orSize/2, orCenterY, orSize/6, Math.PI * 0.5, Math.PI * 1.5);
+                        ctx.stroke();
+                        break;
+                    case 'NOT':
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                        ctx.lineWidth = 2;
+                        const notCenterX = x + width / 2;
+                        const notCenterY = y + height / 2;
+                        const notSize = Math.min(width, height) * 0.7;
+                        
+                        ctx.beginPath();
+                        ctx.rect(notCenterX - notSize/3, notCenterY - notSize/4, notSize/2, notSize/2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(notCenterX + notSize/6, notCenterY);
+                        ctx.lineTo(notCenterX + notSize/3, notCenterY);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(notCenterX + notSize/3 + notSize/12, notCenterY, notSize/12, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                        ctx.fill();
+                        break;
+                    case 'INPUT':
+                        ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+                        break;
+                    case 'OUTPUT':
+                        ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+                        break;
+                    case 'FUNCTION':
+                        ctx.font = `${12 * scaleRatio}px Arial`;
+                        ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
+                        break;
+                }
+                
+                for (const input of template.inputs) {
+                    const portX = x + input.x * scaleRatio;
+                    const portY = y + input.y * scaleRatio;
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                for (const output of template.outputs) {
+                    const portX = x + output.x * scaleRatio;
+                    const portY = y + output.y * scaleRatio;
+                    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            ctx.setLineDash([]);
+        }
+        
+        // 绘制正在绘制的导线
+        if (isDrawingWire && wireStart) {
+            ctx.beginPath();
+            ctx.moveTo(wireStart.x, wireStart.y);
+            ctx.lineTo(mousePos.x, mousePos.y);
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+}
+
 // 初始化应用
 (async function() {
     await init();
+    startRenderLoop();
 })();

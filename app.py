@@ -25,6 +25,8 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 存储电路数据的文件
 CIRCUIT_DATA_FILE = os.path.join(BASE_DIR, 'circuit_data.json')
+# 存储函数数据的文件
+FUNCTIONS_DATA_FILE = os.path.join(BASE_DIR, 'functions_data.json')
 
 # 初始化电路管理器
 circuit_manager = CircuitManager(CIRCUIT_DATA_FILE)
@@ -39,8 +41,19 @@ def init_circuit_file():
         except Exception as e:
             print(f"创建电路数据文件失败: {e}")
 
+# 初始化：如果文件不存在，创建一个空的函数数据文件
+def init_functions_file():
+    if not os.path.exists(FUNCTIONS_DATA_FILE):
+        try:
+            with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
+            print(f"已创建空的函数数据文件: {FUNCTIONS_DATA_FILE}")
+        except Exception as e:
+            print(f"创建函数数据文件失败: {e}")
+
 # 启动时初始化
 init_circuit_file()
+init_functions_file()
 
 @app.after_request
 def after_request(response):
@@ -371,9 +384,69 @@ def fallback_chat(message, error_msg):
         'config_needed': is_config_error
     })
 
+@app.route('/api/save-function', methods=['POST', 'OPTIONS'])
+def save_function():
+    # 处理OPTIONS预检请求
+    if request.method == 'OPTIONS':
+        return '', 200
+    try:
+        new_function = request.json
+        # 读取现有的函数
+        functions_data = {'functions': []}
+        if os.path.exists(FUNCTIONS_DATA_FILE):
+            with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
+                functions_data = json.load(f)
+        
+        # 添加新函数
+        functions_data['functions'].append(new_function)
+        
+        # 写入文件
+        with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(functions_data, f, indent=2, ensure_ascii=False)
+        print(f"函数已保存到: {FUNCTIONS_DATA_FILE}")
+        return jsonify({'status': 'success', 'message': 'Function saved successfully'})
+    except Exception as e:
+        print(f"保存函数失败: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/save-functions', methods=['POST', 'OPTIONS'])
+def save_functions():
+    # 处理OPTIONS预检请求
+    if request.method == 'OPTIONS':
+        return '', 200
+    try:
+        data = request.json
+        # 写入文件
+        with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"函数列表已保存到: {FUNCTIONS_DATA_FILE}")
+        return jsonify({'status': 'success', 'message': 'Functions saved successfully'})
+    except Exception as e:
+        print(f"保存函数列表失败: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/load-functions', methods=['GET', 'OPTIONS'])
+def load_functions():
+    # 处理OPTIONS预检请求
+    if request.method == 'OPTIONS':
+        return '', 200
+    try:
+        print(f"尝试加载函数数据 from: {FUNCTIONS_DATA_FILE}")
+        if os.path.exists(FUNCTIONS_DATA_FILE):
+            with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            print(f"函数数据已加载，包含 {len(data.get('functions', []))} 个函数")
+            return jsonify(data)
+        else:
+            return jsonify({'functions': []})
+    except Exception as e:
+        print(f"加载函数数据失败: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     print(f"电路设计应用启动中...")
     print(f"电路数据文件路径: {CIRCUIT_DATA_FILE}")
+    print(f"函数数据文件路径: {FUNCTIONS_DATA_FILE}")
     print(f"打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']

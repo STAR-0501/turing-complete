@@ -40,6 +40,28 @@
                 <button id="send-chat">发送</button>
             </div>
         </div>
+
+        <!-- 函数面板 -->
+        <div id="function-panel" class="function-panel">
+            <div class="function-panel-header">
+                <h3>保存的函数</h3>
+            </div>
+            <div id="function-list" class="function-list">
+                <!-- 函数列表会在这里动态添加 -->
+            </div>
+        </div>
+
+        <!-- 命名弹窗 -->
+        <div id="name-modal" class="modal">
+            <div class="modal-content">
+                <h3>保存函数</h3>
+                <input type="text" id="function-name-input" placeholder="请输入函数名称" autocomplete="off">
+                <div class="modal-buttons">
+                    <button id="cancel-save-function" class="btn-cancel">取消</button>
+                    <button id="confirm-save-function" class="btn-confirm">保存</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script type="module" src="{{ url_for('static', filename='scripts/app.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='scripts/chat.js') }}"></script>
