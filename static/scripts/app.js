@@ -217,6 +217,18 @@ async function init() {
             startPaste();
             return;
         }
+
+        // Ctrl+A 全选
+        if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+            e.preventDefault();
+            if (elements.length > 0) {
+                selectedElements = [...elements];
+                document.getElementById('status-bar').textContent = `已选中 ${selectedElements.length} 个元件`;
+            } else {
+                document.getElementById('status-bar').textContent = '没有元件可选择';
+            }
+            return;
+        }
         
         // Esc 取消粘贴模式或函数放置
         if (e.key === 'Escape') {
