@@ -15,14 +15,16 @@ export function createANDGate(x, y) {
         id: generateId(),
         type: 'AND',
         x, y,
-        width: 80,
-        height: 60,
+        width: 80, // 实际大小
+        height: 60, // 实际大小
+        realWidth: 80, // 真实大小（固定）
+        realHeight: 60, // 真实大小（固定）
         inputs: [
-            { id: generateId(), x: -5, y: 15 },
-            { id: generateId(), x: -5, y: 45 }
+            { id: generateId(), x: -5, y: 15, realX: -5, realY: 15 },
+            { id: generateId(), x: -5, y: 45, realX: -5, realY: 45 }
         ],
         outputs: [
-            { id: generateId(), x: 85, y: 30 }
+            { id: generateId(), x: 85, y: 30, realX: 85, realY: 30 }
         ],
         state: false
     };
@@ -39,14 +41,16 @@ export function createORGate(x, y) {
         id: generateId(),
         type: 'OR',
         x, y,
-        width: 80,
-        height: 60,
+        width: 80, // 实际大小
+        height: 60, // 实际大小
+        realWidth: 80, // 真实大小（固定）
+        realHeight: 60, // 真实大小（固定）
         inputs: [
-            { id: generateId(), x: -5, y: 15 },
-            { id: generateId(), x: -5, y: 45 }
+            { id: generateId(), x: -5, y: 15, realX: -5, realY: 15 },
+            { id: generateId(), x: -5, y: 45, realX: -5, realY: 45 }
         ],
         outputs: [
-            { id: generateId(), x: 85, y: 30 }
+            { id: generateId(), x: 85, y: 30, realX: 85, realY: 30 }
         ],
         state: false
     };
@@ -63,13 +67,15 @@ export function createNOTGate(x, y) {
         id: generateId(),
         type: 'NOT',
         x, y,
-        width: 80,
-        height: 60,
+        width: 80, // 实际大小
+        height: 60, // 实际大小
+        realWidth: 80, // 真实大小（固定）
+        realHeight: 60, // 真实大小（固定）
         inputs: [
-            { id: generateId(), x: -5, y: 30 }
+            { id: generateId(), x: -5, y: 30, realX: -5, realY: 30 }
         ],
         outputs: [
-            { id: generateId(), x: 85, y: 30 }
+            { id: generateId(), x: 85, y: 30, realX: 85, realY: 30 }
         ],
         state: false
     };
@@ -86,11 +92,13 @@ export function createInputBlock(x, y) {
         id: generateId(),
         type: 'INPUT',
         x, y,
-        width: 60,
-        height: 60,
+        width: 60, // 实际大小
+        height: 60, // 实际大小
+        realWidth: 60, // 真实大小（固定）
+        realHeight: 60, // 真实大小（固定）
         inputs: [],
         outputs: [
-            { id: generateId(), x: 65, y: 30 }
+            { id: generateId(), x: 65, y: 30, realX: 65, realY: 30 }
         ],
         state: false
     };
@@ -107,10 +115,12 @@ export function createOutputBlock(x, y) {
         id: generateId(),
         type: 'OUTPUT',
         x, y,
-        width: 60,
-        height: 60,
+        width: 60, // 实际大小
+        height: 60, // 实际大小
+        realWidth: 60, // 真实大小（固定）
+        realHeight: 60, // 真实大小（固定）
         inputs: [
-            { id: generateId(), x: -5, y: 30 }
+            { id: generateId(), x: -5, y: 30, realX: -5, realY: 30 }
         ],
         outputs: [],
         state: false
@@ -138,7 +148,9 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
         inputs.push({
             id: generateId(),
             x: -5,
-            y: 20 + i * 25
+            y: 20 + i * 25,
+            realX: -5,
+            realY: 20 + i * 25
         });
     }
     
@@ -147,7 +159,9 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
         outputs.push({
             id: generateId(),
             x: 105,
-            y: 20 + i * 25
+            y: 20 + i * 25,
+            realX: 105,
+            realY: 20 + i * 25
         });
     }
     
@@ -156,8 +170,10 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
         type: 'FUNCTION',
         name: name,
         x, y,
-        width: 100,
-        height: height,
+        width: 100, // 实际大小
+        height: height, // 实际大小
+        realWidth: 100, // 真实大小（固定）
+        realHeight: height, // 真实大小（固定）
         inputs: inputs,
         outputs: outputs,
         state: false,

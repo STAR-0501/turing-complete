@@ -1,5 +1,5 @@
 circuit_data.json
-function_data.json
+functions_data.json
 build/
 dist/
 venv/

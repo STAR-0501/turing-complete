@@ -24,6 +24,8 @@ let historyIndex = -1;
 let currentTool = 'select'; // select, input-toggle, delete
 let isPlacingElement = false;
 let currentElementToPlace = null;
+let isMiddleClickCopy = false; // 中键复制后连续放置模式
+let lastMiddleClickElement = null; // 最后中键复制的元件（用于连续放置）
 let mousePos = { x: 0, y: 0 };
 let isPanning = false;
 let panOffset = { x: 0, y: 0 };
@@ -52,6 +54,7 @@ let savedFunctions = []; // 保存的函数列表
 let isPlacingFunction = false; // 是否正在放置函数元件
 let currentFunctionToPlace = null; // 当前要放置的函数
 let isNameModalOpen = false; // 命名弹窗是否打开
+let shouldCreateNewElement = true; // 是否应该创建新元件（用于防止点击工具栏时创建多个元件）
 
 /**
  * 初始化应用
@@ -116,14 +119,20 @@ async function init() {
     
     // 辅助函数：添加元件
     function addElementButtonHandler(type) {
-        return function() {
-            // 取消当前正在放置的元件
-            if (isPlacingElement) {
-                isPlacingElement = false;
-                currentElementToPlace = null;
-            }
-            
+        return function(e) {
+            console.log('addElementButtonHandler 被调用，type=', type, 'isPlacingElement=', isPlacingElement);
+
+            // 立即取消当前的放置/粘贴状态
+            isPlacingElement = false;
+            isPasting = false;
+            currentElementToPlace = null;
+            isMiddleClickCopy = false; // 重置中键复制连续模式
+            lastMiddleClickElement = null; // 重置最后复制的元件
+            currentTool = 'place-' + type;
+
+            // 创建元件并进入跟随模式
             addElement(type);
+
             // 保持对应的工具栏按钮高亮
             document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
             switch(type) {
@@ -143,6 +152,7 @@ async function init() {
                     document.getElementById('btn-output').classList.add('active');
                     break;
             }
+            document.getElementById('status-bar').textContent = `点击画布放置 ${type} 元件`;
         };
     }
     
@@ -229,17 +239,35 @@ async function init() {
             }
             return;
         }
-        
-        // Esc 取消粘贴模式或函数放置
+
+        // ESC 取消所有放置状态
         if (e.key === 'Escape') {
-            cancelPaste();
+            // 取消粘贴模式
+            if (isPasting) {
+                isPasting = false;
+                document.getElementById('status-bar').textContent = '已取消粘贴';
+            }
+
+            // 取消普通放置状态
+            if (isPlacingElement) {
+                isPlacingElement = false;
+                currentElementToPlace = null;
+                isMiddleClickCopy = false; // 清除中键复制连续模式
+                lastMiddleClickElement = null; // 清除最后复制的元件
+                currentTool = 'select';
+                document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('btn-select').classList.add('active');
+                document.getElementById('status-bar').textContent = '已取消放置';
+            }
+
+            // 取消函数放置状态
             if (isPlacingFunction) {
                 isPlacingFunction = false;
                 currentFunctionToPlace = null;
-                // 恢复函数面板的点击事件
                 restoreFunctionPanelEvents();
                 document.getElementById('status-bar').textContent = '已取消放置函数';
             }
+
             return;
         }
         
@@ -309,9 +337,35 @@ function resizeCanvas() {
  * @param {string} type - 元件类型
  */
 function addElement(type) {
+    // 获取当前缩放比例
+    let scaleFactor = 1;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            const gridSize = parseInt(sizeMatch[1]);
+            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
+        }
+    }
+    
     // 创建临时元素
     const element = createElement(type, mousePos.x, mousePos.y);
     if (element) {
+        // 根据当前缩放比例调整实际大小
+        element.width = element.realWidth * scaleFactor;
+        element.height = element.realHeight * scaleFactor;
+        
+        // 调整端口位置
+        for (const input of element.inputs) {
+            input.x = input.realX * scaleFactor;
+            input.y = input.realY * scaleFactor;
+        }
+        for (const output of element.outputs) {
+            output.x = output.realX * scaleFactor;
+            output.y = output.realY * scaleFactor;
+        }
+        
         // 设置元素位置为鼠标位置
         element.x = mousePos.x - element.width / 2;
         element.y = mousePos.y - element.height / 2;
@@ -322,10 +376,99 @@ function addElement(type) {
 }
 
 /**
+ * 为中键连续复制创建新元件
+ * @param {object} sourceElement - 源元件
+ * @param {number} x - x坐标
+ * @param {number} y - y坐标
+ * @returns {object|null} 新的元件
+ */
+function createElementForMiddleClickCopy(sourceElement, x, y) {
+    // 获取当前缩放比例
+    let scaleFactor = 1;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            const gridSize = parseInt(sizeMatch[1]);
+            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
+        }
+    }
+    
+    let newElement;
+    if (sourceElement.type === 'FUNCTION') {
+        newElement = createElement('FUNCTION', x, y, {
+            name: sourceElement.name,
+            functionElements: JSON.parse(JSON.stringify(sourceElement.functionData.elements)),
+            functionWires: JSON.parse(JSON.stringify(sourceElement.functionData.wires)),
+            inputElements: JSON.parse(JSON.stringify(sourceElement.functionData.inputElementIds)),
+            outputElements: JSON.parse(JSON.stringify(sourceElement.functionData.outputElementIds))
+        });
+        
+        if (newElement) {
+            // 根据当前缩放比例调整实际大小
+            newElement.width = newElement.realWidth * scaleFactor;
+            newElement.height = newElement.realHeight * scaleFactor;
+            
+            // 调整端口位置
+            for (const input of newElement.inputs) {
+                input.x = input.realX * scaleFactor;
+                input.y = input.realY * scaleFactor;
+            }
+            for (const output of newElement.outputs) {
+                output.x = output.realX * scaleFactor;
+                output.y = output.realY * scaleFactor;
+            }
+        }
+    } else {
+        newElement = createElement(sourceElement.type, x, y);
+        
+        if (newElement) {
+            if (sourceElement.type === 'INPUT') {
+                newElement.state = sourceElement.state;
+            }
+            
+            // 根据当前缩放比例调整实际大小
+            newElement.width = newElement.realWidth * scaleFactor;
+            newElement.height = newElement.realHeight * scaleFactor;
+            
+            // 调整端口位置
+            for (const input of newElement.inputs) {
+                input.x = input.realX * scaleFactor;
+                input.y = input.realY * scaleFactor;
+            }
+            for (const output of newElement.outputs) {
+                output.x = output.realX * scaleFactor;
+                output.y = output.realY * scaleFactor;
+            }
+        }
+    }
+    
+    if (newElement) {
+        newElement.x = x - newElement.width / 2;
+        newElement.y = y - newElement.height / 2;
+        return newElement;
+    }
+    return null;
+}
+
+/**
  * 复制元素 - 使用跟随鼠标模式
  * @param {object} sourceElement - 要复制的源元素
  */
 function duplicateElement(sourceElement) {
+    // 获取当前缩放比例
+    let scaleFactor = 1;
+    const grid = document.getElementById('grid');
+    if (grid) {
+        const currentBgSize = getComputedStyle(grid).backgroundSize;
+        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
+        if (sizeMatch) {
+            const gridSize = parseInt(sizeMatch[1]);
+            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
+        }
+    }
+    
     // 创建临时元素，位置在鼠标附近
     let newElement;
     if (sourceElement.type === 'FUNCTION') {
@@ -339,18 +482,18 @@ function duplicateElement(sourceElement) {
         });
         
         if (newElement) {
-            // 复制源元件的尺寸和端口位置（已经是当前缩放比例）
-            newElement.width = sourceElement.width;
-            newElement.height = sourceElement.height;
+            // 根据当前缩放比例调整实际大小
+            newElement.width = newElement.realWidth * scaleFactor;
+            newElement.height = newElement.realHeight * scaleFactor;
             
-            for (let i = 0; i < newElement.inputs.length; i++) {
-                newElement.inputs[i].x = sourceElement.inputs[i].x;
-                newElement.inputs[i].y = sourceElement.inputs[i].y;
+            // 调整端口位置
+            for (const input of newElement.inputs) {
+                input.x = input.realX * scaleFactor;
+                input.y = input.realY * scaleFactor;
             }
-            
-            for (let i = 0; i < newElement.outputs.length; i++) {
-                newElement.outputs[i].x = sourceElement.outputs[i].x;
-                newElement.outputs[i].y = sourceElement.outputs[i].y;
+            for (const output of newElement.outputs) {
+                output.x = output.realX * scaleFactor;
+                output.y = output.realY * scaleFactor;
             }
         }
     } else {
@@ -362,17 +505,18 @@ function duplicateElement(sourceElement) {
                 newElement.state = sourceElement.state;
             }
             
-            // 复制源元件的尺寸和端口位置
-            newElement.width = sourceElement.width;
-            newElement.height = sourceElement.height;
+            // 根据当前缩放比例调整实际大小
+            newElement.width = newElement.realWidth * scaleFactor;
+            newElement.height = newElement.realHeight * scaleFactor;
             
-            for (let i = 0; i < newElement.inputs.length; i++) {
-                newElement.inputs[i].x = sourceElement.inputs[i].x;
-                newElement.inputs[i].y = sourceElement.inputs[i].y;
+            // 调整端口位置
+            for (const input of newElement.inputs) {
+                input.x = input.realX * scaleFactor;
+                input.y = input.realY * scaleFactor;
             }
-            for (let i = 0; i < newElement.outputs.length; i++) {
-                newElement.outputs[i].x = sourceElement.outputs[i].x;
-                newElement.outputs[i].y = sourceElement.outputs[i].y;
+            for (const output of newElement.outputs) {
+                output.x = output.realX * scaleFactor;
+                output.y = output.realY * scaleFactor;
             }
         }
     }
@@ -385,7 +529,9 @@ function duplicateElement(sourceElement) {
         // 设置为正在放置状态，跟随鼠标
         currentElementToPlace = newElement;
         isPlacingElement = true;
-        document.getElementById('status-bar').textContent = '请点击鼠标左键放置复制的元件';
+        isMiddleClickCopy = true; // 标记为中键复制连续放置模式
+        lastMiddleClickElement = sourceElement; // 记住复制的源元件
+        document.getElementById('status-bar').textContent = '中键复制成功，中键放置，ESC取消';
         
         return newElement;
     }
@@ -422,33 +568,91 @@ function handleMouseDown(e) {
     if (e.button !== 0 && e.type !== 'auxclick') {
         return;
     }
-    
+
+    console.log('handleMouseDown:', { isPlacingElement, isPlacingFunction, isPasting, button: e.button, target: e.target?.id });
+
+    // 如果点击的是工具栏按钮，不处理
+    const target = e.target || e.srcElement;
+    if (target && target.closest && target.closest('.toolbar')) {
+        console.log('点击的是工具栏按钮，跳过');
+        return;
+    }
+
+    // 如果处于任何放置状态，阻止事件冒泡
+    if (isPlacingElement || isPlacingFunction || isPasting) {
+        e.stopPropagation();
+    }
+
+    // 重置 shouldCreateNewElement
+    shouldCreateNewElement = true;
+
     // 如果正在放置函数元件
     if (isPlacingFunction && currentFunctionToPlace && e.button === 0) {
-        // 放置函数元件
-        elements.push(currentFunctionToPlace);
-        saveState();
-        isPlacingFunction = false;
-        currentFunctionToPlace = null;
-        // 恢复函数面板的点击事件
-        restoreFunctionPanelEvents();
-        document.getElementById('status-bar').textContent = '函数元件已放置';
-        elements = calculateCircuit(elements, wires);
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        // 检查点击是否在 canvas 上（不在工具栏等其他UI元素上）
+        const target = e.target || e.srcElement;
+        if (target && target.id === 'canvas') {
+            // 放置函数元件
+            elements.push(currentFunctionToPlace);
+            saveState();
+            isPlacingFunction = false;
+            currentFunctionToPlace = null;
+            // 恢复函数面板的点击事件
+            restoreFunctionPanelEvents();
+            document.getElementById('status-bar').textContent = '函数元件已放置';
+            elements = calculateCircuit(elements, wires);
+            render(ctx, elements, wires, selectedElement, selectedWire);
+        } else {
+            // 点击的不是 canvas，取消放置状态，但不创建新元件
+            shouldCreateNewElement = false;
+            isPlacingFunction = false;
+            currentFunctionToPlace = null;
+        }
         return;
     }
-    
-    // 如果正在放置元素，不处理其他左键事件
-    if (isPlacingElement) {
-        return;
-    }
-    
+
     // 如果正在粘贴模式，左键点击执行粘贴
     if (isPasting && e.button === 0) {
-        executePaste();
+        // 检查点击是否在 canvas 上
+        const target = e.target || e.srcElement;
+        if (target && target.id === 'canvas') {
+            console.log('执行粘贴');
+            executePaste();
+        } else {
+            // 点击不在 canvas 上，取消粘贴状态，但不创建新元件
+            shouldCreateNewElement = false;
+            isPasting = false;
+        }
         return;
     }
-    
+
+    // 如果正在放置元素（点击工具栏按钮后），检查点击目标
+    if (isPlacingElement && e.button === 0) {
+        const target = e.target || e.srcElement;
+        if (target && target.id === 'canvas') {
+            // 点击的是 canvas，执行放置
+            const elementToPlace = currentElementToPlace;
+            elements.push(elementToPlace);
+            saveState();
+            isPlacingElement = false;
+            currentElementToPlace = null;
+            currentTool = 'select';
+            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-select').classList.add('active');
+            elements = calculateCircuit(elements, wires);
+            document.getElementById('status-bar').textContent = `${elementToPlace.type} 元件已放置`;
+            render(ctx, elements, wires, selectedElement, selectedWire);
+        } else {
+            // 点击的不是 canvas（可能是工具栏按钮），取消当前放置状态，但不创建新元件
+            shouldCreateNewElement = false;
+            isPlacingElement = false;
+            currentElementToPlace = null;
+        }
+        return;
+    }
+
+    // 如果正在放置元素（仅用于中键复制后的跟随鼠标，不拦截左键点击）
+    // 注意：这里不 return，让左键点击可以继续执行其他逻辑
+
     // 检查是否点击了端口
     for (const element of elements) {
         for (const input of element.inputs) {
@@ -562,7 +766,38 @@ function handleMouseDown(e) {
             }
         }
     }
-    
+
+    // 中键点击空白处且处于连续放置模式：直接放置副本
+    if (e.type === 'auxclick' && e.button === 1 && isMiddleClickCopy && currentElementToPlace) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // 更新位置到当前鼠标位置
+        currentElementToPlace.x = mouseX - currentElementToPlace.width / 2;
+        currentElementToPlace.y = mouseY - currentElementToPlace.height / 2;
+        
+        // 放置副本
+        elements.push(currentElementToPlace);
+        saveState();
+        
+        // 创建新的副本用于下一次放置
+        const sourceElement = lastMiddleClickElement;
+        if (sourceElement) {
+            // 使用lastMiddleClickElement作为源来创建新副本
+            const newElement = createElementForMiddleClickCopy(sourceElement, mousePos.x, mousePos.y);
+            if (newElement) {
+                currentElementToPlace = newElement;
+                // 立即更新位置到鼠标位置
+                currentElementToPlace.x = mouseX - currentElementToPlace.width / 2;
+                currentElementToPlace.y = mouseY - currentElementToPlace.height / 2;
+            }
+        }
+        
+        document.getElementById('status-bar').textContent = '放置成功，继续中键放置，ESC取消';
+        render(ctx, elements, wires, selectedElement, selectedWire);
+        return;
+    }
+
     // 点击空白处
     console.log('点击空白处: currentTool=', currentTool, 'button=', e.button);
     if (currentTool === 'select' && e.button === 0) { // 左键 - 框选
@@ -744,13 +979,54 @@ function handleMouseMove(e) {
     
     if (isDrawingWire) {
         render(ctx, elements, wires, selectedElement, selectedWire);
+
+        // 端口吸附
+        let endX = mouseX;
+        let endY = mouseY;
+        const snapDistance = 15; // 吸附距离
+
+        // 查找最近的端口
+        for (const element of elements) {
+            if (element.id === wireStart.elementId) continue;
+
+            for (const input of element.inputs) {
+                const portX = element.x + input.x;
+                const portY = element.y + input.y;
+                if (distance(mouseX, mouseY, portX, portY) < snapDistance) {
+                    endX = portX;
+                    endY = portY;
+                    break;
+                }
+            }
+            if (endX !== mouseX || endY !== mouseY) break;
+
+            for (const output of element.outputs) {
+                const portX = element.x + output.x;
+                const portY = element.y + output.y;
+                if (distance(mouseX, mouseY, portX, portY) < snapDistance) {
+                    endX = portX;
+                    endY = portY;
+                    break;
+                }
+            }
+            if (endX !== mouseX || endY !== mouseY) break;
+        }
+
         // 绘制临时导线
         ctx.beginPath();
         ctx.moveTo(wireStart.x, wireStart.y);
-        ctx.lineTo(mouseX, mouseY);
+        ctx.lineTo(endX, endY);
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // 绘制吸附指示
+        if (endX !== mouseX || endY !== mouseY) {
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
     
     if (isPlacingElement && currentElementToPlace) {
@@ -1026,9 +1302,10 @@ function startPaste() {
         document.getElementById('status-bar').textContent = '剪贴板为空，先复制一些元件';
         return;
     }
-    
+
     isPasting = true;
     pasteOffset = { x: mousePos.x, y: mousePos.y };
+    console.log('startPaste: isPasting =', isPasting, 'pasteOffset =', pasteOffset);
     document.getElementById('status-bar').textContent = '粘贴模式：点击鼠标左键放置，按 Esc 取消';
     render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
 }
@@ -1056,7 +1333,20 @@ function executePaste() {
     
     // 创建新元件
     for (const template of clipboardElements) {
-        const newElement = createElement(template.type, 0, 0);
+        let newElement;
+        if (template.type === 'FUNCTION' && template.functionData) {
+            // 函数元件需要特殊处理，传递 functionData
+            newElement = createElement('FUNCTION', 0, 0, {
+                name: template.name,
+                functionElements: template.functionData.elements,
+                functionWires: template.functionData.wires,
+                inputElements: template.functionData.inputElementIds,
+                outputElements: template.functionData.outputElementIds
+            });
+        } else {
+            newElement = createElement(template.type, 0, 0);
+        }
+        
         if (newElement) {
             // 计算缩放比例（当前缩放 / 复制时的缩放）
             const copyScale = template._scaleFactor || 1;
@@ -1242,19 +1532,33 @@ function handleMouseUp(e) {
         
         // 处理放置元素
         if (isPlacingElement && currentElementToPlace) {
-            // 放置元素
-            elements.push(currentElementToPlace);
-            saveState();
-            isPlacingElement = false;
-            currentElementToPlace = null;
-            document.getElementById('status-bar').textContent = '元件放置成功';
-            
-            // 切换回选择工具状态
-            currentTool = 'select';
-            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('btn-1').classList.add('active');
-            
-            render(ctx, elements, wires, selectedElement, selectedWire);
+            // 检查点击的是否是工具栏按钮，如果是则不放置
+            const target = e.target || e.srcElement;
+            if (target && target.closest && target.closest('.toolbar')) {
+                // 点击的是工具栏按钮，不执行放置，让工具栏按钮的处理函数来处理
+            } else {
+                // 放置元素
+                elements.push(currentElementToPlace);
+                saveState();
+                
+                if (isMiddleClickCopy) {
+                    // 中键复制连续放置模式：保持状态，用户可以继续放置
+                    document.getElementById('status-bar').textContent = '放置成功，继续中键放置，ESC取消';
+                    render(ctx, elements, wires, selectedElement, selectedWire);
+                } else {
+                    // 普通工具栏放置模式：放置后退出放置状态
+                    isPlacingElement = false;
+                    currentElementToPlace = null;
+                    document.getElementById('status-bar').textContent = '元件放置成功';
+                    
+                    // 切换回选择工具状态
+                    currentTool = 'select';
+                    document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+                    document.getElementById('btn-select').classList.add('active');
+                    
+                    render(ctx, elements, wires, selectedElement, selectedWire);
+                }
+            }
             return;
         }
         
@@ -1514,6 +1818,10 @@ export async function loadFromServer() {
     try {
         const response = await fetch('http://localhost:5000/api/load-circuit');
         const result = await response.json();
+
+        // 保存当前选中的元件ID
+        const selectedElementIds = selectedElements.map(el => el.id);
+
         if (result.elements) {
             elements = result.elements;
         }
@@ -1539,6 +1847,11 @@ export async function loadFromServer() {
         
         // 重新计算电路状态，确保导线颜色正确
         elements = calculateCircuit(elements, wires);
+
+        // 恢复选中状态
+        if (selectedElementIds.length > 0) {
+            selectedElements = elements.filter(el => selectedElementIds.includes(el.id));
+        }
         
         // 渲染更新
         render(ctx, elements, wires, selectedElement, selectedWire);
@@ -1617,11 +1930,11 @@ function handleWheel(e) {
         element.x = mouseX + relX * scaleFactor;
         element.y = mouseY + relY * scaleFactor;
         
-        // 缩放元件大小
+        // 缩放元件大小（实际大小）
         element.width *= scaleFactor;
         element.height *= scaleFactor;
         
-        // 缩放端口位置
+        // 缩放端口位置（实际位置）
         for (const input of element.inputs) {
             input.x *= scaleFactor;
             input.y *= scaleFactor;
