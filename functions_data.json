@@ -1,8 +1,6 @@
 {
   "functions": [
     {
-      "id": "cm02bq0yz",
-      "name": "XOR",
       "elements": [
         {
           "height": 60,
@@ -186,6 +184,15 @@
           "y": 150
         }
       ],
+      "id": "cm02bq0yz",
+      "inputElementIds": [
+        "kmj4x7yyy",
+        "ma6r6jdir"
+      ],
+      "name": "XOR",
+      "outputElementIds": [
+        "xqlnqo9rj"
+      ],
       "wires": [
         {
           "end": {
@@ -349,13 +356,6 @@
           },
           "state": false
         }
-      ],
-      "inputElementIds": [
-        "kmj4x7yyy",
-        "ma6r6jdir"
-      ],
-      "outputElementIds": [
-        "xqlnqo9rj"
       ]
     }
   ]
