@@ -7,8 +7,20 @@ def generate_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
 
 class CircuitManager:
-    def __init__(self, data_file):
+    def __init__(self, data_file, functions_file=None):
         self.data_file = data_file
+        self.functions_file = functions_file
+
+    def _load_functions(self):
+        if self.functions_file and os.path.exists(self.functions_file):
+            with open(self.functions_file, 'r', encoding='utf-8') as f:
+                return json.load(f).get("functions", [])
+        return []
+
+    def _save_functions(self, functions):
+        if self.functions_file:
+            with open(self.functions_file, 'w', encoding='utf-8') as f:
+                json.dump({"functions": functions}, f, indent=2, ensure_ascii=False)
 
     def _load_data(self):
         if os.path.exists(self.data_file):
@@ -118,35 +130,85 @@ class CircuitManager:
         if element_type == 'AND':
             element.update({
                 "width": 80, "height": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 15}, {"id": generate_id(), "x": -5, "y": 45}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30}]
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15}, {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
             })
         elif element_type == 'OR':
             element.update({
                 "width": 80, "height": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 15}, {"id": generate_id(), "x": -5, "y": 45}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30}]
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15}, {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
             })
         elif element_type == 'NOT':
             element.update({
                 "width": 80, "height": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 30}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30}]
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
             })
         elif element_type == 'INPUT':
             element.update({
                 "width": 60, "height": 60,
+                "realWidth": 60, "realHeight": 60,
                 "inputs": [],
-                "outputs": [{"id": generate_id(), "x": 65, "y": 30}]
+                "outputs": [{"id": generate_id(), "x": 65, "y": 30, "realX": 65, "realY": 30}]
             })
         elif element_type == 'OUTPUT':
             element.update({
                 "width": 60, "height": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 30}],
+                "realWidth": 60, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
                 "outputs": []
             })
         else:
-            raise ValueError(f"Unknown element type: {element_type}")
+            # Check if it's a function
+            functions = self._load_functions()
+            func = next((f for f in functions if f.get("name") == element_type), None)
+            if func:
+                input_count = len(func.get("inputElementIds", []))
+                output_count = len(func.get("outputElementIds", []))
+                height = max(60, max(input_count, output_count) * 25 + 20)
+                
+                inputs = []
+                for i in range(input_count):
+                    inputs.append({
+                        "id": generate_id(),
+                        "x": -5,
+                        "y": 20 + i * 25,
+                        "realX": -5,
+                        "realY": 20 + i * 25
+                    })
+                
+                outputs = []
+                for i in range(output_count):
+                    outputs.append({
+                        "id": generate_id(),
+                        "x": 105,
+                        "y": 20 + i * 25,
+                        "realX": 105,
+                        "realY": 20 + i * 25
+                    })
+                
+                element.update({
+                    "type": "FUNCTION",
+                    "name": element_type,
+                    "width": 100,
+                    "height": height,
+                    "realWidth": 100,
+                    "realHeight": height,
+                    "inputs": inputs,
+                    "outputs": outputs,
+                    "functionData": {
+                        "elements": func.get("elements", []),
+                        "wires": func.get("wires", []),
+                        "inputElementIds": func.get("inputElementIds", []),
+                        "outputElementIds": func.get("outputElementIds", [])
+                    }
+                })
+            else:
+                raise ValueError(f"Unknown element type: {element_type}")
 
         data["elements"].append(element)
         self._save_data(data)
@@ -211,6 +273,33 @@ class CircuitManager:
     def clear_circuit(self):
         self._save_data({"elements": [], "wires": []})
         return True
+
+    def define_function(self, name):
+        data = self._load_data()
+        elements = data.get("elements", [])
+        wires = data.get("wires", [])
+        
+        input_ids = [e["id"] for e in elements if e.get("type") == "INPUT"]
+        output_ids = [e["id"] for e in elements if e.get("type") == "OUTPUT"]
+        
+        if not input_ids or not output_ids:
+            raise ValueError("A function must have at least one INPUT and one OUTPUT.")
+            
+        functions = self._load_functions()
+        functions = [f for f in functions if f.get("name") != name]
+        
+        func_data = {
+            "id": generate_id(),
+            "name": name,
+            "elements": elements,
+            "wires": wires,
+            "inputElementIds": input_ids,
+            "outputElementIds": output_ids
+        }
+        
+        functions.append(func_data)
+        self._save_functions(functions)
+        return func_data
 
     def toggle_input(self, element_id):
         data = self._load_data()

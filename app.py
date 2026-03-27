@@ -37,7 +37,7 @@ CIRCUIT_DATA_FILE = os.path.join(BASE_DIR, 'circuit_data.json')
 FUNCTIONS_DATA_FILE = os.path.join(BASE_DIR, 'functions_data.json')
 
 # 初始化电路管理器
-circuit_manager = CircuitManager(CIRCUIT_DATA_FILE)
+circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, FUNCTIONS_DATA_FILE)
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
 def init_circuit_file():
@@ -131,6 +131,8 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.remove_wire(params['id'])
     elif cmd == 'clear_circuit':
         return circuit_manager.clear_circuit()
+    elif cmd == 'define_function':
+        return circuit_manager.define_function(params['name'])
     elif cmd == 'toggle_input':
         return circuit_manager.toggle_input(params['id'])
     elif cmd == 'get_state':
@@ -167,10 +169,10 @@ def _parse_commands_payload(commands_str):
             if cmd == 'ADD':
                 if len(parts) >= 4:
                     element_type = _clean_token(parts[1]).upper()
-                    if element_type not in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT'}:
-                        continue
+                    # We remove the strict type check here to allow custom function names
+                    # Or check if it's in the allowed basic types OR let CircuitManager handle it
                     params = {
-                        'type': element_type,
+                        'type': element_type if element_type in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT'} else _clean_token(parts[1]),
                         'x': float(_clean_token(parts[2])),
                         'y': float(_clean_token(parts[3]))
                     }
@@ -196,6 +198,9 @@ def _parse_commands_payload(commands_str):
                     commands.append({'command': 'remove_wire', 'params': {'id': _clean_token(parts[1])}})
             elif cmd == 'CLEAR':
                 commands.append({'command': 'clear_circuit', 'params': {}})
+            elif cmd == 'DEFINE_FUNC':
+                if len(parts) >= 2:
+                    commands.append({'command': 'define_function', 'params': {'name': _clean_token(parts[1])}})
             elif cmd == 'TOGGLE':
                 if len(parts) >= 2:
                     commands.append({'command': 'toggle_input', 'params': {'id': _clean_token(parts[1])}})
@@ -255,6 +260,24 @@ def _execute_commands_with_alias(commands):
 
         execute_circuit_command('add_wire', params)
 
+    def _flush_pending_wires():
+        nonlocal pending_wires
+        retries = 3
+        for _ in range(retries):
+            if not pending_wires:
+                break
+            unresolved_wires = []
+            executed_count = 0
+            for wire_params in pending_wires:
+                try:
+                    _try_execute_wire(wire_params)
+                    executed_count += 1
+                except:
+                    unresolved_wires.append(wire_params)
+            pending_wires = unresolved_wires
+            if executed_count == 0:
+                break
+
     for cmd_data in commands:
         cmd = cmd_data.get('command')
         params = dict(cmd_data.get('params', {}) or {})
@@ -277,26 +300,17 @@ def _execute_commands_with_alias(commands):
             pending_wires.append(params)
             continue
 
+        # For commands that depend on previous elements/wires (like DEFINE_FUNC or CLEAR),
+        # we must execute pending wires first!
+        if cmd in ('clear_circuit', 'define_function', 'remove_element', 'remove_wire'):
+            _flush_pending_wires()
+
         try:
             execute_circuit_command(cmd, params)
         except:
             continue
 
-    retries = 3
-    for _ in range(retries):
-        if not pending_wires:
-            break
-        unresolved_wires = []
-        executed_count = 0
-        for wire_params in pending_wires:
-            try:
-                _try_execute_wire(wire_params)
-                executed_count += 1
-            except:
-                unresolved_wires.append(wire_params)
-        pending_wires = unresolved_wires
-        if executed_count == 0:
-            break
+    _flush_pending_wires()
 
 def _build_compact_state(state):
     elements = state.get('elements', [])
@@ -450,29 +464,42 @@ def call_llm_stream(user_message):
     current_state = circuit_manager.get_state()
     compact_state = _build_compact_state(current_state)
     compact_state_json = json.dumps(compact_state, ensure_ascii=False, separators=(',', ':'))
+    
+    # 动态加载现有函数列表
+    functions_data = circuit_manager._load_functions()
+    available_functions = [f.get('name') for f in functions_data] if functions_data else []
+    functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
+
     system_prompt = """你是一个电路模拟器助手。你可以通过调用指令来操作电路。
     
 可用指令集 (简短指令格式，每行一条):
-1. ADD <type> <x> <y> [alias] (添加元件，type 为 AND|OR|NOT|INPUT|OUTPUT，alias 为可选别名)
+1. ADD <type> <x> <y> [alias] (添加元件，type 为 AND|OR|NOT|INPUT|OUTPUT 或 自定义函数名，alias 为可选别名)
 2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx> (连接导线)
 3. DEL <id> (删除元件)
 4. DELW <id> (删除导线)
 5. CLEAR (清空电路)
 6. TOGGLE <id> (切换输入开关状态)
+7. DEFINE_FUNC <name> (将当前画布上所有元件封装为一个新的自定义函数)
 
 示例指令块:
 ADD INPUT 100 100 IN1
 ADD AND 200 100 A1
 WIRE IN1 0 A1 0
 
+关于函数系统 (Function System) 与“函数思维”:
+- 你应该拥有函数的思维去构建复杂电路。当你被要求实现一个复杂的逻辑（例如异或门 XOR、半加器等），你可以先用基础门电路（AND/OR/NOT）搭建出该逻辑，然后调用 `DEFINE_FUNC <name>` 将其封装为函数。
+- 封装为函数后，你可以调用 `CLEAR` 清空画布，然后直接使用 `ADD <name> <x> <y>` 来多次复用你刚刚写好的函数。
+- 一个合法的函数必须至少包含一个 INPUT 和一个 OUTPUT 元件作为其输入和输出端口。
+- {functions_str}
+
 当前电路状态:
 """ + compact_state_json + """
 
 请根据用户需求进行操作。
 门类型强约束：
-- 只允许使用 AND、OR、NOT、INPUT、OUTPUT。
-- 严禁输出 XOR、XNOR、NAND、NOR 以及其他未支持门类型。
-- 当用户要求“异或”功能时，必须用 AND/OR/NOT 组合实现，不能直接写 XOR。
+- 基础门只允许使用 AND、OR、NOT、INPUT、OUTPUT。
+- 严禁直接输出未支持的基础门（如 XOR、XNOR、NAND、NOR）。
+- 如果用户要求“异或”功能，必须用 AND/OR/NOT 组合实现，或将其封装为自定义函数后调用。
 **回复格式要求**:
 1. 先直接输出你对用户说的话（回复文字，尽量1句）。
 2. 在回复的最后，用 <commands> 标签包含你要执行的指令。
