@@ -453,169 +453,219 @@ def _extract_finish_reason(chunk_json, protocol):
         return str(choices[0].get("finish_reason") or "")
     return ""
 
-def call_llm_stream(user_message):
-    """
-    调用大语言模型 API，流式返回
-    """
-    if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
-        yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
-        return
+def _extract_tag_text(text, tag):
+    if not isinstance(text, str):
+        return ""
+    pattern = rf'<{tag}>([\s\S]*?)</{tag}>'
+    match = re.search(pattern, text, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
 
-    current_state = circuit_manager.get_state()
-    compact_state = _build_compact_state(current_state)
-    compact_state_json = json.dumps(compact_state, ensure_ascii=False, separators=(',', ':'))
-    
-    # 动态加载现有函数列表
-    functions_data = circuit_manager._load_functions()
-    available_functions = [f.get('name') for f in functions_data] if functions_data else []
-    functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
+def _extract_commands_block(text):
+    if not isinstance(text, str):
+        return ""
+    matches = re.findall(r'<commands>([\s\S]*?)</commands>', text, re.IGNORECASE)
+    if matches:
+        merged = "\n".join([m.strip() for m in matches if m and m.strip()]).strip()
+        return merged
+    open_match = re.search(r'<commands>([\s\S]*)', text, re.IGNORECASE)
+    if open_match:
+        return open_match.group(1).strip()
+    return ""
 
-    system_prompt = """你是一个电路模拟器助手。你可以通过调用指令来操作电路。
-    
-可用指令集 (简短指令格式，每行一条):
-1. ADD <type> <x> <y> [alias] (添加元件，type 为 AND|OR|NOT|INPUT|OUTPUT 或 自定义函数名，alias 为可选别名)
-2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx> (连接导线)
-3. DEL <id> (删除元件)
-4. DELW <id> (删除导线)
-5. CLEAR (清空电路)
-6. TOGGLE <id> (切换输入开关状态)
-7. DEFINE_FUNC <name> (将当前画布上所有元件封装为一个新的自定义函数)
+def _is_done_response(text):
+    done_text = _extract_tag_text(text, "done").lower()
+    return done_text in {"true", "yes", "1", "done"}
 
-示例指令块:
-ADD INPUT 100 100 IN1
-ADD AND 200 100 A1
-WIRE IN1 0 A1 0
+def _extract_answer_text(text):
+    answer = _extract_tag_text(text, "answer")
+    if answer:
+        return answer
+    stripped = re.sub(r'<plan>[\s\S]*?</plan>', '', text, flags=re.IGNORECASE).strip()
+    stripped = re.sub(r'<done>[\s\S]*?</done>', '', stripped, flags=re.IGNORECASE).strip()
+    stripped = _strip_commands_from_reply(stripped)
+    return stripped
 
-关于函数系统 (Function System) 与“函数思维”:
-- 你应该拥有函数的思维去构建复杂电路。当你被要求实现一个复杂的逻辑（例如异或门 XOR、半加器等），你可以先用基础门电路（AND/OR/NOT）搭建出该逻辑，然后调用 `DEFINE_FUNC <name>` 将其封装为函数。
-- 封装为函数后，你可以调用 `CLEAR` 清空画布，然后直接使用 `ADD <name> <x> <y>` 来多次复用你刚刚写好的函数。
-- 一个合法的函数必须至少包含一个 INPUT 和一个 OUTPUT 元件作为其输入和输出端口。
-- {functions_str}
+def _build_autonomous_system_prompt(compact_state_json, functions_str):
+    return """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
+
+可用指令集 (每行一条):
+1. ADD <type> <x> <y> [alias]
+2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx>
+3. DEL <id>
+4. DELW <id>
+5. CLEAR
+6. TOGGLE <id>
+7. DEFINE_FUNC <name>
+
+规则:
+- ADD 的 type 可以是 AND|OR|NOT|INPUT|OUTPUT 或已存在的自定义函数名。
+- 基础门只允许 AND、OR、NOT、INPUT、OUTPUT，不能直接使用 XOR、XNOR、NAND、NOR。
+- 处理复杂逻辑时必须使用函数思维：先拆分、再封装、再复用。
+- 需要封装时先搭建电路，再调用 DEFINE_FUNC，随后可 CLEAR 并 ADD <函数名> 复用。
+- 每轮都要先计划再执行，执行后必须自检是否满足用户目标。
+
+当前函数信息:
+""" + functions_str + """
 
 当前电路状态:
 """ + compact_state_json + """
 
-请根据用户需求进行操作。
-门类型强约束：
-- 基础门只允许使用 AND、OR、NOT、INPUT、OUTPUT。
-- 严禁直接输出未支持的基础门（如 XOR、XNOR、NAND、NOR）。
-- 如果用户要求“异或”功能，必须用 AND/OR/NOT 组合实现，或将其封装为自定义函数后调用。
-**回复格式要求**:
-1. 先直接输出你对用户说的话（回复文字，尽量1句）。
-2. 在回复的最后，用 <commands> 标签包含你要执行的指令。
-示例:
-好的，为您添加了一个与门。<commands>
-ADD INPUT 100 100 IN1
-ADD AND 200 100 A1
-WIRE IN1 0 A1 0
+你必须严格输出以下结构:
+<plan>
+先写本轮计划（简洁、可执行）
+</plan>
+<answer>
+给用户的简短说明
+</answer>
+<commands>
+命令列表；若本轮无需执行则留空
 </commands>
+<done>true 或 false</done>
 
-注意：确保指令格式完全正确。只在最后输出一次 <commands> 标签。
-优先输出最少必要文字，避免冗长解释。"""
+当你确认目标已满足时，done 设为 true；否则为 false 并继续给出整改命令。"""
+
+def _call_llm_once(system_prompt, request_messages):
+    protocol = _get_ai_protocol()
+    base_url = str(AI_CONFIG['base_url']).rstrip('/')
+    if protocol == "anthropic":
+        request_url = f"{base_url}/v1/messages"
+        request_headers = {
+            "x-api-key": AI_CONFIG['api_key'],
+            "anthropic-version": AI_CONFIG.get("anthropic_version", "2023-06-01"),
+            "Content-Type": "application/json"
+        }
+        request_payload = {
+            "model": AI_CONFIG["model"],
+            "system": system_prompt,
+            "messages": request_messages,
+            "temperature": 0.2,
+            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "stream": False
+        }
+    else:
+        request_url = f"{base_url}/chat/completions"
+        request_headers = {
+            "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+            "Content-Type": "application/json"
+        }
+        request_payload = {
+            "model": AI_CONFIG["model"],
+            "messages": [{"role": "system", "content": system_prompt}] + request_messages,
+            "temperature": 0.2,
+            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "stream": False
+        }
+    connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
+    read_timeout = float(AI_CONFIG.get("read_timeout", 180))
+    response = requests.post(
+        request_url,
+        headers=request_headers,
+        json=request_payload,
+        timeout=(connect_timeout, read_timeout)
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if protocol == "anthropic":
+        content = payload.get("content") or []
+        text = ''.join([c.get("text", "") for c in content if isinstance(c, dict)])
+        finish_reason = str(payload.get("stop_reason") or "")
+        return text, finish_reason
+    choices = payload.get("choices") or []
+    if not choices:
+        return "", ""
+    message = choices[0].get("message") or {}
+    finish_reason = str(choices[0].get("finish_reason") or "")
+    return str(message.get("content") or ""), finish_reason
+
+def call_llm_stream(user_message):
+    if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+        yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
+        return
 
     try:
-        protocol = _get_ai_protocol()
-        base_url = str(AI_CONFIG['base_url']).rstrip('/')
+        max_rounds = int(AI_CONFIG.get("agent_max_rounds", 3))
         request_messages = _get_chat_messages_with_memory(user_message)
-        if protocol == "anthropic":
-            request_url = f"{base_url}/v1/messages"
-            request_headers = {
-                "x-api-key": AI_CONFIG['api_key'],
-                "anthropic-version": AI_CONFIG.get("anthropic_version", "2023-06-01"),
-                "Content-Type": "application/json"
-            }
-            request_payload = {
-                "model": AI_CONFIG["model"],
-                "system": system_prompt,
-                "messages": request_messages,
-                "temperature": 0.2,
-                "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
-                "stream": True
-            }
-        else:
-            request_url = f"{base_url}/chat/completions"
-            request_headers = {
-                "Authorization": f"Bearer {AI_CONFIG['api_key']}",
-                "Content-Type": "application/json"
-            }
-            request_payload = {
-                "model": AI_CONFIG["model"],
-                "messages": [{"role": "system", "content": system_prompt}] + request_messages,
-                "temperature": 0.2,
-                "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
-                "stream": True
-            }
-
-        connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
-        read_timeout = float(AI_CONFIG.get("read_timeout", 180))
-
-        response = requests.post(
-            request_url,
-            headers=request_headers,
-            json=request_payload,
-            timeout=(connect_timeout, read_timeout),
-            stream=True
-        )
-        response.raise_for_status()
-        
-        full_content = ""
-        thinking_started = False
-        answer_started = False
+        aggregated_commands = []
+        final_answer_text = ""
         finish_reason = ""
-        commands_executed = False
-        for line in response.iter_lines():
-            if line:
-                line_str = line.decode('utf-8')
-                if line_str.startswith('data: '):
-                    data_content = line_str[6:]
-                    if data_content == '[DONE]':
-                        break
-                    
-                    try:
-                        chunk_json = json.loads(data_content)
-                    except:
-                        continue
-                    current_finish_reason = _extract_finish_reason(chunk_json, protocol)
-                    if current_finish_reason:
-                        finish_reason = current_finish_reason
-                    chunk_text, thinking_text = _extract_chunk_parts(chunk_json, protocol)
-                    if thinking_text:
-                        if not thinking_started:
-                            yield STREAM_THINKING_MARKER
-                            thinking_started = True
-                        yield thinking_text
-                    if chunk_text:
-                        if not answer_started:
-                            yield STREAM_ANSWER_MARKER
-                            answer_started = True
-                        full_content += chunk_text
-                        yield chunk_text
-        
-        # 兜底：如果循环结束还没执行
-        if not commands_executed:
-            match = re.search(r'<commands>(.*?)</commands>', full_content, re.DOTALL)
-            if match:
-                try:
-                    commands_str = match.group(1).strip()
-                    commands = _parse_commands_payload(commands_str)
-                    _execute_commands_with_alias(commands)
-                    commands_executed = True
-                except Exception as e:
-                    import traceback
-                    print(f"执行流式指令失败: {e}\n{traceback.format_exc()}")
-            else:
-                # 尝试容错：如果没有闭合标签，但有开始标签
-                match_open = re.search(r'<commands>(.*)', full_content, re.DOTALL)
-                if match_open:
-                    try:
-                        commands_str = match_open.group(1).strip()
-                        commands = _parse_commands_payload(commands_str)
-                        _execute_commands_with_alias(commands)
-                        commands_executed = True
-                    except Exception as e:
-                        print(f"执行容错流式指令失败: {e}")
+        yield STREAM_THINKING_MARKER
+        yield "已进入自治执行模式：计划→执行→检查→整改。\n"
 
-        assistant_memory_text = _strip_commands_from_reply(full_content)
+        for round_idx in range(1, max_rounds + 1):
+            current_state = circuit_manager.get_state()
+            compact_state = _build_compact_state(current_state)
+            compact_state_json = json.dumps(compact_state, ensure_ascii=False, separators=(',', ':'))
+            functions_data = circuit_manager._load_functions()
+            available_functions = [f.get('name') for f in functions_data] if functions_data else []
+            functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
+            system_prompt = _build_autonomous_system_prompt(compact_state_json, functions_str)
+
+            full_content, finish_reason = _call_llm_once(system_prompt, request_messages)
+            request_messages.append({"role": "assistant", "content": full_content})
+
+            plan_text = _extract_tag_text(full_content, "plan")
+            answer_text = _extract_answer_text(full_content)
+            commands_text = _extract_commands_block(full_content)
+            done_flag = _is_done_response(full_content)
+
+            if not answer_text:
+                answer_text = "已完成本轮处理。"
+            final_answer_text = answer_text
+
+            if plan_text:
+                yield f"[第{round_idx}轮计划]\n{plan_text}\n"
+            else:
+                yield f"[第{round_idx}轮计划]\n先执行必要操作，再进行结果检查。\n"
+
+            executed_command_count = 0
+            execution_error = ""
+            if commands_text:
+                try:
+                    parsed_commands = _parse_commands_payload(commands_text)
+                    executed_command_count = len(parsed_commands)
+                    _execute_commands_with_alias(parsed_commands)
+                    aggregated_commands.append(commands_text)
+                except Exception as e:
+                    execution_error = str(e)
+                    yield f"[第{round_idx}轮执行异常] {execution_error}\n"
+
+            after_state = circuit_manager.get_state()
+            compact_after_state = _build_compact_state(after_state)
+            element_count = len(compact_after_state.get('elements', []))
+            wire_count = len(compact_after_state.get('wires', []))
+            function_count = len(circuit_manager._load_functions())
+            yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}\n"
+
+            if execution_error:
+                request_messages.append({
+                    "role": "user",
+                    "content": f"系统检查：第{round_idx}轮执行发生错误：{execution_error}。请修复并继续。"
+                })
+                continue
+
+            if done_flag:
+                break
+
+            request_messages.append({
+                "role": "user",
+                "content": (
+                    f"系统检查反馈：第{round_idx}轮执行后，当前状态为 "
+                    f"{json.dumps(compact_after_state, ensure_ascii=False, separators=(',', ':'))}。"
+                    f"请判断是否满足用户目标：{user_message}。"
+                    "若满足请输出 done=true 且无需新命令；若不满足请继续整改。"
+                )
+            })
+
+        yield STREAM_ANSWER_MARKER
+        final_output = final_answer_text.strip() if final_answer_text else "已完成处理。"
+        if aggregated_commands:
+            merged_commands = "\n".join([c for c in aggregated_commands if c.strip()]).strip()
+            final_output += f"\n<commands>\n{merged_commands}\n</commands>"
+        else:
+            final_output += "\n<commands>\n[]\n</commands>"
+        yield final_output
+
+        assistant_memory_text = _strip_commands_from_reply(final_output)
         _append_chat_memory("user", user_message)
         _append_chat_memory("assistant", assistant_memory_text)
 
