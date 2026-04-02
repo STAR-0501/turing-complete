@@ -20,11 +20,11 @@ AI 应生成以下简短指令，以 `<commands>` 和 `</commands>` 标签包裹
 在画布上添加一个逻辑元件。
 - **格式**: `ADD <type> <x> <y> [alias]`
 - **参数**:
-  - `type`: 元件类型 (可选值: `AND`, `OR`, `NOT`, `INPUT`, `OUTPUT`)
+  - `type`: 元件类型 (可选值: `AND`, `OR`, `NOT`, `INPUT`, `OUTPUT`，或任何已保存的自定义函数名称)
   - `x`: X 坐标 (建议范围 0-1000)
   - `y`: Y 坐标 (建议范围 0-800)
   - `alias`: (可选) 元件别名，方便后续连接
-- **示例**: `ADD AND 100 200 A1`
+- **示例**: `ADD AND 100 200 A1` 或 `ADD MyXOR 100 200 XOR1`
 
 #### 2. `DEL`
 根据 ID 删除一个元件及其关联的所有导线。
@@ -50,6 +50,12 @@ AI 应生成以下简短指令，以 `<commands>` 和 `</commands>` 标签包裹
 清空整个画布。
 - **格式**: `CLEAR`
 
+#### 7. `DEFINE_FUNC`
+将当前画布上的所有元件和导线封装为一个新的自定义函数。
+- **格式**: `DEFINE_FUNC <name>`
+- **说明**: 画布上必须至少包含一个 INPUT 和一个 OUTPUT 元件。封装后，你可以通过 `CLEAR` 清空画布，然后用 `ADD <name>` 来调用该函数。
+- **示例**: `DEFINE_FUNC MyXOR`
+
 ---
 
 ## 3. 建议的 System Prompt (给 AI 使用)
@@ -62,10 +68,16 @@ AI 应生成以下简短指令，以 `<commands>` 和 `</commands>` 标签包裹
 4. DELW <id>
 5. CLEAR
 6. TOGGLE <id>
+7. DEFINE_FUNC <name>
+
+关于函数系统与“函数思维”:
+- 你应该拥有函数的思维去构建复杂电路。当你被要求实现一个复杂的逻辑（如异或门、半加器等），你可以先用基础门搭建，然后调用 `DEFINE_FUNC <name>` 将其封装为函数。
+- 封装为函数后，调用 `CLEAR` 清空画布，然后使用 `ADD <name>` 来多次复用该函数。
+
 门类型约束:
-- 只允许 AND、OR、NOT、INPUT、OUTPUT。
-- 严禁输出 XOR、XNOR、NAND、NOR 等未支持门类型。
-- 如用户要求异或功能，必须用 AND/OR/NOT 组合实现，不得直接使用 XOR。
+- 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。
+- 严禁输出 XOR、XNOR、NAND、NOR 等未支持基础门。
+- 如用户要求异或功能，必须用 AND/OR/NOT 组合实现，或将其封装为自定义函数后调用。
 
 你的工作流程：
 1. 分析用户需求。

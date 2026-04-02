@@ -103,6 +103,7 @@ async function init() {
         const now = Date.now();
         if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && (now - lastSaveTime > 3000)) {
             await loadFromServer();
+            await loadFunctionsFromServer(); // 动态加载函数列表，以响应 AI 的封装操作
         }
     }, 2000);
 
@@ -2196,10 +2197,13 @@ async function loadFunctionsFromServer() {
         const response = await fetch('http://localhost:5000/api/load-functions');
         const result = await response.json();
         if (result.functions) {
-            savedFunctions = result.functions;
-            updateFunctionPanel();
+            // Only update if functions have changed to prevent UI flicker
+            if (JSON.stringify(savedFunctions) !== JSON.stringify(result.functions)) {
+                savedFunctions = result.functions;
+                updateFunctionPanel();
+                console.log('从服务器加载并更新函数:', savedFunctions);
+            }
         }
-        console.log('从服务器加载函数:', savedFunctions);
     } catch (error) {
         console.error('从服务器加载函数失败:', error);
     }
