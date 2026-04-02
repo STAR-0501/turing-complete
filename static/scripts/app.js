@@ -2505,134 +2505,28 @@ function startRenderLoop() {
         }
         
         // 基础渲染
-        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements, [], null, false, zoom, camera, signalAnimation);
+        render(
+            ctx,
+            elements,
+            wires,
+            selectedElement,
+            selectedWire,
+            selectionRect,
+            selectedElements,
+            isPasting ? clipboardElements : [],
+            isPasting ? pasteOffset : null,
+            isPasting,
+            zoom,
+            camera,
+            signalAnimation
+        );
         
         // 绘制临时元素（正在放置的元件）
         if (tempElement) {
             drawTemporaryElement(ctx, tempElement);
         }
         
-        // 绘制粘贴预览
-        if (isPasting && clipboardElements.length > 0 && pasteOffset) {
-            // 获取当前缩放比例
-            let gridSize = 20;
-            const grid = document.getElementById('grid');
-            if (grid) {
-                const currentBgSize = getComputedStyle(grid).backgroundSize;
-                const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-                if (sizeMatch) {
-                    gridSize = parseInt(sizeMatch[1]);
-                }
-            }
-            const currentScale = gridSize / 20;
-            
-            for (const template of clipboardElements) {
-                const copyScale = template._scaleFactor || 1;
-                const scaleRatio = currentScale / copyScale;
-                
-                const x = pasteOffset.x + template._copyOffsetX * scaleRatio;
-                const y = pasteOffset.y + template._copyOffsetY * scaleRatio;
-                const width = template.width * scaleRatio;
-                const height = template.height * scaleRatio;
-                
-                ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                
-                ctx.beginPath();
-                ctx.rect(x, y, width, height);
-                ctx.fill();
-                ctx.stroke();
-                
-                ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-                ctx.font = `${14 * scaleRatio}px Arial`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                
-                switch (template.type) {
-                    case 'AND':
-                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                        ctx.lineWidth = 2;
-                        const andCenterX = x + width / 2;
-                        const andCenterY = y + height / 2;
-                        const andSize = Math.min(width, height) * 0.7;
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(andCenterX - andSize/2, andCenterY - andSize/3);
-                        ctx.lineTo(andCenterX - andSize/2, andCenterY + andSize/3);
-                        ctx.arc(andCenterX + andSize/4, andCenterY, andSize/3, Math.PI * 1.5, Math.PI * 0.5);
-                        ctx.closePath();
-                        ctx.stroke();
-                        break;
-                    case 'OR':
-                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                        ctx.lineWidth = 2;
-                        const orCenterX = x + width / 2;
-                        const orCenterY = y + height / 2;
-                        const orSize = Math.min(width, height) * 0.7;
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(orCenterX - orSize/2, orCenterY - orSize/3);
-                        ctx.lineTo(orCenterX - orSize/2, orCenterY + orSize/3);
-                        ctx.arc(orCenterX + orSize/4, orCenterY, orSize/3, Math.PI * 1.5, Math.PI * 0.5);
-                        ctx.closePath();
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.arc(orCenterX - orSize/2, orCenterY, orSize/6, Math.PI * 0.5, Math.PI * 1.5);
-                        ctx.stroke();
-                        break;
-                    case 'NOT':
-                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                        ctx.lineWidth = 2;
-                        const notCenterX = x + width / 2;
-                        const notCenterY = y + height / 2;
-                        const notSize = Math.min(width, height) * 0.7;
-                        
-                        ctx.beginPath();
-                        ctx.rect(notCenterX - notSize/3, notCenterY - notSize/4, notSize/2, notSize/2);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(notCenterX + notSize/6, notCenterY);
-                        ctx.lineTo(notCenterX + notSize/3, notCenterY);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.arc(notCenterX + notSize/3 + notSize/12, notCenterY, notSize/12, 0, Math.PI * 2);
-                        ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-                        ctx.fill();
-                        break;
-                    case 'INPUT':
-                        ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
-                        break;
-                    case 'OUTPUT':
-                        ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
-                        break;
-                    case 'FUNCTION':
-                        ctx.font = `${12 * scaleRatio}px Arial`;
-                        ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
-                        break;
-                }
-                
-                for (const input of template.inputs) {
-                    const portX = x + input.x * scaleRatio;
-                    const portY = y + input.y * scaleRatio;
-                    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-                    ctx.beginPath();
-                    ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                for (const output of template.outputs) {
-                    const portX = x + output.x * scaleRatio;
-                    const portY = y + output.y * scaleRatio;
-                    ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-                    ctx.beginPath();
-                    ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-            ctx.setLineDash([]);
-        }
+        
         
         // 绘制正在绘制的导线
         if (isDrawingWire && wireStart) {
