@@ -16,7 +16,7 @@
  * @param {object} pasteOffset - 粘贴位置偏移量
  * @param {boolean} isPasting - 是否正在粘贴模式
  */
-export function render(ctx, elements, wires, selectedElement, selectedWire, selectionRect = null, selectedElements = [], clipboardElements = [], pasteOffset = null, isPasting = false, zoom = 1, camera = { x: 0, y: 0 }) {
+export function render(ctx, elements, wires, selectedElement, selectedWire, selectionRect = null, selectedElements = [], clipboardElements = [], pasteOffset = null, isPasting = false, zoom = 1, camera = { x: 0, y: 0 }, signalAnimation = null) {
     // 清空画布
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     
@@ -49,6 +49,35 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
         ctx.strokeStyle = wireColor;
         ctx.lineWidth = 2;
         ctx.stroke();
+    }
+
+    if (signalAnimation && signalAnimation.active && Array.isArray(signalAnimation.wireTravels)) {
+        const now = performance.now();
+        const t = now - signalAnimation.startTime;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (const travel of signalAnimation.wireTravels) {
+            const local = t - travel.startOffset;
+            if (local <= 0) continue;
+            const progress = Math.min(1, local / travel.duration);
+            if (progress <= 0 || progress >= 1) continue;
+            const x = travel.fromX + (travel.toX - travel.fromX) * progress;
+            const y = travel.fromY + (travel.toY - travel.fromY) * progress;
+
+            ctx.beginPath();
+            ctx.moveTo(travel.fromX, travel.fromY);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = travel.color;
+            ctx.lineWidth = 4 / zoom;
+            ctx.stroke();
+
+            ctx.fillStyle = travel.color;
+            ctx.beginPath();
+            ctx.arc(x, y, 4 / zoom, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
     }
     
     // 绘制元件

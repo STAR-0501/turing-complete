@@ -32,6 +32,15 @@ let panOffset = { x: 0, y: 0 };
 let canvasOffset = { x: 0, y: 0 };
 let zoom = 1; // 缩放级别
 let camera = { x: 0, y: 0 }; // 相机位置
+let signalAnimation = null;
+let isSignalAnimating = false;
+
+const SIGNAL_ANIMATION_SETTINGS = {
+    nodeEmitDelay: 60,
+    nodeLightDelay: 80,
+    wireBaseDelay: 60,
+    wireSpeed: 1.2
+};
 
 // 框选相关变量
 let isSelecting = false; // 是否正在进行框选
@@ -101,7 +110,7 @@ async function init() {
     setInterval(async () => {
         // 如果正在操作中，或者刚保存完（防止覆盖最新的本地改动），不从服务器加载
         const now = Date.now();
-        if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && (now - lastSaveTime > 3000)) {
+        if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && !isSignalAnimating && (now - lastSaveTime > 3000)) {
             await loadFromServer();
             await loadFunctionsFromServer(); // 动态加载函数列表，以响应 AI 的封装操作
         }
@@ -523,6 +532,253 @@ function duplicateElement(sourceElement) {
     return null;
 }
 
+function takeCircuitStateSnapshot() {
+    const elementStates = new Map();
+    for (const el of elements) {
+        elementStates.set(el.id, !!el.state);
+    }
+    const wireStates = new Map();
+    for (const wire of wires) {
+        wireStates.set(wire.id, !!wire.state);
+    }
+    return { elementStates, wireStates };
+}
+
+function applyCircuitStateSnapshot(snapshot) {
+    if (!snapshot) return;
+    for (const el of elements) {
+        const v = snapshot.elementStates.get(el.id);
+        if (v !== undefined) el.state = v;
+    }
+    for (const wire of wires) {
+        const v = snapshot.wireStates.get(wire.id);
+        if (v !== undefined) wire.state = v;
+    }
+}
+
+function getWireFlowInfo(wire) {
+    if (!wire?.start?.elementId || !wire?.end?.elementId) return null;
+
+    const startIsOutput = !wire.start.isInput;
+    const endIsOutput = !wire.end.isInput;
+
+    if (startIsOutput && wire.end.isInput) {
+        return {
+            wireId: wire.id,
+            fromElementId: wire.start.elementId,
+            toElementId: wire.end.elementId,
+            fromX: wire.start.x,
+            fromY: wire.start.y,
+            toX: wire.end.x,
+            toY: wire.end.y
+        };
+    }
+
+    if (endIsOutput && wire.start.isInput) {
+        return {
+            wireId: wire.id,
+            fromElementId: wire.end.elementId,
+            toElementId: wire.start.elementId,
+            fromX: wire.end.x,
+            fromY: wire.end.y,
+            toX: wire.start.x,
+            toY: wire.start.y
+        };
+    }
+
+    if (startIsOutput && endIsOutput) {
+        return {
+            wireId: wire.id,
+            fromElementId: wire.start.elementId,
+            toElementId: wire.end.elementId,
+            fromX: wire.start.x,
+            fromY: wire.start.y,
+            toX: wire.end.x,
+            toY: wire.end.y
+        };
+    }
+
+    return {
+        wireId: wire.id,
+        fromElementId: wire.start.elementId,
+        toElementId: wire.end.elementId,
+        fromX: wire.start.x,
+        fromY: wire.start.y,
+        toX: wire.end.x,
+        toY: wire.end.y
+    };
+}
+
+function buildSignalAnimation(sourceElementId, beforeSnapshot, targetSnapshot) {
+    const startTime = performance.now();
+
+    const elementById = new Map();
+    for (const el of elements) {
+        elementById.set(el.id, el);
+    }
+    const wireById = new Map();
+    for (const wire of wires) {
+        wireById.set(wire.id, wire);
+    }
+
+    const outgoing = new Map();
+    const directedWires = [];
+    const changedWireStates = new Map();
+    const changedElementStates = new Map();
+
+    for (const el of elements) {
+        const beforeValue = beforeSnapshot.elementStates.get(el.id) || false;
+        const afterValue = targetSnapshot.elementStates.get(el.id) || false;
+        changedElementStates.set(el.id, beforeValue !== afterValue);
+    }
+    for (const wire of wires) {
+        const info = getWireFlowInfo(wire);
+        if (!info) continue;
+        const beforeValue = beforeSnapshot.wireStates.get(info.wireId) || false;
+        const afterValue = targetSnapshot.wireStates.get(info.wireId) || false;
+        const isChanged = beforeValue !== afterValue;
+        changedWireStates.set(info.wireId, isChanged);
+        if (!isChanged) continue;
+        directedWires.push(info);
+        if (!outgoing.has(info.fromElementId)) outgoing.set(info.fromElementId, []);
+        outgoing.get(info.fromElementId).push(info);
+    }
+
+
+    const switchTimes = new Map();
+    for (const el of elements) {
+        switchTimes.set(el.id, Infinity);
+    }
+    switchTimes.set(sourceElementId, 0);
+
+    const visited = new Set();
+    while (true) {
+        let currentId = null;
+        let currentTime = Infinity;
+        for (const [id, t] of switchTimes) {
+            if (visited.has(id)) continue;
+            if (t < currentTime) {
+                currentTime = t;
+                currentId = id;
+            }
+        }
+        if (currentId === null || currentTime === Infinity) break;
+        visited.add(currentId);
+
+        const outs = outgoing.get(currentId) || [];
+        for (const info of outs) {
+            const length = distance(info.fromX, info.fromY, info.toX, info.toY);
+            const travel = SIGNAL_ANIMATION_SETTINGS.wireBaseDelay + length / SIGNAL_ANIMATION_SETTINGS.wireSpeed;
+            const nextTime = currentTime + SIGNAL_ANIMATION_SETTINGS.nodeEmitDelay + travel + SIGNAL_ANIMATION_SETTINGS.nodeLightDelay;
+            if (nextTime < (switchTimes.get(info.toElementId) || Infinity)) {
+                switchTimes.set(info.toElementId, nextTime);
+            }
+        }
+    }
+
+    const elementEvents = [];
+    for (const [id, t] of switchTimes) {
+        if (t === Infinity) continue;
+        if (id === sourceElementId || changedElementStates.get(id)) {
+            elementEvents.push({ id, time: t });
+        }
+    }
+    elementEvents.sort((a, b) => a.time - b.time);
+
+    const wireTravels = [];
+    const wireEvents = [];
+    let endTime = 0;
+
+    for (const info of directedWires) {
+        const fromTime = switchTimes.get(info.fromElementId);
+        if (fromTime === undefined || fromTime === Infinity) continue;
+        const startOffset = fromTime + SIGNAL_ANIMATION_SETTINGS.nodeEmitDelay;
+        const length = distance(info.fromX, info.fromY, info.toX, info.toY);
+        const duration = SIGNAL_ANIMATION_SETTINGS.wireBaseDelay + length / SIGNAL_ANIMATION_SETTINGS.wireSpeed;
+        const endOffset = startOffset + duration;
+
+        const targetWireState = targetSnapshot.wireStates.get(info.wireId) || false;
+        const color = targetWireState ? '#00ff00' : '#ff0000';
+
+        wireTravels.push({
+            wireId: info.wireId,
+            fromX: info.fromX,
+            fromY: info.fromY,
+            toX: info.toX,
+            toY: info.toY,
+            startOffset,
+            duration,
+            color
+        });
+
+        wireEvents.push({ id: info.wireId, time: endOffset });
+        endTime = Math.max(endTime, endOffset);
+    }
+
+    for (const ev of elementEvents) {
+        endTime = Math.max(endTime, ev.time);
+    }
+
+    wireEvents.sort((a, b) => a.time - b.time);
+
+    return {
+        active: true,
+        startTime,
+        endTime: endTime + 200,
+        elementEvents,
+        wireEvents,
+        elementIndex: 0,
+        wireIndex: 0,
+        elementById,
+        wireById,
+        targetElementStates: targetSnapshot.elementStates,
+        targetWireStates: targetSnapshot.wireStates,
+        changedWireStates,
+        changedElementStates,
+        wireTravels
+    };
+}
+
+function completeSignalAnimation() {
+    if (!signalAnimation) return;
+    for (const [id, state] of signalAnimation.targetElementStates) {
+        const el = signalAnimation.elementById.get(id);
+        if (el) el.state = state;
+    }
+    for (const [id, state] of signalAnimation.targetWireStates) {
+        const wire = signalAnimation.wireById.get(id);
+        if (wire) wire.state = state;
+    }
+    signalAnimation.active = false;
+    signalAnimation = null;
+    isSignalAnimating = false;
+}
+
+function updateSignalAnimation(now) {
+    if (!signalAnimation || !signalAnimation.active) return;
+    const t = now - signalAnimation.startTime;
+
+    while (signalAnimation.elementIndex < signalAnimation.elementEvents.length &&
+        t >= signalAnimation.elementEvents[signalAnimation.elementIndex].time) {
+        const id = signalAnimation.elementEvents[signalAnimation.elementIndex].id;
+        const el = signalAnimation.elementById.get(id);
+        if (el) el.state = signalAnimation.targetElementStates.get(id) || false;
+        signalAnimation.elementIndex++;
+    }
+
+    while (signalAnimation.wireIndex < signalAnimation.wireEvents.length &&
+        t >= signalAnimation.wireEvents[signalAnimation.wireIndex].time) {
+        const id = signalAnimation.wireEvents[signalAnimation.wireIndex].id;
+        const wire = signalAnimation.wireById.get(id);
+        if (wire) wire.state = signalAnimation.targetWireStates.get(id) || false;
+        signalAnimation.wireIndex++;
+    }
+
+    if (t >= signalAnimation.endTime) {
+        completeSignalAnimation();
+    }
+}
+
 /**
  * 处理鼠标按下事件
  * @param {MouseEvent} e - 鼠标事件
@@ -535,6 +791,10 @@ function handleMouseDown(e) {
     // 计算鼠标在世界坐标系中的位置
     const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
     const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
+
+    if (isSignalAnimating) {
+        completeSignalAnimation();
+    }
     
     // 右键点击 - 始终启动拖动屏幕（无论点击哪里）
     // 只有 mousedown 事件会触发 panning，auxclick 不会
@@ -683,10 +943,19 @@ function handleMouseDown(e) {
             }
             
             if (currentTool === 'input-toggle' && element.type === 'INPUT') {
-                // 输入切换工具：切换输入状态
+                const beforeSnapshot = takeCircuitStateSnapshot();
                 element.state = !element.state;
                 saveState();
+
                 elements = calculateCircuit(elements, wires);
+                const targetSnapshot = takeCircuitStateSnapshot();
+
+                applyCircuitStateSnapshot(beforeSnapshot);
+                element.state = targetSnapshot.elementStates.get(element.id) || false;
+
+                signalAnimation = buildSignalAnimation(element.id, beforeSnapshot, targetSnapshot);
+                isSignalAnimating = true;
+
                 document.getElementById('status-bar').textContent = `输入状态已切换为: ${element.state ? '1' : '0'}`;
                 render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 return;
@@ -2212,6 +2481,10 @@ async function loadFunctionsFromServer() {
 // 持续渲染循环（帧率刷新）
 function startRenderLoop() {
     function loop() {
+        if (isSignalAnimating) {
+            updateSignalAnimation(performance.now());
+        }
+
         // 根据当前状态确定框选矩形
         let selectionRect = null;
         if (isSelecting) {
@@ -2232,7 +2505,7 @@ function startRenderLoop() {
         }
         
         // 基础渲染
-        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements, [], null, false, zoom, camera);
+        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements, [], null, false, zoom, camera, signalAnimation);
         
         // 绘制临时元素（正在放置的元件）
         if (tempElement) {
@@ -2363,12 +2636,24 @@ function startRenderLoop() {
         
         // 绘制正在绘制的导线
         if (isDrawingWire && wireStart) {
+            const canvasWidth = ctx.canvas.width;
+            const canvasHeight = ctx.canvas.height;
+            const endX = (mousePos.x - canvasWidth / 2) / zoom + camera.x;
+            const endY = (mousePos.y - canvasHeight / 2) / zoom + camera.y;
+
+            ctx.save();
+            ctx.translate(canvasWidth / 2, canvasHeight / 2);
+            ctx.scale(zoom, zoom);
+            ctx.translate(-camera.x, -camera.y);
+
             ctx.beginPath();
             ctx.moveTo(wireStart.x, wireStart.y);
-            ctx.lineTo(mousePos.x, mousePos.y);
+            ctx.lineTo(endX, endY);
             ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoom;
             ctx.stroke();
+
+            ctx.restore();
         }
         
         requestAnimationFrame(loop);
