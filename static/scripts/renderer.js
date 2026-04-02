@@ -16,9 +16,15 @@
  * @param {object} pasteOffset - 粘贴位置偏移量
  * @param {boolean} isPasting - 是否正在粘贴模式
  */
-export function render(ctx, elements, wires, selectedElement, selectedWire, selectionRect = null, selectedElements = [], clipboardElements = [], pasteOffset = null, isPasting = false) {
+export function render(ctx, elements, wires, selectedElement, selectedWire, selectionRect = null, selectedElements = [], clipboardElements = [], pasteOffset = null, isPasting = false, zoom = 1, camera = { x: 0, y: 0 }) {
     // 清空画布
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
+    // 应用相机变换
+    ctx.save();
+    ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-camera.x, -camera.y);
     
     // 绘制导线
     for (const wire of wires) {
@@ -195,8 +201,8 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
     // 绘制框选矩形
     if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1 / zoom;
+        ctx.setLineDash([5 / zoom, 5 / zoom]);
         ctx.strokeRect(selectionRect.x, selectionRect.y, selectionRect.width, selectionRect.height);
         ctx.setLineDash([]);
         
@@ -207,33 +213,18 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
     
     // 绘制粘贴预览
     if (isPasting && clipboardElements.length > 0 && pasteOffset) {
-        // 获取当前缩放比例
-        let gridSize = 20;
-        const grid = document.getElementById('grid');
-        if (grid) {
-            const currentBgSize = getComputedStyle(grid).backgroundSize;
-            const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-            if (sizeMatch) {
-                gridSize = parseInt(sizeMatch[1]);
-            }
-        }
-        const currentScale = gridSize / 20;
-        
         for (const template of clipboardElements) {
-            // 计算缩放比例
-            const copyScale = template._scaleFactor || 1;
-            const scaleRatio = currentScale / copyScale;
-            
-            const x = pasteOffset.x + template._copyOffsetX * scaleRatio;
-            const y = pasteOffset.y + template._copyOffsetY * scaleRatio;
-            const width = template.width * scaleRatio;
-            const height = template.height * scaleRatio;
+            // 不进行缩放，使用原始大小
+            const x = pasteOffset.x + template._copyOffsetX;
+            const y = pasteOffset.y + template._copyOffsetY;
+            const width = template.width;
+            const height = template.height;
             
             // 绘制预览元件（半透明虚线）
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
             ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 2 / zoom;
+            ctx.setLineDash([5 / zoom, 5 / zoom]);
             
             // 绘制元件背景
             ctx.beginPath();
@@ -243,14 +234,14 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
             
             // 绘制元件符号
             ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-            ctx.font = `${14 * scaleRatio}px Arial`;
+            ctx.font = (14 / zoom) + 'px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
             switch (template.type) {
                 case 'AND':
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 2 / zoom;
                     const andCenterX = x + width / 2;
                     const andCenterY = y + height / 2;
                     const andSize = Math.min(width, height) * 0.7;
@@ -264,7 +255,7 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
                     break;
                 case 'OR':
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 2 / zoom;
                     const orCenterX = x + width / 2;
                     const orCenterY = y + height / 2;
                     const orSize = Math.min(width, height) * 0.7;
@@ -281,7 +272,7 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
                     break;
                 case 'NOT':
                     ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 2 / zoom;
                     const notCenterX = x + width / 2;
                     const notCenterY = y + height / 2;
                     const notSize = Math.min(width, height) * 0.7;
@@ -305,30 +296,33 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
                     ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
                     break;
                 case 'FUNCTION':
-                    ctx.font = `${12 * scaleRatio}px Arial`;
+                    ctx.font = (12 / zoom) + 'px Arial';
                     ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
                     break;
             }
             
             // 绘制端口
             for (const input of template.inputs) {
-                const portX = x + input.x * scaleRatio;
-                const portY = y + input.y * scaleRatio;
+                const portX = x + input.x;
+                const portY = y + input.y;
                 ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
                 ctx.beginPath();
-                ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                ctx.arc(portX, portY, 5 / zoom, 0, Math.PI * 2);
                 ctx.fill();
             }
             
             for (const output of template.outputs) {
-                const portX = x + output.x * scaleRatio;
-                const portY = y + output.y * scaleRatio;
+                const portX = x + output.x;
+                const portY = y + output.y;
                 ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
                 ctx.beginPath();
-                ctx.arc(portX, portY, 5 * scaleRatio, 0, Math.PI * 2);
+                ctx.arc(portX, portY, 5 / zoom, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
         ctx.setLineDash([]);
     }
+    
+    // 恢复上下文
+    ctx.restore();
 }

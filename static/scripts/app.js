@@ -30,6 +30,8 @@ let mousePos = { x: 0, y: 0 };
 let isPanning = false;
 let panOffset = { x: 0, y: 0 };
 let canvasOffset = { x: 0, y: 0 };
+let zoom = 1; // 缩放级别
+let camera = { x: 0, y: 0 }; // 相机位置
 
 // 框选相关变量
 let isSelecting = false; // 是否正在进行框选
@@ -74,20 +76,22 @@ async function init() {
     saveState();
     
     // 事件监听
-    canvas.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mousemove', handleMouseMove); // 改为 window 监听，以支持鼠标在任何位置（包括覆盖层）
-    canvas.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('mouseup', handleMouseUp);
+    
+    // 只添加一个mousedown事件监听器到canvas
+    canvas.addEventListener('mousedown', (e) => {
+        // 阻止中键默认的滚动行为
+        if (e.button === 1) {
+            e.preventDefault();
+        }
+        handleMouseDown(e);
+    });
+    
     canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
     // 阻止右键菜单
     canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-    });
-    // 阻止中键默认的滚动行为
-    canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 1) {
-            e.preventDefault();
-        }
     });
     // 添加滚轮缩放功能
     canvas.addEventListener('wheel', handleWheel);
@@ -320,7 +324,7 @@ async function init() {
     saveState();
     
     // 开始渲染循环
-    render(ctx, elements, wires, selectedElement, selectedWire);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 }
 
 /**
@@ -329,7 +333,7 @@ async function init() {
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    render(ctx, elements, wires, selectedElement, selectedWire);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 }
 
 /**
@@ -337,38 +341,19 @@ function resizeCanvas() {
  * @param {string} type - 元件类型
  */
 function addElement(type) {
-    // 获取当前缩放比例
-    let scaleFactor = 1;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            const gridSize = parseInt(sizeMatch[1]);
-            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
-        }
-    }
+    // 计算鼠标在世界坐标系中的位置
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = mousePos.x;
+    const mouseY = mousePos.y;
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
     
     // 创建临时元素
-    const element = createElement(type, mousePos.x, mousePos.y);
+    const element = createElement(type, worldX, worldY);
     if (element) {
-        // 根据当前缩放比例调整实际大小
-        element.width = element.realWidth * scaleFactor;
-        element.height = element.realHeight * scaleFactor;
-        
-        // 调整端口位置
-        for (const input of element.inputs) {
-            input.x = input.realX * scaleFactor;
-            input.y = input.realY * scaleFactor;
-        }
-        for (const output of element.outputs) {
-            output.x = output.realX * scaleFactor;
-            output.y = output.realY * scaleFactor;
-        }
-        
-        // 设置元素位置为鼠标位置
-        element.x = mousePos.x - element.width / 2;
-        element.y = mousePos.y - element.height / 2;
+        // 设置元素位置为鼠标位置（世界坐标）
+        element.x = worldX - element.width / 2;
+        element.y = worldY - element.height / 2;
         currentElementToPlace = element;
         isPlacingElement = true;
         document.getElementById('status-bar').textContent = '请点击鼠标左键放置元件';
@@ -383,18 +368,6 @@ function addElement(type) {
  * @returns {object|null} 新的元件
  */
 function createElementForMiddleClickCopy(sourceElement, x, y) {
-    // 获取当前缩放比例
-    let scaleFactor = 1;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            const gridSize = parseInt(sizeMatch[1]);
-            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
-        }
-    }
-    
     let newElement;
     if (sourceElement.type === 'FUNCTION') {
         newElement = createElement('FUNCTION', x, y, {
@@ -406,18 +379,22 @@ function createElementForMiddleClickCopy(sourceElement, x, y) {
         });
         
         if (newElement) {
-            // 根据当前缩放比例调整实际大小
-            newElement.width = newElement.realWidth * scaleFactor;
-            newElement.height = newElement.realHeight * scaleFactor;
+            // 使用与源元件相同的大小
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
             
             // 调整端口位置
-            for (const input of newElement.inputs) {
-                input.x = input.realX * scaleFactor;
-                input.y = input.realY * scaleFactor;
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                if (sourceElement.inputs[i]) {
+                    newElement.inputs[i].x = sourceElement.inputs[i].x;
+                    newElement.inputs[i].y = sourceElement.inputs[i].y;
+                }
             }
-            for (const output of newElement.outputs) {
-                output.x = output.realX * scaleFactor;
-                output.y = output.realY * scaleFactor;
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                if (sourceElement.outputs[i]) {
+                    newElement.outputs[i].x = sourceElement.outputs[i].x;
+                    newElement.outputs[i].y = sourceElement.outputs[i].y;
+                }
             }
         }
     } else {
@@ -428,18 +405,22 @@ function createElementForMiddleClickCopy(sourceElement, x, y) {
                 newElement.state = sourceElement.state;
             }
             
-            // 根据当前缩放比例调整实际大小
-            newElement.width = newElement.realWidth * scaleFactor;
-            newElement.height = newElement.realHeight * scaleFactor;
+            // 使用与源元件相同的大小
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
             
             // 调整端口位置
-            for (const input of newElement.inputs) {
-                input.x = input.realX * scaleFactor;
-                input.y = input.realY * scaleFactor;
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                if (sourceElement.inputs[i]) {
+                    newElement.inputs[i].x = sourceElement.inputs[i].x;
+                    newElement.inputs[i].y = sourceElement.inputs[i].y;
+                }
             }
-            for (const output of newElement.outputs) {
-                output.x = output.realX * scaleFactor;
-                output.y = output.realY * scaleFactor;
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                if (sourceElement.outputs[i]) {
+                    newElement.outputs[i].x = sourceElement.outputs[i].x;
+                    newElement.outputs[i].y = sourceElement.outputs[i].y;
+                }
             }
         }
     }
@@ -457,23 +438,18 @@ function createElementForMiddleClickCopy(sourceElement, x, y) {
  * @param {object} sourceElement - 要复制的源元素
  */
 function duplicateElement(sourceElement) {
-    // 获取当前缩放比例
-    let scaleFactor = 1;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            const gridSize = parseInt(sizeMatch[1]);
-            scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
-        }
-    }
+    // 计算鼠标在世界坐标系中的位置
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = mousePos.x;
+    const mouseY = mousePos.y;
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
     
     // 创建临时元素，位置在鼠标附近
     let newElement;
     if (sourceElement.type === 'FUNCTION') {
         // 函数元件需要特殊处理
-        newElement = createElement('FUNCTION', mousePos.x, mousePos.y, {
+        newElement = createElement('FUNCTION', worldX, worldY, {
             name: sourceElement.name,
             functionElements: JSON.parse(JSON.stringify(sourceElement.functionData.elements)),
             functionWires: JSON.parse(JSON.stringify(sourceElement.functionData.wires)),
@@ -482,22 +458,26 @@ function duplicateElement(sourceElement) {
         });
         
         if (newElement) {
-            // 根据当前缩放比例调整实际大小
-            newElement.width = newElement.realWidth * scaleFactor;
-            newElement.height = newElement.realHeight * scaleFactor;
+            // 使用与源元件相同的大小
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
             
             // 调整端口位置
-            for (const input of newElement.inputs) {
-                input.x = input.realX * scaleFactor;
-                input.y = input.realY * scaleFactor;
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                if (sourceElement.inputs[i]) {
+                    newElement.inputs[i].x = sourceElement.inputs[i].x;
+                    newElement.inputs[i].y = sourceElement.inputs[i].y;
+                }
             }
-            for (const output of newElement.outputs) {
-                output.x = output.realX * scaleFactor;
-                output.y = output.realY * scaleFactor;
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                if (sourceElement.outputs[i]) {
+                    newElement.outputs[i].x = sourceElement.outputs[i].x;
+                    newElement.outputs[i].y = sourceElement.outputs[i].y;
+                }
             }
         }
     } else {
-        newElement = createElement(sourceElement.type, mousePos.x, mousePos.y);
+        newElement = createElement(sourceElement.type, worldX, worldY);
         
         if (newElement) {
             // 复制状态（对于INPUT元件）
@@ -505,26 +485,30 @@ function duplicateElement(sourceElement) {
                 newElement.state = sourceElement.state;
             }
             
-            // 根据当前缩放比例调整实际大小
-            newElement.width = newElement.realWidth * scaleFactor;
-            newElement.height = newElement.realHeight * scaleFactor;
+            // 使用与源元件相同的大小
+            newElement.width = sourceElement.width;
+            newElement.height = sourceElement.height;
             
             // 调整端口位置
-            for (const input of newElement.inputs) {
-                input.x = input.realX * scaleFactor;
-                input.y = input.realY * scaleFactor;
+            for (let i = 0; i < newElement.inputs.length; i++) {
+                if (sourceElement.inputs[i]) {
+                    newElement.inputs[i].x = sourceElement.inputs[i].x;
+                    newElement.inputs[i].y = sourceElement.inputs[i].y;
+                }
             }
-            for (const output of newElement.outputs) {
-                output.x = output.realX * scaleFactor;
-                output.y = output.realY * scaleFactor;
+            for (let i = 0; i < newElement.outputs.length; i++) {
+                if (sourceElement.outputs[i]) {
+                    newElement.outputs[i].x = sourceElement.outputs[i].x;
+                    newElement.outputs[i].y = sourceElement.outputs[i].y;
+                }
             }
         }
     }
     
     if (newElement) {
         // 设置元素位置为鼠标位置（居中）
-        newElement.x = mousePos.x - newElement.width / 2;
-        newElement.y = mousePos.y - newElement.height / 2;
+        newElement.x = worldX - newElement.width / 2;
+        newElement.y = worldY - newElement.height / 2;
         
         // 设置为正在放置状态，跟随鼠标
         currentElementToPlace = newElement;
@@ -546,6 +530,10 @@ function handleMouseDown(e) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
+    
+    // 计算鼠标在世界坐标系中的位置
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
     
     // 右键点击 - 始终启动拖动屏幕（无论点击哪里）
     // 只有 mousedown 事件会触发 panning，auxclick 不会
@@ -600,7 +588,7 @@ function handleMouseDown(e) {
             restoreFunctionPanelEvents();
             document.getElementById('status-bar').textContent = '函数元件已放置';
             elements = calculateCircuit(elements, wires);
-            render(ctx, elements, wires, selectedElement, selectedWire);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         } else {
             // 点击的不是 canvas，取消放置状态，但不创建新元件
             shouldCreateNewElement = false;
@@ -640,7 +628,7 @@ function handleMouseDown(e) {
             document.getElementById('btn-select').classList.add('active');
             elements = calculateCircuit(elements, wires);
             document.getElementById('status-bar').textContent = `${elementToPlace.type} 元件已放置`;
-            render(ctx, elements, wires, selectedElement, selectedWire);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         } else {
             // 点击的不是 canvas（可能是工具栏按钮），取消当前放置状态，但不创建新元件
             shouldCreateNewElement = false;
@@ -658,7 +646,7 @@ function handleMouseDown(e) {
         for (const input of element.inputs) {
             const portX = element.x + input.x;
             const portY = element.y + input.y;
-            if (distance(mouseX, mouseY, portX, portY) < 10) {
+            if (distance(worldX, worldY, portX, portY) < 10) {
                 isDrawingWire = true;
                 wireStart = { elementId: element.id, portId: input.id, x: portX, y: portY, isInput: true };
                 document.getElementById('status-bar').textContent = '正在绘制导线...';
@@ -668,7 +656,7 @@ function handleMouseDown(e) {
         for (const output of element.outputs) {
             const portX = element.x + output.x;
             const portY = element.y + output.y;
-            if (distance(mouseX, mouseY, portX, portY) < 10) {
+            if (distance(worldX, worldY, portX, portY) < 10) {
                 isDrawingWire = true;
                 wireStart = { elementId: element.id, portId: output.id, x: portX, y: portY, isInput: false };
                 document.getElementById('status-bar').textContent = '正在绘制导线...';
@@ -679,8 +667,8 @@ function handleMouseDown(e) {
     
     // 检查是否点击了元件
     for (const element of elements) {
-        if (mouseX >= element.x && mouseX <= element.x + element.width &&
-            mouseY >= element.y && mouseY <= element.y + element.height) {
+        if (worldX >= element.x && worldX <= element.x + element.width &&
+            worldY >= element.y && worldY <= element.y + element.height) {
             
             console.log('点击元件: button=', e.button, 'type=', e.type);
             
@@ -699,7 +687,7 @@ function handleMouseDown(e) {
                 saveState();
                 elements = calculateCircuit(elements, wires);
                 document.getElementById('status-bar').textContent = `输入状态已切换为: ${element.state ? '1' : '0'}`;
-                render(ctx, elements, wires, selectedElement, selectedWire);
+                render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 return;
             } else if (currentTool === 'delete') {
                 // 删除工具：删除元件
@@ -714,7 +702,7 @@ function handleMouseDown(e) {
                 saveState();
                 elements = calculateCircuit(elements, wires);
                 document.getElementById('status-bar').textContent = '元件已删除';
-                render(ctx, elements, wires, selectedElement, selectedWire);
+                render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 return;
             } else {
                 // 选择工具：选择并准备拖拽
@@ -722,11 +710,11 @@ function handleMouseDown(e) {
                 if (selectedElements.length > 1 && selectedElements.includes(element)) {
                     // 开始集体拖动
                     isGroupDragging = true;
-                    groupDragStart = { x: mouseX, y: mouseY };
+                    groupDragStart = { x: worldX, y: worldY };
                     groupDragOffsets = selectedElements.map(el => ({
                         element: el,
-                        offsetX: mouseX - el.x,
-                        offsetY: mouseY - el.y
+                        offsetX: worldX - el.x,
+                        offsetY: worldY - el.y
                     }));
                     document.getElementById('status-bar').textContent = `集体拖动 ${selectedElements.length} 个元件`;
                 } else {
@@ -734,12 +722,12 @@ function handleMouseDown(e) {
                     selectedElement = element;
                     selectedWire = null;
                     selectedElements = []; // 清除多选状态
-                    dragOffset.x = mouseX - element.x;
-                    dragOffset.y = mouseY - element.y;
+                    dragOffset.x = worldX - element.x;
+                    dragOffset.y = worldY - element.y;
                     isDragging = true;
                     document.getElementById('status-bar').textContent = `选中元件: ${element.type}`;
                 }
-                render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+                render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
                 return;
             }
         }
@@ -747,7 +735,7 @@ function handleMouseDown(e) {
     
     // 检查是否点击了导线
     for (const wire of wires) {
-        if (isPointOnWire(mouseX, mouseY, wire)) {
+        if (isPointOnWire(worldX, worldY, wire)) {
             if (currentTool === 'delete') {
                 // 删除工具：删除导线
                 wires = wires.filter(w => w.id !== wire.id);
@@ -755,7 +743,7 @@ function handleMouseDown(e) {
                 saveState();
                 elements = calculateCircuit(elements, wires);
                 document.getElementById('status-bar').textContent = '导线已删除';
-                render(ctx, elements, wires, selectedElement, selectedWire);
+                render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 return;
             } else {
                 // 选择工具：选择导线
@@ -773,8 +761,8 @@ function handleMouseDown(e) {
         e.stopPropagation();
         
         // 更新位置到当前鼠标位置
-        currentElementToPlace.x = mouseX - currentElementToPlace.width / 2;
-        currentElementToPlace.y = mouseY - currentElementToPlace.height / 2;
+        currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
+        currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
         
         // 放置副本
         elements.push(currentElementToPlace);
@@ -784,17 +772,17 @@ function handleMouseDown(e) {
         const sourceElement = lastMiddleClickElement;
         if (sourceElement) {
             // 使用lastMiddleClickElement作为源来创建新副本
-            const newElement = createElementForMiddleClickCopy(sourceElement, mousePos.x, mousePos.y);
+            const newElement = createElementForMiddleClickCopy(sourceElement, worldX, worldY);
             if (newElement) {
                 currentElementToPlace = newElement;
                 // 立即更新位置到鼠标位置
-                currentElementToPlace.x = mouseX - currentElementToPlace.width / 2;
-                currentElementToPlace.y = mouseY - currentElementToPlace.height / 2;
+                currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
+                currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
             }
         }
         
         document.getElementById('status-bar').textContent = '放置成功，继续中键放置，ESC取消';
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         return;
     }
 
@@ -804,8 +792,8 @@ function handleMouseDown(e) {
         // 开始框选
         isSelecting = true;
         isPanning = false; // 确保不会同时触发
-        selectionStart = { x: mouseX, y: mouseY };
-        selectionEnd = { x: mouseX, y: mouseY };
+        selectionStart = { x: worldX, y: worldY };
+        selectionEnd = { x: worldX, y: worldY };
         // 清除之前的单选状态
         selectedElement = null;
         selectedWire = null;
@@ -833,42 +821,43 @@ function handleMouseMove(e) {
     const mouseY = e.clientY - rect.top;
     mousePos = { x: mouseX, y: mouseY };
     
+    // 计算鼠标在世界坐标系中的位置
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
+    
     // 如果正在放置函数元件
     if (isPlacingFunction && currentFunctionToPlace) {
         // 更新函数元件位置
-        currentFunctionToPlace.x = mouseX - currentFunctionToPlace.width / 2;
-        currentFunctionToPlace.y = mouseY - currentFunctionToPlace.height / 2;
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        currentFunctionToPlace.x = worldX - currentFunctionToPlace.width / 2;
+        currentFunctionToPlace.y = worldY - currentFunctionToPlace.height / 2;
+        // 先渲染背景
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         // 绘制临时函数元件
         drawTemporaryElement(ctx, currentFunctionToPlace);
         return;
     }
     
+    // 如果正在放置普通元件
+    if (isPlacingElement && currentElementToPlace) {
+        // 更新元件位置
+        currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
+        currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
+        // 先渲染背景
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
+        // 绘制临时元件
+        drawTemporaryElement(ctx, currentElementToPlace);
+        return;
+    }
+    
     // 处理拖动屏幕 (Panning)
     if (isPanning) {
-        // 计算偏移量
-        const deltaX = mouseX - panOffset.x;
-        const deltaY = mouseY - panOffset.y;
+        // 计算偏移量（转换为世界坐标）
+        const deltaX = (mouseX - panOffset.x) / zoom;
+        const deltaY = (mouseY - panOffset.y) / zoom;
         
-        // 更新所有元件的位置
-        for (const element of elements) {
-            element.x += deltaX;
-            element.y += deltaY;
-        }
-        
-        // 更新所有导线的位置
-        for (const wire of wires) {
-            wire.start.x += deltaX;
-            wire.start.y += deltaY;
-            wire.end.x += deltaX;
-            wire.end.y += deltaY;
-        }
-        
-        // 更新临时元素的位置
-        if (currentElementToPlace) {
-            currentElementToPlace.x += deltaX;
-            currentElementToPlace.y += deltaY;
-        }
+        // 更新相机位置
+        camera.x -= deltaX;
+        camera.y -= deltaY;
         
         // 更新网格背景位置，实现无限延伸效果
         const grid = document.getElementById('grid');
@@ -883,14 +872,14 @@ function handleMouseMove(e) {
             }
             
             // 更新背景位置
-            grid.style.backgroundPosition = `${bgX + deltaX}px ${bgY + deltaY}px`;
+            grid.style.backgroundPosition = `${bgX + (mouseX - panOffset.x)}px ${bgY + (mouseY - panOffset.y)}px`;
         }
         
         // 更新偏移量
         panOffset = { x: mouseX, y: mouseY };
         
         // 重新渲染并返回
-        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         
         // 如果正在放置元件，也要绘制预览
         if (isPlacingElement && currentElementToPlace) {
@@ -902,9 +891,9 @@ function handleMouseMove(e) {
     
     // 更新框选区域
     if (isSelecting) {
-        selectionEnd = { x: mouseX, y: mouseY };
+        selectionEnd = { x: worldX, y: worldY };
         updateSelection();
-        render(ctx, elements, wires, selectedElement, selectedWire, getSelectionRect(), selectedElements);
+        render(ctx, elements, wires, selectedElement, selectedWire, getSelectionRect(), selectedElements, [], null, false, zoom, camera);
         return;
     }
     
@@ -912,8 +901,8 @@ function handleMouseMove(e) {
     if (isGroupDragging && selectedElements.length > 0) {
         for (const item of groupDragOffsets) {
             const el = item.element;
-            el.x = mouseX - item.offsetX;
-            el.y = mouseY - item.offsetY;
+            el.x = worldX - item.offsetX;
+            el.y = worldY - item.offsetY;
             
             // 更新连接到该元件的导线
             for (const wire of wires) {
@@ -937,20 +926,20 @@ function handleMouseMove(e) {
                 }
             }
         }
-        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         return;
     }
     
     // 更新粘贴预览位置
     if (isPasting) {
-        pasteOffset = { x: mouseX, y: mouseY };
-        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+        pasteOffset = { x: worldX, y: worldY };
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting, zoom, camera);
         return;
     }
     
     if (isDragging && selectedElement) {
-        selectedElement.x = mouseX - dragOffset.x;
-        selectedElement.y = mouseY - dragOffset.y;
+        selectedElement.x = worldX - dragOffset.x;
+        selectedElement.y = worldY - dragOffset.y;
         // 更新连接到该元件的导线
         for (const wire of wires) {
             if (wire.start.elementId === selectedElement.id) {
@@ -974,16 +963,16 @@ function handleMouseMove(e) {
                 }
             }
         }
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     }
     
     if (isDrawingWire) {
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 
         // 端口吸附
-        let endX = mouseX;
-        let endY = mouseY;
-        const snapDistance = 15; // 吸附距离
+        let endX = worldX;
+        let endY = worldY;
+        const snapDistance = 15 / zoom; // 吸附距离（转换为世界坐标）
 
         // 查找最近的端口
         for (const element of elements) {
@@ -992,48 +981,57 @@ function handleMouseMove(e) {
             for (const input of element.inputs) {
                 const portX = element.x + input.x;
                 const portY = element.y + input.y;
-                if (distance(mouseX, mouseY, portX, portY) < snapDistance) {
+                if (distance(worldX, worldY, portX, portY) < snapDistance) {
                     endX = portX;
                     endY = portY;
                     break;
                 }
             }
-            if (endX !== mouseX || endY !== mouseY) break;
+            if (endX !== worldX || endY !== worldY) break;
 
             for (const output of element.outputs) {
                 const portX = element.x + output.x;
                 const portY = element.y + output.y;
-                if (distance(mouseX, mouseY, portX, portY) < snapDistance) {
+                if (distance(worldX, worldY, portX, portY) < snapDistance) {
                     endX = portX;
                     endY = portY;
                     break;
                 }
             }
-            if (endX !== mouseX || endY !== mouseY) break;
+            if (endX !== worldX || endY !== worldY) break;
         }
+
+        // 应用相机变换进行绘制
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(zoom, zoom);
+        ctx.translate(-camera.x, -camera.y);
 
         // 绘制临时导线
         ctx.beginPath();
         ctx.moveTo(wireStart.x, wireStart.y);
         ctx.lineTo(endX, endY);
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 / zoom;
         ctx.stroke();
 
         // 绘制吸附指示
-        if (endX !== mouseX || endY !== mouseY) {
+        if (endX !== worldX || endY !== worldY) {
             ctx.fillStyle = '#00ffff';
             ctx.beginPath();
-            ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+            ctx.arc(endX, endY, 5 / zoom, 0, Math.PI * 2);
             ctx.fill();
         }
+
+        // 恢复上下文
+        ctx.restore();
     }
     
     if (isPlacingElement && currentElementToPlace) {
         // 更新当前要放置的元素位置
-        currentElementToPlace.x = mouseX - currentElementToPlace.width / 2;
-        currentElementToPlace.y = mouseY - currentElementToPlace.height / 2;
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
+        currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         // 绘制临时元素
         drawTemporaryElement(ctx, currentElementToPlace);
     }
@@ -1045,10 +1043,16 @@ function handleMouseMove(e) {
  * @param {object} element - 要绘制的临时元素
  */
 function drawTemporaryElement(ctx, element) {
+    // 绘制临时元件，使用与render函数相同的相机变换
+    ctx.save();
+    ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-camera.x, -camera.y);
+    
     // 绘制元件背景
     ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
     ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 / zoom;
     ctx.beginPath();
     ctx.rect(element.x, element.y, element.width, element.height);
     ctx.fill();
@@ -1056,7 +1060,7 @@ function drawTemporaryElement(ctx, element) {
     
     // 绘制元件符号
     ctx.fillStyle = '#00ffff';
-    ctx.font = '14px Arial';
+    ctx.font = (14 / zoom) + 'px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -1064,7 +1068,7 @@ function drawTemporaryElement(ctx, element) {
         case 'AND':
             // 绘制与门符号
             ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoom;
             // 简化与门：使用更小的尺寸，居中绘制
             const andCenterX = element.x + element.width / 2;
             const andCenterY = element.y + element.height / 2;
@@ -1080,7 +1084,7 @@ function drawTemporaryElement(ctx, element) {
         case 'OR':
             // 绘制或门符号
             ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoom;
             // 简化或门：使用更小的尺寸，居中绘制
             const orCenterX = element.x + element.width / 2;
             const orCenterY = element.y + element.height / 2;
@@ -1100,7 +1104,7 @@ function drawTemporaryElement(ctx, element) {
         case 'NOT':
             // 绘制非门符号
             ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoom;
             // 简化非门：使用更小的尺寸，居中绘制
             const notCenterX = element.x + element.width / 2;
             const notCenterY = element.y + element.height / 2;
@@ -1132,13 +1136,13 @@ function drawTemporaryElement(ctx, element) {
         case 'FUNCTION':
             // 绘制函数块边框
             ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
+            ctx.lineWidth = 2 / zoom;
+            ctx.setLineDash([5 / zoom, 5 / zoom]);
             ctx.strokeRect(element.x, element.y, element.width, element.height);
             ctx.setLineDash([]);
             // 绘制函数名称
             ctx.fillStyle = '#00ffff';
-            ctx.font = '12px Arial';
+            ctx.font = (12 / zoom) + 'px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(element.name || 'Func', element.x + element.width / 2, element.y + element.height / 2);
@@ -1151,7 +1155,7 @@ function drawTemporaryElement(ctx, element) {
         const portY = element.y + input.y;
         ctx.fillStyle = '#00ffff';
         ctx.beginPath();
-        ctx.arc(portX, portY, 5, 0, Math.PI * 2);
+        ctx.arc(portX, portY, 5 / zoom, 0, Math.PI * 2);
         ctx.fill();
     }
     
@@ -1160,9 +1164,12 @@ function drawTemporaryElement(ctx, element) {
         const portY = element.y + output.y;
         ctx.fillStyle = '#00ffff';
         ctx.beginPath();
-        ctx.arc(portX, portY, 5, 0, Math.PI * 2);
+        ctx.arc(portX, portY, 5 / zoom, 0, Math.PI * 2);
         ctx.fill();
     }
+    
+    // 恢复上下文
+    ctx.restore();
 }
 
 /**
@@ -1226,7 +1233,7 @@ function deleteSelected() {
     saveState();
     elements = calculateCircuit(elements, wires);
     document.getElementById('status-bar').textContent = `已删除 ${elementIds.length} 个元件`;
-    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
 }
 
 /**
@@ -1237,18 +1244,6 @@ function copySelected() {
         document.getElementById('status-bar').textContent = '没有选中的元件可复制';
         return;
     }
-    
-    // 获取当前网格大小作为缩放参考
-    let gridSize = 20;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            gridSize = parseInt(sizeMatch[1]);
-        }
-    }
-    const scaleFactor = gridSize / 20; // 相对于默认20px的缩放比例
     
     // 深拷贝选中的元件
     clipboardElements = selectedElements.map(el => {
@@ -1284,11 +1279,10 @@ function copySelected() {
     const centerX = selectedElements.reduce((sum, el) => sum + el.x + el.width / 2, 0) / selectedElements.length;
     const centerY = selectedElements.reduce((sum, el) => sum + el.y + el.height / 2, 0) / selectedElements.length;
     
-    // 保存相对偏移量和缩放比例
+    // 保存相对偏移量
     clipboardElements.forEach(el => {
         el._copyOffsetX = el.x - centerX;
         el._copyOffsetY = el.y - centerY;
-        el._scaleFactor = scaleFactor;
     });
     
     document.getElementById('status-bar').textContent = `已复制 ${clipboardElements.length} 个元件和 ${clipboardWires.length} 条导线，按 Ctrl+V 粘贴`;
@@ -1303,11 +1297,18 @@ function startPaste() {
         return;
     }
 
+    // 计算鼠标在世界坐标系中的位置
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = mousePos.x;
+    const mouseY = mousePos.y;
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
+
     isPasting = true;
-    pasteOffset = { x: mousePos.x, y: mousePos.y };
+    pasteOffset = { x: worldX, y: worldY };
     console.log('startPaste: isPasting =', isPasting, 'pasteOffset =', pasteOffset);
     document.getElementById('status-bar').textContent = '粘贴模式：点击鼠标左键放置，按 Esc 取消';
-    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting, zoom, camera);
 }
 
 /**
@@ -1315,18 +1316,6 @@ function startPaste() {
  */
 function executePaste() {
     if (!isPasting || clipboardElements.length === 0) return;
-    
-    // 获取当前缩放比例
-    let gridSize = 20;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            gridSize = parseInt(sizeMatch[1]);
-        }
-    }
-    const currentScale = gridSize / 20;
     
     const newElements = [];
     const idMapping = {}; // 旧ID到新ID的映射
@@ -1348,30 +1337,26 @@ function executePaste() {
         }
         
         if (newElement) {
-            // 计算缩放比例（当前缩放 / 复制时的缩放）
-            const copyScale = template._scaleFactor || 1;
-            const scaleRatio = currentScale / copyScale;
-            
-            // 复制属性，应用缩放
-            newElement.x = pasteOffset.x + template._copyOffsetX * scaleRatio;
-            newElement.y = pasteOffset.y + template._copyOffsetY * scaleRatio;
+            // 复制属性，不应用缩放，保持与新元件放置相同的行为
+            newElement.x = pasteOffset.x + template._copyOffsetX;
+            newElement.y = pasteOffset.y + template._copyOffsetY;
             newElement.state = template.state;
             
-            // 缩放元件大小
-            newElement.width = template.width * scaleRatio;
-            newElement.height = template.height * scaleRatio;
+            // 使用与模板相同的大小，不进行缩放
+            newElement.width = template.width;
+            newElement.height = template.height;
             
-            // 缩放端口位置
+            // 使用与模板相同的端口位置
             for (let i = 0; i < newElement.inputs.length; i++) {
                 if (template.inputs[i]) {
-                    newElement.inputs[i].x = template.inputs[i].x * scaleRatio;
-                    newElement.inputs[i].y = template.inputs[i].y * scaleRatio;
+                    newElement.inputs[i].x = template.inputs[i].x;
+                    newElement.inputs[i].y = template.inputs[i].y;
                 }
             }
             for (let i = 0; i < newElement.outputs.length; i++) {
                 if (template.outputs[i]) {
-                    newElement.outputs[i].x = template.outputs[i].x * scaleRatio;
-                    newElement.outputs[i].y = template.outputs[i].y * scaleRatio;
+                    newElement.outputs[i].x = template.outputs[i].x;
+                    newElement.outputs[i].y = template.outputs[i].y;
                 }
             }
             
@@ -1450,7 +1435,7 @@ function executePaste() {
     saveState();
     elements = calculateCircuit(elements, wires);
     document.getElementById('status-bar').textContent = `已粘贴 ${newElements.length} 个元件和 ${clipboardWires.length} 条导线`;
-    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
 }
 
 /**
@@ -1460,7 +1445,7 @@ function cancelPaste() {
     if (isPasting) {
         isPasting = false;
         document.getElementById('status-bar').textContent = '已取消粘贴';
-        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, clipboardElements, pasteOffset, isPasting, zoom, camera);
     }
 }
 
@@ -1485,6 +1470,10 @@ function handleMouseUp(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
+    // 计算鼠标在世界坐标系中的位置
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
+    
     console.log('鼠标释放: button=', e.button, 'isPanning=', isPanning);
     
     // 处理右键释放 - 结束拖动屏幕
@@ -1494,7 +1483,7 @@ function handleMouseUp(e) {
             isPanning = false;
             saveState();
             document.getElementById('status-bar').textContent = '屏幕拖动完成';
-            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         }
         return;
     }
@@ -1513,7 +1502,7 @@ function handleMouseUp(e) {
                     document.getElementById('status-bar').textContent = '就绪';
                 }
             }
-            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         }
         
         // 处理单选拖动结束
@@ -1544,7 +1533,7 @@ function handleMouseUp(e) {
                 if (isMiddleClickCopy) {
                     // 中键复制连续放置模式：保持状态，用户可以继续放置
                     document.getElementById('status-bar').textContent = '放置成功，继续中键放置，ESC取消';
-                    render(ctx, elements, wires, selectedElement, selectedWire);
+                    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 } else {
                     // 普通工具栏放置模式：放置后退出放置状态
                     isPlacingElement = false;
@@ -1556,7 +1545,7 @@ function handleMouseUp(e) {
                     document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
                     document.getElementById('btn-select').classList.add('active');
                     
-                    render(ctx, elements, wires, selectedElement, selectedWire);
+                    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                 }
             }
             return;
@@ -1571,7 +1560,7 @@ function handleMouseUp(e) {
                 for (const input of element.inputs) {
                     const portX = element.x + input.x;
                     const portY = element.y + input.y;
-                    if (distance(mouseX, mouseY, portX, portY) < 10) {
+                    if (distance(worldX, worldY, portX, portY) < 10 / zoom) {
                         // 确保不会将输入端口连接到输入端口
                         if (!wireStart.isInput) {
                             const wire = {
@@ -1586,7 +1575,7 @@ function handleMouseUp(e) {
                         isDrawingWire = false;
                         wireStart = null;
                         document.getElementById('status-bar').textContent = '导线连接成功';
-                        render(ctx, elements, wires, selectedElement, selectedWire);
+                        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                         return;
                     }
                 }
@@ -1594,7 +1583,7 @@ function handleMouseUp(e) {
                 for (const output of element.outputs) {
                     const portX = element.x + output.x;
                     const portY = element.y + output.y;
-                    if (distance(mouseX, mouseY, portX, portY) < 10) {
+                    if (distance(worldX, worldY, portX, portY) < 10 / zoom) {
                         // 确保不会将输出端口连接到输出端口
                         if (wireStart.isInput) {
                             const wire = {
@@ -1609,7 +1598,7 @@ function handleMouseUp(e) {
                         isDrawingWire = false;
                         wireStart = null;
                         document.getElementById('status-bar').textContent = '导线连接成功';
-                        render(ctx, elements, wires, selectedElement, selectedWire);
+                        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
                         return;
                     }
                 }
@@ -1619,7 +1608,7 @@ function handleMouseUp(e) {
             isDrawingWire = false;
             wireStart = null;
             document.getElementById('status-bar').textContent = '取消绘制导线';
-            render(ctx, elements, wires, selectedElement, selectedWire);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
             return;
         }
         
@@ -1649,7 +1638,7 @@ function undo() {
         selectedElement = null;
         selectedWire = null;
         document.getElementById('status-bar').textContent = '已撤销';
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     }
 }
 
@@ -1673,7 +1662,7 @@ function redo() {
         saveToLocalStorage();
         saveToServer();
         
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     }
 }
 
@@ -1721,7 +1710,7 @@ function clearCircuit() {
     document.getElementById('status-bar').textContent = '电路已清空';
     
     // 重新渲染
-    render(ctx, elements, wires, selectedElement, selectedWire);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 }
 
 /**
@@ -1854,7 +1843,7 @@ export async function loadFromServer() {
         }
         
         // 渲染更新
-        render(ctx, elements, wires, selectedElement, selectedWire);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         
         console.log('从服务器加载:', result);
     } catch (error) {
@@ -1916,112 +1905,42 @@ function handleWheel(e) {
     
     // 计算缩放因子
     const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = zoom * scaleFactor;
+    
+    // 限制缩放范围
+    if (newZoom < 0.1 || newZoom > 10) return;
     
     // 保存当前状态
     saveState();
     
-    // 缩放所有元件
-    for (const element of elements) {
-        // 计算元件相对于鼠标的位置
-        const relX = element.x - mouseX;
-        const relY = element.y - mouseY;
-        
-        // 缩放元件位置
-        element.x = mouseX + relX * scaleFactor;
-        element.y = mouseY + relY * scaleFactor;
-        
-        // 缩放元件大小（实际大小）
-        element.width *= scaleFactor;
-        element.height *= scaleFactor;
-        
-        // 缩放端口位置（实际位置）
-        for (const input of element.inputs) {
-            input.x *= scaleFactor;
-            input.y *= scaleFactor;
-        }
-        for (const output of element.outputs) {
-            output.x *= scaleFactor;
-            output.y *= scaleFactor;
-        }
-    }
+    // 计算鼠标在世界坐标系中的位置
+    const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
+    const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
     
-    // 缩放所有导线
-    for (const wire of wires) {
-        // 计算导线相对于鼠标的位置
-        const relStartX = wire.start.x - mouseX;
-        const relStartY = wire.start.y - mouseY;
-        const relEndX = wire.end.x - mouseX;
-        const relEndY = wire.end.y - mouseY;
-        
-        // 缩放导线位置
-        wire.start.x = mouseX + relStartX * scaleFactor;
-        wire.start.y = mouseY + relStartY * scaleFactor;
-        wire.end.x = mouseX + relEndX * scaleFactor;
-        wire.end.y = mouseY + relEndY * scaleFactor;
-    }
+    // 更新缩放级别
+    zoom = newZoom;
     
-    // 缩放临时元素
-    if (currentElementToPlace) {
-        // 计算临时元素相对于鼠标的位置
-        const relX = currentElementToPlace.x - mouseX;
-        const relY = currentElementToPlace.y - mouseY;
-        
-        // 缩放临时元素位置
-        currentElementToPlace.x = mouseX + relX * scaleFactor;
-        currentElementToPlace.y = mouseY + relY * scaleFactor;
-        
-        // 缩放临时元素大小
-        currentElementToPlace.width *= scaleFactor;
-        currentElementToPlace.height *= scaleFactor;
-        
-        // 缩放临时元素端口位置
-        for (const input of currentElementToPlace.inputs) {
-            input.x *= scaleFactor;
-            input.y *= scaleFactor;
-        }
-        for (const output of currentElementToPlace.outputs) {
-            output.x *= scaleFactor;
-            output.y *= scaleFactor;
-        }
-    }
+    // 调整相机位置，使鼠标指向的点在缩放后保持不变
+    camera.x = worldX - (mouseX - canvas.width / 2) / zoom;
+    camera.y = worldY - (mouseY - canvas.height / 2) / zoom;
     
     // 调整网格大小和位置
     const grid = document.getElementById('grid');
     if (grid) {
-        // 获取当前网格大小
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        let gridSize = 20; // 默认网格大小
-        if (sizeMatch) {
-            gridSize = parseInt(sizeMatch[1]);
-        }
-        
         // 计算新的网格大小
-        const newGridSize = Math.max(5, Math.min(100, gridSize * scaleFactor));
+        const newGridSize = Math.max(5, Math.min(100, 20 * zoom));
         
-        // 获取当前网格位置
-        const currentBgPos = grid.style.backgroundPosition || '0px 0px';
-        const posMatch = currentBgPos.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/);
-        let bgX = 0, bgY = 0;
-        if (posMatch) {
-            bgX = parseFloat(posMatch[1]);
-            bgY = parseFloat(posMatch[2]);
-        }
-        
-        // 计算新的网格位置，确保网格与元件保持对齐
-        // 鼠标位置相对于网格的偏移应该保持不变
-        const gridOffsetX = (mouseX - bgX) / gridSize;
-        const gridOffsetY = (mouseY - bgY) / gridSize;
-        const newBgX = mouseX - gridOffsetX * newGridSize;
-        const newBgY = mouseY - gridOffsetY * newGridSize;
-        
-        // 更新网格大小和位置
+        // 更新网格大小
         grid.style.backgroundSize = `${newGridSize}px ${newGridSize}px`;
-        grid.style.backgroundPosition = `${newBgX}px ${newBgY}px`;
+        
+        // 更新网格位置，使其与相机同步
+        const gridX = -camera.x * zoom % newGridSize;
+        const gridY = -camera.y * zoom % newGridSize;
+        grid.style.backgroundPosition = `${gridX}px ${gridY}px`;
     }
     
     // 重新渲染
-    render(ctx, elements, wires, selectedElement, selectedWire);
+    render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     
     // 绘制临时元素
     if (isPlacingElement && currentElementToPlace) {
@@ -2219,19 +2138,6 @@ async function saveFunctionsToServer() {
 function startPlaceFunction(funcData) {
     console.log('startPlaceFunction called with:', funcData.name);
     
-    // 获取当前缩放比例
-    let gridSize = 20;
-    const grid = document.getElementById('grid');
-    if (grid) {
-        const currentBgSize = getComputedStyle(grid).backgroundSize;
-        const sizeMatch = currentBgSize.match(/(\d+)px\s+(\d+)px/);
-        if (sizeMatch) {
-            gridSize = parseInt(sizeMatch[1]);
-        }
-    }
-    const currentScale = gridSize / 20;
-    console.log('currentScale:', currentScale);
-    
     // 获取画布中心位置（作为默认放置位置）
     const canvasCenterX = canvas.width / 2;
     const canvasCenterY = canvas.height / 2;
@@ -2247,22 +2153,6 @@ function startPlaceFunction(funcData) {
     console.log('funcElement created:', funcElement);
     
     if (funcElement) {
-        // 根据缩放比例调整函数元件大小
-        funcElement.width = 100 * currentScale;
-        funcElement.height = Math.max(60, Math.max(funcElement.inputs.length, funcElement.outputs.length) * 25 + 20) * currentScale;
-        
-        // 调整输入端口位置
-        for (let i = 0; i < funcElement.inputs.length; i++) {
-            funcElement.inputs[i].x = -5 * currentScale;
-            funcElement.inputs[i].y = (20 + i * 25) * currentScale;
-        }
-        
-        // 调整输出端口位置
-        for (let i = 0; i < funcElement.outputs.length; i++) {
-            funcElement.outputs[i].x = 105 * currentScale;
-            funcElement.outputs[i].y = (20 + i * 25) * currentScale;
-        }
-        
         currentFunctionToPlace = funcElement;
         isPlacingFunction = true;
         console.log('isPlacingFunction set to true');
@@ -2338,7 +2228,7 @@ function startRenderLoop() {
         }
         
         // 基础渲染
-        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements);
+        render(ctx, elements, wires, selectedElement, selectedWire, selectionRect, selectedElements, [], null, false, zoom, camera);
         
         // 绘制临时元素（正在放置的元件）
         if (tempElement) {
