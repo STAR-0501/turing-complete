@@ -1941,10 +1941,12 @@ function handleMouseUp(e) {
                     if (distance(worldX, worldY, portX, portY) < 10 / zoom) {
                         // 确保不会将输入端口连接到输入端口
                         if (!wireStart.isInput) {
+                            const startElement = elements.find(e => e.id === wireStart.elementId);
+                            const startPortIndex = startElement ? startElement.outputs.findIndex(p => p.id === wireStart.portId) : -1;
                             const wire = {
                                 id: generateId(),
-                                start: wireStart,
-                                end: { elementId: element.id, portId: input.id, x: portX, y: portY, isInput: true }
+                                start: { ...wireStart, portIndex: startPortIndex },
+                                end: { elementId: element.id, portId: input.id, x: portX, y: portY, isInput: true, portIndex: -1 }
                             };
                             wires.push(wire);
                             saveState();
@@ -1964,10 +1966,12 @@ function handleMouseUp(e) {
                     if (distance(worldX, worldY, portX, portY) < 10 / zoom) {
                         // 确保不会将输出端口连接到输出端口
                         if (wireStart.isInput) {
+                            const endElement = elements.find(e => e.id === element.id);
+                            const endPortIndex = endElement ? endElement.outputs.findIndex(p => p.id === output.id) : -1;
                             const wire = {
                                 id: generateId(),
-                                start: wireStart,
-                                end: { elementId: element.id, portId: output.id, x: portX, y: portY, isInput: false }
+                                start: { ...wireStart, portIndex: -1 },
+                                end: { elementId: element.id, portId: output.id, x: portX, y: portY, isInput: false, portIndex: endPortIndex }
                             };
                             wires.push(wire);
                             saveState();
