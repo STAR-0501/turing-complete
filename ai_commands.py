@@ -2,9 +2,18 @@ import json
 import os
 import random
 import string
+import time
 
 def generate_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
+
+def _atomic_write_json(path, data):
+    tmp_path = f"{path}.tmp.{generate_id()}"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, path)
 
 class CircuitManager:
     def __init__(self, data_file, functions_file=None):
@@ -13,29 +22,38 @@ class CircuitManager:
 
     def _load_functions(self):
         if self.functions_file and os.path.exists(self.functions_file):
-            try:
-                with open(self.functions_file, 'r', encoding='utf-8') as f:
-                    return json.load(f).get("functions", [])
-            except Exception:
-                # If file is empty or corrupted, recover with empty structure.
-                self._save_functions([])
-                return []
+            for _ in range(3):
+                try:
+                    if os.path.getsize(self.functions_file) == 0:
+                        self._save_functions([])
+                        return []
+                    with open(self.functions_file, 'r', encoding='utf-8') as f:
+                        return json.load(f).get("functions", [])
+                except json.JSONDecodeError:
+                    time.sleep(0.01)
+                except (FileNotFoundError, PermissionError, OSError):
+                    return []
+            return []
         return []
 
     def _save_functions(self, functions):
         if self.functions_file:
-            with open(self.functions_file, 'w', encoding='utf-8') as f:
-                json.dump({"functions": functions}, f, indent=2, ensure_ascii=False)
+            _atomic_write_json(self.functions_file, {"functions": functions})
 
     def _load_data(self):
         if os.path.exists(self.data_file):
-            with open(self.data_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            for _ in range(3):
+                try:
+                    with open(self.data_file, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except json.JSONDecodeError:
+                    time.sleep(0.01)
+                except (FileNotFoundError, PermissionError):
+                    break
         return {"elements": [], "wires": []}
 
     def _save_data(self, data):
-        with open(self.data_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        _atomic_write_json(self.data_file, data)
 
     def _build_endpoint(self, element, port_id, is_input):
         ports = element.get("inputs", []) if is_input else element.get("outputs", [])
