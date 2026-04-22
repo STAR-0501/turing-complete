@@ -16,7 +16,7 @@ class CircuitManager:
             try:
                 with open(self.functions_file, 'r', encoding='utf-8') as f:
                     return json.load(f).get("functions", [])
-            except Exception:
+            except (json.JSONDecodeError, FileNotFoundError, PermissionError):
                 # If file is empty or corrupted, recover with empty structure.
                 self._save_functions([])
                 return []
