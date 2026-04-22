@@ -332,6 +332,40 @@ class CircuitManager:
         self.simulate()
         return True
 
+    def set_input(self, element_id, value):
+        data = self._load_data()
+        found = False
+        for e in data.get("elements", []):
+            if e.get("id") == element_id and e.get("type") == 'INPUT':
+                e["state"] = bool(value)
+                found = True
+                break
+        if not found:
+            raise ValueError("INPUT element not found")
+        self._save_data(data)
+        self.simulate()
+        return True
+
+    def sample_outputs(self, output_ids=None):
+        self.simulate()
+        data = self._load_data()
+        elements = data.get("elements", [])
+        outputs = [e for e in elements if e.get("type") == "OUTPUT"]
+
+        if output_ids:
+            id_set = set(output_ids)
+            missing = [oid for oid in output_ids if oid not in {o.get("id") for o in outputs}]
+            if missing:
+                raise ValueError(f"Unknown OUTPUT id(s): {', '.join(missing)}")
+            outputs = [o for o in outputs if o.get("id") in id_set]
+
+        return {
+            "outputs": [
+                {"id": o.get("id"), "alias": o.get("alias") or o.get("name"), "state": bool(o.get("state", False))}
+                for o in outputs
+            ]
+        }
+
     def _get_input_source_state(self, elements, wires, target_element_id, target_port_id):
         def _get_output_value(src_el, src_port_id):
             if not src_el:
