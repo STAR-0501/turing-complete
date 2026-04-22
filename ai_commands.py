@@ -13,8 +13,13 @@ class CircuitManager:
 
     def _load_functions(self):
         if self.functions_file and os.path.exists(self.functions_file):
-            with open(self.functions_file, 'r', encoding='utf-8') as f:
-                return json.load(f).get("functions", [])
+            try:
+                with open(self.functions_file, 'r', encoding='utf-8') as f:
+                    return json.load(f).get("functions", [])
+            except Exception:
+                # If file is empty or corrupted, recover with empty structure.
+                self._save_functions([])
+                return []
         return []
 
     def _save_functions(self, functions):

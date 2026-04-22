@@ -696,7 +696,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 规则:
 - 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
 - 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> CLEAR -> ADD <函数名> 复用。
-- 布局美观：使用 MOVE 调整位置，避免元件重叠。
+- 布局美观：每一轮都要美观地、不重叠地放置元件，必要时使用 MOVE 调整位置。
 - 验证驱动：如果你不确定电路是否正确，可以使用 TOGGLE 切换输入并观察 elements 的 state 变化。
 - 更推荐：用 SET 做确定性输入，然后用 SAMPLE 查看 OUTPUT 结果来验证，再决定 done。
 - 强烈建议：给关键元件设置 alias（ADD 第 5 个参数）。alias 会持久化，后续所有 <id_or_alias> 都可以直接使用 alias。
