@@ -219,8 +219,16 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
         for (const output of element.outputs) {
             const portX = element.x + output.x;
             const portY = element.y + output.y;
-            // 输出端口状态与元件状态一致
-            ctx.fillStyle = elementColor;
+            
+            // 函数元件：根据 outputStates 显示各输出端口状态
+            let portState = false;
+            if (element.type === 'FUNCTION' && element.outputStates) {
+                const outputIndex = element.outputs.indexOf(output);
+                portState = element.outputStates[outputIndex] || false;
+            }
+            
+            // 根据端口状态显示不同颜色
+            ctx.fillStyle = portState ? '#00ff00' : '#666666';
             ctx.beginPath();
             ctx.arc(portX, portY, 5, 0, Math.PI * 2);
             ctx.fill();
