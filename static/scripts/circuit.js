@@ -22,6 +22,15 @@ function getInputSourceState(elements, wires, targetElementId, targetPortId) {
         if (wire.end.elementId === targetElementId && wire.end.portId === targetPortId) {
             const sourceElement = elements.find(e => e.id === wire.start.elementId);
             if (sourceElement) {
+                if (sourceElement.type === 'FUNCTION') {
+                    const outputs = sourceElement.outputs || [];
+                    const outIdx = outputs.findIndex(p => p.id === wire.start.portId);
+                    const outputStates = sourceElement.outputStates || [];
+                    if (outIdx >= 0 && outIdx < outputStates.length) {
+                        return outputStates[outIdx];
+                    }
+                    return outputStates.length > 0 ? outputStates[0] : sourceElement.state;
+                }
                 return sourceElement.state;
             }
         }
@@ -29,6 +38,15 @@ function getInputSourceState(elements, wires, targetElementId, targetPortId) {
         if (wire.start.elementId === targetElementId && wire.start.portId === targetPortId) {
             const sourceElement = elements.find(e => e.id === wire.end.elementId);
             if (sourceElement) {
+                if (sourceElement.type === 'FUNCTION') {
+                    const outputs = sourceElement.outputs || [];
+                    const outIdx = outputs.findIndex(p => p.id === wire.end.portId);
+                    const outputStates = sourceElement.outputStates || [];
+                    if (outIdx >= 0 && outIdx < outputStates.length) {
+                        return outputStates[outIdx];
+                    }
+                    return outputStates.length > 0 ? outputStates[0] : sourceElement.state;
+                }
                 return sourceElement.state;
             }
         }
@@ -66,8 +84,11 @@ function hasInputConnection(wires, targetElementId, targetPortId) {
  * @param {Map} functionCache - 函数计算缓存，避免重复计算
  * @returns {Array} 函数元件各输出端口的状态数组
  */
-function calculateFunctionElement(functionElement, elements, wires, functionCache = new Map()) {
+function calculateFunctionElement(functionElement, elements, wires, functionCache = new Map(), depth = 0) {
     if (!functionElement.functionData) {
+        return [];
+    }
+    if (depth >= 10) {
         return [];
     }
     
@@ -160,15 +181,15 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
                 newState = inputTrue;
             } else if (element.type === 'FUNCTION') {
                 // 递归计算嵌套的函数元件
-                const cachedResult = functionCache.get(element.id);
-                if (cachedResult !== undefined) {
-                    newState = cachedResult.length > 0 ? cachedResult[0] : false;
-                    element.outputStates = cachedResult;
-                } else {
-                    const nestedOutputStates = calculateFunctionElement(element, funcElements, funcWires, functionCache);
-                    newState = nestedOutputStates.length > 0 ? nestedOutputStates[0] : false;
-                    element.outputStates = nestedOutputStates;
-                    functionCache.set(element.id, nestedOutputStates);
+                const oldOutputStates = element.outputStates || [];
+                const nestedOutputStates = calculateFunctionElement(element, funcElements, funcWires, functionCache, depth + 1);
+                newState = nestedOutputStates.length > 0 ? nestedOutputStates[0] : false;
+                element.outputStates = nestedOutputStates;
+                if (
+                    oldOutputStates.length !== nestedOutputStates.length ||
+                    oldOutputStates.some((v, i) => v !== nestedOutputStates[i])
+                ) {
+                    changed = true;
                 }
             }
             
@@ -274,9 +295,16 @@ export function calculateCircuit(elements, wires) {
                 newState = inputTrue;
             } else if (element.type === 'FUNCTION') {
                 // 函数元件：计算内部电路
+                const oldOutputStates = element.outputStates || [];
                 const outputStates = calculateFunctionElement(element, elements, wires);
                 newState = outputStates.length > 0 ? outputStates[0] : false;
                 element.outputStates = outputStates;
+                if (
+                    oldOutputStates.length !== outputStates.length ||
+                    oldOutputStates.some((v, i) => v !== outputStates[i])
+                ) {
+                    changed = true;
+                }
             }
             
             // 检查状态是否改变

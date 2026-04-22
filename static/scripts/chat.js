@@ -12,6 +12,7 @@ const toggleBtn = document.getElementById('toggle-chat');
 const chatHeader = document.querySelector('.chat-header');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
+const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
 
 // 初始化聊天窗口
 export function initChat() {
@@ -99,7 +100,9 @@ async function sendMessage() {
         .replace(/'/g, '&#39;');
 
     const splitThinkingAndAnswer = (raw) => {
-        const cleaned = raw.replace(/<commands>[\s\S]*?<\/commands>/g, '');
+        const cleaned = raw
+            .replace(/<commands>[\s\S]*?<\/commands>/g, '')
+            .replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
         const thinkIdx = cleaned.indexOf(THINKING_MARKER);
         const answerIdx = cleaned.indexOf(ANSWER_MARKER);
         let thinking = '';
@@ -162,6 +165,11 @@ async function sendMessage() {
             if (done) break;
             
             const chunk = decoder.decode(value, { stream: true });
+            
+            if (chunk.includes(STATE_CHANGED_MARKER)) {
+                loadFromServer();
+            }
+
             fullContent += chunk;
             const now = performance.now();
             if (now - lastRenderTime >= renderInterval) {

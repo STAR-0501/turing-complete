@@ -1,3 +1,2295 @@
 {
-  "functions": []
+  "functions": [
+    {
+      "id": "d2ajgw38x",
+      "name": "XOR",
+      "elements": [
+        {
+          "alias": "A",
+          "height": 60,
+          "id": "rgzy2uzbg",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "mnq126cdn",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 50
+        },
+        {
+          "alias": "B",
+          "height": 60,
+          "id": "63wzsrs4c",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "fqxj9ug23",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 150
+        },
+        {
+          "height": 60,
+          "id": "rb6zek9zn",
+          "inputs": [
+            {
+              "id": "7k8nzqd50",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "if9zoy322",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "bx7wfj4f8",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "AND",
+          "width": 80,
+          "x": 200,
+          "y": 100
+        },
+        {
+          "height": 60,
+          "id": "20fjeyc4t",
+          "inputs": [
+            {
+              "id": "qrvplbjd7",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "42o75f1fw",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "wsqhwgco9",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "AND",
+          "width": 80,
+          "x": 200,
+          "y": 200
+        },
+        {
+          "height": 60,
+          "id": "vwm54bxc2",
+          "inputs": [
+            {
+              "id": "uyguszo2h",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "t4b90libf",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "o8wbc7eg8",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "OR",
+          "width": 80,
+          "x": 200,
+          "y": 300
+        },
+        {
+          "height": 60,
+          "id": "aqttr9irn",
+          "inputs": [
+            {
+              "id": "jfb3c8fx7",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [
+            {
+              "id": "yqrvgc8lu",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "NOT",
+          "width": 80,
+          "x": 200,
+          "y": 400
+        },
+        {
+          "height": 60,
+          "id": "pf9xygeqh",
+          "inputs": [
+            {
+              "id": "zpz5t89wd",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [
+            {
+              "id": "r8xd1qxdb",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "NOT",
+          "width": 80,
+          "x": 200,
+          "y": 500
+        },
+        {
+          "alias": "XOR_OUT",
+          "height": 60,
+          "id": "2567os996",
+          "inputs": [
+            {
+              "id": "4lej4q01f",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 300,
+          "y": 350
+        }
+      ],
+      "wires": [],
+      "inputElementIds": [
+        "rgzy2uzbg",
+        "63wzsrs4c"
+      ],
+      "outputElementIds": [
+        "2567os996"
+      ]
+    },
+    {
+      "id": "n9wm01pm4",
+      "name": "HalfAdder",
+      "elements": [
+        {
+          "alias": "A",
+          "height": 60,
+          "id": "c99avjqfe",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "js9pqsk4n",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 50
+        },
+        {
+          "alias": "B",
+          "height": 60,
+          "id": "s2swc34dx",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "0am7db81k",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 150
+        },
+        {
+          "functionData": {
+            "elements": [
+              {
+                "alias": "A",
+                "height": 60,
+                "id": "rgzy2uzbg",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "mnq126cdn",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 50
+              },
+              {
+                "alias": "B",
+                "height": 60,
+                "id": "63wzsrs4c",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "fqxj9ug23",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 150
+              },
+              {
+                "height": 60,
+                "id": "rb6zek9zn",
+                "inputs": [
+                  {
+                    "id": "7k8nzqd50",
+                    "realX": -5,
+                    "realY": 15,
+                    "x": -5,
+                    "y": 15
+                  },
+                  {
+                    "id": "if9zoy322",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "bx7wfj4f8",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "AND",
+                "width": 80,
+                "x": 200,
+                "y": 100
+              },
+              {
+                "height": 60,
+                "id": "20fjeyc4t",
+                "inputs": [
+                  {
+                    "id": "qrvplbjd7",
+                    "realX": -5,
+                    "realY": 15,
+                    "x": -5,
+                    "y": 15
+                  },
+                  {
+                    "id": "42o75f1fw",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "wsqhwgco9",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "AND",
+                "width": 80,
+                "x": 200,
+                "y": 200
+              },
+              {
+                "height": 60,
+                "id": "vwm54bxc2",
+                "inputs": [
+                  {
+                    "id": "uyguszo2h",
+                    "realX": -5,
+                    "realY": 15,
+                    "x": -5,
+                    "y": 15
+                  },
+                  {
+                    "id": "t4b90libf",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "o8wbc7eg8",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "OR",
+                "width": 80,
+                "x": 200,
+                "y": 300
+              },
+              {
+                "height": 60,
+                "id": "aqttr9irn",
+                "inputs": [
+                  {
+                    "id": "jfb3c8fx7",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "yqrvgc8lu",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "NOT",
+                "width": 80,
+                "x": 200,
+                "y": 400
+              },
+              {
+                "height": 60,
+                "id": "pf9xygeqh",
+                "inputs": [
+                  {
+                    "id": "zpz5t89wd",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "r8xd1qxdb",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "NOT",
+                "width": 80,
+                "x": 200,
+                "y": 500
+              },
+              {
+                "alias": "XOR_OUT",
+                "height": 60,
+                "id": "2567os996",
+                "inputs": [
+                  {
+                    "id": "4lej4q01f",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "OUTPUT",
+                "width": 60,
+                "x": 300,
+                "y": 350
+              }
+            ],
+            "inputElementIds": [
+              "rgzy2uzbg",
+              "63wzsrs4c"
+            ],
+            "outputElementIds": [
+              "2567os996"
+            ],
+            "wires": []
+          },
+          "height": 70,
+          "id": "g8fg4yg3m",
+          "inputs": [
+            {
+              "id": "v79glda4n",
+              "realX": -5,
+              "realY": 20,
+              "x": -5,
+              "y": 20
+            },
+            {
+              "id": "74hsomnxe",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "name": "XOR",
+          "outputStates": [
+            false
+          ],
+          "outputs": [
+            {
+              "id": "4e5kz24bw",
+              "realX": 105,
+              "realY": 20,
+              "x": 105,
+              "y": 20
+            }
+          ],
+          "realHeight": 70,
+          "realWidth": 100,
+          "state": false,
+          "type": "FUNCTION",
+          "width": 100,
+          "x": 200,
+          "y": 100
+        },
+        {
+          "height": 60,
+          "id": "t1zguec8b",
+          "inputs": [
+            {
+              "id": "9hj0w29n9",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "ftyco8rlr",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "v3deng22u",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "AND",
+          "width": 80,
+          "x": 200,
+          "y": 200
+        },
+        {
+          "alias": "SUM",
+          "height": 60,
+          "id": "s3l014ltu",
+          "inputs": [
+            {
+              "id": "n9hspfgsb",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 300,
+          "y": 150
+        },
+        {
+          "alias": "CARRY",
+          "height": 60,
+          "id": "qqb3k7x4o",
+          "inputs": [
+            {
+              "id": "abmluhkp8",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 300,
+          "y": 250
+        }
+      ],
+      "wires": [],
+      "inputElementIds": [
+        "c99avjqfe",
+        "s2swc34dx"
+      ],
+      "outputElementIds": [
+        "s3l014ltu",
+        "qqb3k7x4o"
+      ]
+    },
+    {
+      "id": "nfwk8s97b",
+      "name": "FullAdder",
+      "elements": [
+        {
+          "alias": "A",
+          "height": 60,
+          "id": "2bsku27s3",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "zzxqxvu8k",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 50
+        },
+        {
+          "alias": "B",
+          "height": 60,
+          "id": "b3grqsade",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "gpfqtx8iw",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 150
+        },
+        {
+          "alias": "Cin",
+          "height": 60,
+          "id": "sicu0kx84",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "5iwhmpcxo",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "INPUT",
+          "width": 60,
+          "x": 100,
+          "y": 250
+        },
+        {
+          "alias": "HA1",
+          "functionData": {
+            "elements": [
+              {
+                "alias": "A",
+                "height": 60,
+                "id": "c99avjqfe",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "js9pqsk4n",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": true,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 50
+              },
+              {
+                "alias": "B",
+                "height": 60,
+                "id": "s2swc34dx",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "0am7db81k",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": true,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 150
+              },
+              {
+                "functionData": {
+                  "elements": [
+                    {
+                      "alias": "A",
+                      "height": 60,
+                      "id": "rgzy2uzbg",
+                      "inputs": [],
+                      "outputs": [
+                        {
+                          "id": "mnq126cdn",
+                          "realX": 65,
+                          "realY": 30,
+                          "x": 65,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "INPUT",
+                      "width": 60,
+                      "x": 100,
+                      "y": 50
+                    },
+                    {
+                      "alias": "B",
+                      "height": 60,
+                      "id": "63wzsrs4c",
+                      "inputs": [],
+                      "outputs": [
+                        {
+                          "id": "fqxj9ug23",
+                          "realX": 65,
+                          "realY": 30,
+                          "x": 65,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "INPUT",
+                      "width": 60,
+                      "x": 100,
+                      "y": 150
+                    },
+                    {
+                      "height": 60,
+                      "id": "rb6zek9zn",
+                      "inputs": [
+                        {
+                          "id": "7k8nzqd50",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "if9zoy322",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "bx7wfj4f8",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "AND",
+                      "width": 80,
+                      "x": 200,
+                      "y": 100
+                    },
+                    {
+                      "height": 60,
+                      "id": "20fjeyc4t",
+                      "inputs": [
+                        {
+                          "id": "qrvplbjd7",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "42o75f1fw",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "wsqhwgco9",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "AND",
+                      "width": 80,
+                      "x": 200,
+                      "y": 200
+                    },
+                    {
+                      "height": 60,
+                      "id": "vwm54bxc2",
+                      "inputs": [
+                        {
+                          "id": "uyguszo2h",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "t4b90libf",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "o8wbc7eg8",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "OR",
+                      "width": 80,
+                      "x": 200,
+                      "y": 300
+                    },
+                    {
+                      "height": 60,
+                      "id": "aqttr9irn",
+                      "inputs": [
+                        {
+                          "id": "jfb3c8fx7",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "yqrvgc8lu",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "NOT",
+                      "width": 80,
+                      "x": 200,
+                      "y": 400
+                    },
+                    {
+                      "height": 60,
+                      "id": "pf9xygeqh",
+                      "inputs": [
+                        {
+                          "id": "zpz5t89wd",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "r8xd1qxdb",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "NOT",
+                      "width": 80,
+                      "x": 200,
+                      "y": 500
+                    },
+                    {
+                      "alias": "XOR_OUT",
+                      "height": 60,
+                      "id": "2567os996",
+                      "inputs": [
+                        {
+                          "id": "4lej4q01f",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "OUTPUT",
+                      "width": 60,
+                      "x": 300,
+                      "y": 350
+                    }
+                  ],
+                  "inputElementIds": [
+                    "rgzy2uzbg",
+                    "63wzsrs4c"
+                  ],
+                  "outputElementIds": [
+                    "2567os996"
+                  ],
+                  "wires": []
+                },
+                "height": 70,
+                "id": "g8fg4yg3m",
+                "inputs": [
+                  {
+                    "id": "v79glda4n",
+                    "realX": -5,
+                    "realY": 20,
+                    "x": -5,
+                    "y": 20
+                  },
+                  {
+                    "id": "74hsomnxe",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "name": "XOR",
+                "outputStates": [
+                  false
+                ],
+                "outputs": [
+                  {
+                    "id": "4e5kz24bw",
+                    "realX": 105,
+                    "realY": 20,
+                    "x": 105,
+                    "y": 20
+                  }
+                ],
+                "realHeight": 70,
+                "realWidth": 100,
+                "state": false,
+                "type": "FUNCTION",
+                "width": 100,
+                "x": 200,
+                "y": 100
+              },
+              {
+                "height": 60,
+                "id": "t1zguec8b",
+                "inputs": [
+                  {
+                    "id": "9hj0w29n9",
+                    "realX": -5,
+                    "realY": 15,
+                    "x": -5,
+                    "y": 15
+                  },
+                  {
+                    "id": "ftyco8rlr",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "v3deng22u",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "AND",
+                "width": 80,
+                "x": 200,
+                "y": 200
+              },
+              {
+                "alias": "SUM",
+                "height": 60,
+                "id": "s3l014ltu",
+                "inputs": [
+                  {
+                    "id": "n9hspfgsb",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "OUTPUT",
+                "width": 60,
+                "x": 300,
+                "y": 150
+              },
+              {
+                "alias": "CARRY",
+                "height": 60,
+                "id": "qqb3k7x4o",
+                "inputs": [
+                  {
+                    "id": "abmluhkp8",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "OUTPUT",
+                "width": 60,
+                "x": 300,
+                "y": 250
+              }
+            ],
+            "inputElementIds": [
+              "c99avjqfe",
+              "s2swc34dx"
+            ],
+            "outputElementIds": [
+              "s3l014ltu",
+              "qqb3k7x4o"
+            ],
+            "wires": []
+          },
+          "height": 70,
+          "id": "0dd7hl5i2",
+          "inputs": [
+            {
+              "id": "10cl86g9b",
+              "realX": -5,
+              "realY": 20,
+              "x": -5,
+              "y": 20
+            },
+            {
+              "id": "v49ew392w",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "name": "HalfAdder",
+          "outputStates": [
+            false,
+            false
+          ],
+          "outputs": [
+            {
+              "id": "80gwm9g22",
+              "realX": 105,
+              "realY": 20,
+              "x": 105,
+              "y": 20
+            },
+            {
+              "id": "sdofy4a32",
+              "realX": 105,
+              "realY": 45,
+              "x": 105,
+              "y": 45
+            }
+          ],
+          "realHeight": 70,
+          "realWidth": 100,
+          "state": false,
+          "type": "FUNCTION",
+          "width": 100,
+          "x": 200,
+          "y": 100
+        },
+        {
+          "alias": "HA2",
+          "functionData": {
+            "elements": [
+              {
+                "alias": "A",
+                "height": 60,
+                "id": "c99avjqfe",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "js9pqsk4n",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": true,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 50
+              },
+              {
+                "alias": "B",
+                "height": 60,
+                "id": "s2swc34dx",
+                "inputs": [],
+                "outputs": [
+                  {
+                    "id": "0am7db81k",
+                    "realX": 65,
+                    "realY": 30,
+                    "x": 65,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": true,
+                "type": "INPUT",
+                "width": 60,
+                "x": 100,
+                "y": 150
+              },
+              {
+                "functionData": {
+                  "elements": [
+                    {
+                      "alias": "A",
+                      "height": 60,
+                      "id": "rgzy2uzbg",
+                      "inputs": [],
+                      "outputs": [
+                        {
+                          "id": "mnq126cdn",
+                          "realX": 65,
+                          "realY": 30,
+                          "x": 65,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "INPUT",
+                      "width": 60,
+                      "x": 100,
+                      "y": 50
+                    },
+                    {
+                      "alias": "B",
+                      "height": 60,
+                      "id": "63wzsrs4c",
+                      "inputs": [],
+                      "outputs": [
+                        {
+                          "id": "fqxj9ug23",
+                          "realX": 65,
+                          "realY": 30,
+                          "x": 65,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "INPUT",
+                      "width": 60,
+                      "x": 100,
+                      "y": 150
+                    },
+                    {
+                      "height": 60,
+                      "id": "rb6zek9zn",
+                      "inputs": [
+                        {
+                          "id": "7k8nzqd50",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "if9zoy322",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "bx7wfj4f8",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "AND",
+                      "width": 80,
+                      "x": 200,
+                      "y": 100
+                    },
+                    {
+                      "height": 60,
+                      "id": "20fjeyc4t",
+                      "inputs": [
+                        {
+                          "id": "qrvplbjd7",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "42o75f1fw",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "wsqhwgco9",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "AND",
+                      "width": 80,
+                      "x": 200,
+                      "y": 200
+                    },
+                    {
+                      "height": 60,
+                      "id": "vwm54bxc2",
+                      "inputs": [
+                        {
+                          "id": "uyguszo2h",
+                          "realX": -5,
+                          "realY": 15,
+                          "x": -5,
+                          "y": 15
+                        },
+                        {
+                          "id": "t4b90libf",
+                          "realX": -5,
+                          "realY": 45,
+                          "x": -5,
+                          "y": 45
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "o8wbc7eg8",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "OR",
+                      "width": 80,
+                      "x": 200,
+                      "y": 300
+                    },
+                    {
+                      "height": 60,
+                      "id": "aqttr9irn",
+                      "inputs": [
+                        {
+                          "id": "jfb3c8fx7",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "yqrvgc8lu",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "NOT",
+                      "width": 80,
+                      "x": 200,
+                      "y": 400
+                    },
+                    {
+                      "height": 60,
+                      "id": "pf9xygeqh",
+                      "inputs": [
+                        {
+                          "id": "zpz5t89wd",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [
+                        {
+                          "id": "r8xd1qxdb",
+                          "realX": 85,
+                          "realY": 30,
+                          "x": 85,
+                          "y": 30
+                        }
+                      ],
+                      "realHeight": 60,
+                      "realWidth": 80,
+                      "state": false,
+                      "type": "NOT",
+                      "width": 80,
+                      "x": 200,
+                      "y": 500
+                    },
+                    {
+                      "alias": "XOR_OUT",
+                      "height": 60,
+                      "id": "2567os996",
+                      "inputs": [
+                        {
+                          "id": "4lej4q01f",
+                          "realX": -5,
+                          "realY": 30,
+                          "x": -5,
+                          "y": 30
+                        }
+                      ],
+                      "outputs": [],
+                      "realHeight": 60,
+                      "realWidth": 60,
+                      "state": false,
+                      "type": "OUTPUT",
+                      "width": 60,
+                      "x": 300,
+                      "y": 350
+                    }
+                  ],
+                  "inputElementIds": [
+                    "rgzy2uzbg",
+                    "63wzsrs4c"
+                  ],
+                  "outputElementIds": [
+                    "2567os996"
+                  ],
+                  "wires": []
+                },
+                "height": 70,
+                "id": "g8fg4yg3m",
+                "inputs": [
+                  {
+                    "id": "v79glda4n",
+                    "realX": -5,
+                    "realY": 20,
+                    "x": -5,
+                    "y": 20
+                  },
+                  {
+                    "id": "74hsomnxe",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "name": "XOR",
+                "outputStates": [
+                  false
+                ],
+                "outputs": [
+                  {
+                    "id": "4e5kz24bw",
+                    "realX": 105,
+                    "realY": 20,
+                    "x": 105,
+                    "y": 20
+                  }
+                ],
+                "realHeight": 70,
+                "realWidth": 100,
+                "state": false,
+                "type": "FUNCTION",
+                "width": 100,
+                "x": 200,
+                "y": 100
+              },
+              {
+                "height": 60,
+                "id": "t1zguec8b",
+                "inputs": [
+                  {
+                    "id": "9hj0w29n9",
+                    "realX": -5,
+                    "realY": 15,
+                    "x": -5,
+                    "y": 15
+                  },
+                  {
+                    "id": "ftyco8rlr",
+                    "realX": -5,
+                    "realY": 45,
+                    "x": -5,
+                    "y": 45
+                  }
+                ],
+                "outputs": [
+                  {
+                    "id": "v3deng22u",
+                    "realX": 85,
+                    "realY": 30,
+                    "x": 85,
+                    "y": 30
+                  }
+                ],
+                "realHeight": 60,
+                "realWidth": 80,
+                "state": false,
+                "type": "AND",
+                "width": 80,
+                "x": 200,
+                "y": 200
+              },
+              {
+                "alias": "SUM",
+                "height": 60,
+                "id": "s3l014ltu",
+                "inputs": [
+                  {
+                    "id": "n9hspfgsb",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "OUTPUT",
+                "width": 60,
+                "x": 300,
+                "y": 150
+              },
+              {
+                "alias": "CARRY",
+                "height": 60,
+                "id": "qqb3k7x4o",
+                "inputs": [
+                  {
+                    "id": "abmluhkp8",
+                    "realX": -5,
+                    "realY": 30,
+                    "x": -5,
+                    "y": 30
+                  }
+                ],
+                "outputs": [],
+                "realHeight": 60,
+                "realWidth": 60,
+                "state": false,
+                "type": "OUTPUT",
+                "width": 60,
+                "x": 300,
+                "y": 250
+              }
+            ],
+            "inputElementIds": [
+              "c99avjqfe",
+              "s2swc34dx"
+            ],
+            "outputElementIds": [
+              "s3l014ltu",
+              "qqb3k7x4o"
+            ],
+            "wires": []
+          },
+          "height": 70,
+          "id": "3596kpdhg",
+          "inputs": [
+            {
+              "id": "nepxlkz6q",
+              "realX": -5,
+              "realY": 20,
+              "x": -5,
+              "y": 20
+            },
+            {
+              "id": "r7l9omfx8",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "name": "HalfAdder",
+          "outputStates": [
+            false,
+            false
+          ],
+          "outputs": [
+            {
+              "id": "tgquvbsp7",
+              "realX": 105,
+              "realY": 20,
+              "x": 105,
+              "y": 20
+            },
+            {
+              "id": "osma6nk8u",
+              "realX": 105,
+              "realY": 45,
+              "x": 105,
+              "y": 45
+            }
+          ],
+          "realHeight": 70,
+          "realWidth": 100,
+          "state": false,
+          "type": "FUNCTION",
+          "width": 100,
+          "x": 200,
+          "y": 300
+        },
+        {
+          "height": 60,
+          "id": "ivlyspiew",
+          "inputs": [
+            {
+              "id": "8xw19r8ka",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "dj74wagtk",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "exa44yiuv",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "OR",
+          "width": 80,
+          "x": 200,
+          "y": 500
+        },
+        {
+          "alias": "Sum",
+          "height": 60,
+          "id": "upvrxt37s",
+          "inputs": [
+            {
+              "id": "u5n9cbx12",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 300,
+          "y": 200
+        },
+        {
+          "alias": "Cout",
+          "height": 60,
+          "id": "m6y7pqe4e",
+          "inputs": [
+            {
+              "id": "9ivcgjq9m",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 300,
+          "y": 350
+        }
+      ],
+      "wires": [],
+      "inputElementIds": [
+        "2bsku27s3",
+        "b3grqsade",
+        "sicu0kx84"
+      ],
+      "outputElementIds": [
+        "upvrxt37s",
+        "m6y7pqe4e"
+      ]
+    },
+    {
+      "id": "tsypbst8p",
+      "name": "1",
+      "elements": [
+        {
+          "height": 60,
+          "id": "2q0njztxj",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "3avdf74x9",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 556,
+          "y": -31
+        },
+        {
+          "height": 60,
+          "id": "2g2bqnlm7",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "8wudxfmtr",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 532,
+          "y": 65
+        },
+        {
+          "height": 60,
+          "id": "qozfzhnb3",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "1pad2m61c",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 562,
+          "y": 143
+        },
+        {
+          "height": 60,
+          "id": "o2ioxqj1m",
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "o0e2wxbaf",
+              "realX": 65,
+              "realY": 30,
+              "x": 65,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "INPUT",
+          "width": 60,
+          "x": 503,
+          "y": 248
+        },
+        {
+          "height": 60,
+          "id": "bdlxsu9hz",
+          "inputs": [
+            {
+              "id": "99sohxuz0",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": false,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 846,
+          "y": -6
+        },
+        {
+          "height": 60,
+          "id": "tm4aspgq5",
+          "inputs": [
+            {
+              "id": "qefz4cx2v",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 828,
+          "y": 74
+        },
+        {
+          "height": 60,
+          "id": "nbgo0gmxm",
+          "inputs": [
+            {
+              "id": "g27khps5c",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [],
+          "realHeight": 60,
+          "realWidth": 60,
+          "state": true,
+          "type": "OUTPUT",
+          "width": 60,
+          "x": 837,
+          "y": 156
+        },
+        {
+          "height": 60,
+          "id": "hwcihf74k",
+          "inputs": [
+            {
+              "id": "gjk0fvelv",
+              "realX": -5,
+              "realY": 15,
+              "x": -5,
+              "y": 15
+            },
+            {
+              "id": "iakhyafzt",
+              "realX": -5,
+              "realY": 45,
+              "x": -5,
+              "y": 45
+            }
+          ],
+          "outputs": [
+            {
+              "id": "uepv0jhnn",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": false,
+          "type": "OR",
+          "width": 80,
+          "x": 695,
+          "y": -45
+        },
+        {
+          "height": 60,
+          "id": "ww3cr8swm",
+          "inputs": [
+            {
+              "id": "lwr51m4dt",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [
+            {
+              "id": "jxvuxa2iq",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": true,
+          "type": "NOT",
+          "width": 80,
+          "x": 689,
+          "y": 79
+        },
+        {
+          "height": 60,
+          "id": "bu4qtctwz",
+          "inputs": [
+            {
+              "id": "so1h5yi54",
+              "realX": -5,
+              "realY": 30,
+              "x": -5,
+              "y": 30
+            }
+          ],
+          "outputs": [
+            {
+              "id": "a60rrn8pd",
+              "realX": 85,
+              "realY": 30,
+              "x": 85,
+              "y": 30
+            }
+          ],
+          "realHeight": 60,
+          "realWidth": 80,
+          "state": true,
+          "type": "NOT",
+          "width": 80,
+          "x": 688,
+          "y": 251
+        }
+      ],
+      "wires": [
+        {
+          "end": {
+            "elementId": "2q0njztxj",
+            "isInput": false,
+            "portId": "3avdf74x9",
+            "x": 621,
+            "y": -1
+          },
+          "id": "35zdaxg12",
+          "start": {
+            "elementId": "hwcihf74k",
+            "isInput": true,
+            "portId": "gjk0fvelv",
+            "x": 690,
+            "y": -30
+          },
+          "state": false
+        },
+        {
+          "end": {
+            "elementId": "hwcihf74k",
+            "isInput": true,
+            "portId": "iakhyafzt",
+            "x": 690,
+            "y": 0
+          },
+          "id": "2y1nk0ha0",
+          "start": {
+            "elementId": "2g2bqnlm7",
+            "isInput": false,
+            "portId": "8wudxfmtr",
+            "x": 597,
+            "y": 95
+          },
+          "state": false
+        },
+        {
+          "end": {
+            "elementId": "bdlxsu9hz",
+            "isInput": true,
+            "portId": "99sohxuz0",
+            "x": 841,
+            "y": 24
+          },
+          "id": "x3ue6rac7",
+          "start": {
+            "elementId": "hwcihf74k",
+            "isInput": false,
+            "portId": "uepv0jhnn",
+            "x": 780,
+            "y": -15
+          },
+          "state": false
+        },
+        {
+          "end": {
+            "elementId": "ww3cr8swm",
+            "isInput": true,
+            "portId": "lwr51m4dt",
+            "x": 684,
+            "y": 109
+          },
+          "id": "rdytsqofs",
+          "start": {
+            "elementId": "qozfzhnb3",
+            "isInput": false,
+            "portId": "1pad2m61c",
+            "x": 627,
+            "y": 173
+          },
+          "state": false
+        },
+        {
+          "end": {
+            "elementId": "tm4aspgq5",
+            "isInput": true,
+            "portId": "qefz4cx2v",
+            "x": 823,
+            "y": 104
+          },
+          "id": "wdyewbbyu",
+          "start": {
+            "elementId": "ww3cr8swm",
+            "isInput": false,
+            "portId": "jxvuxa2iq",
+            "x": 774,
+            "y": 109
+          },
+          "state": true
+        },
+        {
+          "end": {
+            "elementId": "bu4qtctwz",
+            "isInput": true,
+            "portId": "so1h5yi54",
+            "x": 683,
+            "y": 281
+          },
+          "id": "x9qr7cke6",
+          "start": {
+            "elementId": "o2ioxqj1m",
+            "isInput": false,
+            "portId": "o0e2wxbaf",
+            "x": 568,
+            "y": 278
+          },
+          "state": false
+        },
+        {
+          "end": {
+            "elementId": "nbgo0gmxm",
+            "isInput": true,
+            "portId": "g27khps5c",
+            "x": 832,
+            "y": 186
+          },
+          "id": "ak4466o8k",
+          "start": {
+            "elementId": "bu4qtctwz",
+            "isInput": false,
+            "portId": "a60rrn8pd",
+            "x": 773,
+            "y": 281
+          },
+          "state": true
+        }
+      ],
+      "inputElementIds": [
+        "2q0njztxj",
+        "2g2bqnlm7",
+        "qozfzhnb3",
+        "o2ioxqj1m"
+      ],
+      "outputElementIds": [
+        "bdlxsu9hz",
+        "tm4aspgq5",
+        "nbgo0gmxm"
+      ]
+    },
+    {
+      "id": "kb81volx4",
+      "name": "F2",
+      "elements": [
+        {
+          "id": "ycgxonwns",
+          "type": "INPUT",
+          "x": 100,
+          "y": 100,
+          "state": false,
+          "width": 60,
+          "height": 60,
+          "realWidth": 60,
+          "realHeight": 60,
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "ikws7uidx",
+              "x": 65,
+              "y": 30,
+              "realX": 65,
+              "realY": 30
+            }
+          ]
+        },
+        {
+          "id": "alau8v8yy",
+          "type": "INPUT",
+          "x": 100,
+          "y": 200,
+          "state": false,
+          "width": 60,
+          "height": 60,
+          "realWidth": 60,
+          "realHeight": 60,
+          "inputs": [],
+          "outputs": [
+            {
+              "id": "rslxpm98w",
+              "x": 65,
+              "y": 30,
+              "realX": 65,
+              "realY": 30
+            }
+          ]
+        },
+        {
+          "id": "yf8luihzd",
+          "type": "OUTPUT",
+          "x": 300,
+          "y": 100,
+          "state": false,
+          "width": 60,
+          "height": 60,
+          "realWidth": 60,
+          "realHeight": 60,
+          "inputs": [
+            {
+              "id": "pkvinx8he",
+              "x": -5,
+              "y": 30,
+              "realX": -5,
+              "realY": 30
+            }
+          ],
+          "outputs": []
+        },
+        {
+          "id": "jp1m44xnm",
+          "type": "OUTPUT",
+          "x": 300,
+          "y": 200,
+          "state": false,
+          "width": 60,
+          "height": 60,
+          "realWidth": 60,
+          "realHeight": 60,
+          "inputs": [
+            {
+              "id": "9irilheob",
+              "x": -5,
+              "y": 30,
+              "realX": -5,
+              "realY": 30
+            }
+          ],
+          "outputs": []
+        }
+      ],
+      "wires": [
+        {
+          "id": "zd4r77ntn",
+          "start": {
+            "elementId": "ycgxonwns",
+            "portId": "ikws7uidx",
+            "x": 165,
+            "y": 130,
+            "isInput": false
+          },
+          "end": {
+            "elementId": "yf8luihzd",
+            "portId": "pkvinx8he",
+            "x": 295,
+            "y": 130,
+            "isInput": true
+          }
+        },
+        {
+          "id": "ut2bwnscp",
+          "start": {
+            "elementId": "alau8v8yy",
+            "portId": "rslxpm98w",
+            "x": 165,
+            "y": 230,
+            "isInput": false
+          },
+          "end": {
+            "elementId": "jp1m44xnm",
+            "portId": "9irilheob",
+            "x": 295,
+            "y": 230,
+            "isInput": true
+          }
+        }
+      ],
+      "inputElementIds": [
+        "ycgxonwns",
+        "alau8v8yy"
+      ],
+      "outputElementIds": [
+        "yf8luihzd",
+        "jp1m44xnm"
+      ]
+    }
+  ]
 }
