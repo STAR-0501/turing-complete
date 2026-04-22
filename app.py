@@ -136,10 +136,16 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.define_function(params['name'])
     elif cmd == 'toggle_input':
         return circuit_manager.toggle_input(params['id'])
+    elif cmd == 'set_input':
+        return circuit_manager.set_input(params['id'], params.get('value'))
     elif cmd == 'move_element':
         return circuit_manager.move_element(params['id'], params['x'], params['y'])
     elif cmd == 'get_state':
         return circuit_manager.get_state()
+    elif cmd == 'simulate':
+        return circuit_manager.simulate()
+    elif cmd == 'sample_outputs':
+        return circuit_manager.sample_outputs(params.get('ids'))
     else:
         raise ValueError(f'Unknown command: {cmd}')
 
@@ -154,6 +160,16 @@ def _parse_commands_payload(commands_str):
         if not isinstance(token, str):
             return token
         return token.strip().strip('`').strip(',;，；。')
+
+    def _parse_bool_token(token):
+        if token is None:
+            return None
+        t = str(token).strip().lower()
+        if t in {"1", "true", "yes", "on"}:
+            return True
+        if t in {"0", "false", "no", "off"}:
+            return False
+        return None
 
     commands = []
     for line in content.split('\n'):
@@ -207,6 +223,17 @@ def _parse_commands_payload(commands_str):
             elif cmd == 'TOGGLE':
                 if len(parts) >= 2:
                     commands.append({'command': 'toggle_input', 'params': {'id': _clean_token(parts[1])}})
+            elif cmd == 'SET':
+                if len(parts) >= 3:
+                    v = _parse_bool_token(parts[2])
+                    if v is not None:
+                        commands.append({'command': 'set_input', 'params': {'id': _clean_token(parts[1]), 'value': v}})
+            elif cmd in ('SIM', 'SIMULATE'):
+                commands.append({'command': 'simulate', 'params': {}})
+            elif cmd == 'SAMPLE':
+                ids = [_clean_token(p) for p in parts[1:]] if len(parts) > 1 else []
+                params = {'ids': ids} if ids else {}
+                commands.append({'command': 'sample_outputs', 'params': params})
             elif cmd == 'MOVE':
                 if len(parts) >= 4:
                     commands.append({
@@ -240,6 +267,9 @@ def _execute_commands_with_alias(commands):
     alias_map = {}
     last_element_id = None
     pending_wires = []
+    errors = []
+    results = []
+    executed_success = 0
 
     def _bind_alias(alias, element_id):
         if not alias:
@@ -286,20 +316,30 @@ def _execute_commands_with_alias(commands):
     def _flush_pending_wires():
         nonlocal pending_wires
         retries = 3
+        last_failures = []
         for _ in range(retries):
             if not pending_wires:
                 break
             unresolved_wires = []
+            failures = []
             executed_count = 0
             for wire_params in pending_wires:
                 try:
                     _try_execute_wire(wire_params)
                     executed_count += 1
-                except:
+                    results.append({"command": "add_wire", "result": "ok"})
+                except Exception as e:
+                    failures.append(str(e))
                     unresolved_wires.append(wire_params)
             pending_wires = unresolved_wires
+            last_failures = failures
             if executed_count == 0:
                 break
+        if pending_wires:
+            for idx, wire_params in enumerate(pending_wires):
+                msg = last_failures[idx] if idx < len(last_failures) else "无法连接导线"
+                errors.append({"command": "add_wire", "error": msg, "params": wire_params})
+            pending_wires = []
 
     for cmd_data in commands:
         cmd = cmd_data.get('command')
@@ -312,7 +352,10 @@ def _execute_commands_with_alias(commands):
                 if specified_alias:
                     params['alias'] = specified_alias
                 result = execute_circuit_command(cmd, params)
-            except:
+                executed_success += 1
+                results.append({"command": "add_element", "result": {"id": result.get("id")} if isinstance(result, dict) else "ok"})
+            except Exception as e:
+                errors.append({"command": "add_element", "error": str(e), "params": params})
                 continue
             if isinstance(result, dict) and result.get('id'):
                 last_element_id = result['id']
@@ -330,20 +373,30 @@ def _execute_commands_with_alias(commands):
             params['id'] = _resolve_element_ref(params['id'], alias_map)
             if params['id'] == '$last' and last_element_id:
                 params['id'] = last_element_id
+        if 'ids' in params and isinstance(params.get('ids'), list):
+            params['ids'] = [_resolve_element_ref(v, alias_map) for v in params.get('ids') if v is not None]
 
         if cmd in ('clear_circuit', 'define_function', 'remove_element', 'remove_wire'):
             _flush_pending_wires()
 
         try:
-            execute_circuit_command(cmd, params)
-        except:
+            result = execute_circuit_command(cmd, params)
+            executed_success += 1
+            if cmd in ("sample_outputs",):
+                results.append({"command": cmd, "result": result})
+            else:
+                results.append({"command": cmd, "result": "ok"})
+        except Exception as e:
+            errors.append({"command": cmd, "error": str(e), "params": params})
             continue
 
     _flush_pending_wires()
     try:
         circuit_manager.simulate()
-    except:
-        pass
+    except Exception as e:
+        errors.append({"command": "simulate", "error": str(e)})
+
+    return {"executed_success": executed_success, "errors": errors, "results": results}
 
 def _build_compact_state(state):
     elements = state.get('elements', [])
@@ -378,6 +431,18 @@ def _build_compact_state(state):
         'elements': compact_elements,
         'wires': compact_wires
     }
+
+def _build_io_summary(state):
+    elements = (state or {}).get("elements") or []
+    inputs = []
+    outputs = []
+    for e in elements:
+        t = e.get("type")
+        if t == "INPUT":
+            inputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
+        elif t == "OUTPUT":
+            outputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
+    return {"inputs": inputs, "outputs": outputs}
 
 def _strip_commands_from_reply(text):
     if not isinstance(text, str):
@@ -494,6 +559,93 @@ def _extract_tag_text(text, tag):
     match = re.search(pattern, text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
 
+def _extract_verify_payload(text):
+    payload = _extract_tag_text(text, "verify")
+    if not payload:
+        return None
+    try:
+        return json.loads(payload)
+    except:
+        return None
+
+def _resolve_ref_to_id(value, state):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    v = value.strip()
+    if not v:
+        return v
+    elements = (state or {}).get("elements") or []
+    for el in elements:
+        if el.get("id") == v:
+            return v
+    for el in elements:
+        if (el.get("alias") or "").strip() == v:
+            return el.get("id")
+    if v.startswith("$"):
+        raw = v[1:]
+        for el in elements:
+            if (el.get("alias") or "").strip() == raw:
+                return el.get("id")
+    return v
+
+def _run_verify_cases(verify_obj):
+    if not isinstance(verify_obj, dict):
+        return None
+    cases = verify_obj.get("cases")
+    if cases is None:
+        single = {"inputs": verify_obj.get("inputs") or [], "expect": verify_obj.get("expect") or []}
+        cases = [single]
+    if not isinstance(cases, list) or not cases:
+        return None
+
+    max_cases = 16
+    cases = cases[:max_cases]
+
+    report = {"total": len(cases), "passed": 0, "failed": 0, "cases": []}
+    for idx, case in enumerate(cases, start=1):
+        inputs = (case or {}).get("inputs") or []
+        expect = (case or {}).get("expect") or []
+        case_result = {"index": idx, "pass": True, "details": []}
+        try:
+            state = circuit_manager.get_state()
+            for inp in inputs:
+                ref = (inp or {}).get("id")
+                val = (inp or {}).get("value")
+                el_id = _resolve_ref_to_id(ref, state)
+                circuit_manager.set_input(el_id, bool(val))
+            circuit_manager.simulate()
+            out_sample = circuit_manager.sample_outputs(None)
+            out_map = {}
+            for o in (out_sample.get("outputs") or []):
+                out_map[o.get("id")] = bool(o.get("state", False))
+                if o.get("alias"):
+                    out_map[o.get("alias")] = bool(o.get("state", False))
+
+            for exp in expect:
+                ref = (exp or {}).get("id")
+                want = bool((exp or {}).get("value"))
+                got = out_map.get(ref)
+                if got is None:
+                    el_id = _resolve_ref_to_id(ref, state)
+                    got = out_map.get(el_id)
+                ok = (got is not None and bool(got) == want)
+                if not ok:
+                    case_result["pass"] = False
+                case_result["details"].append({"id": ref, "want": want, "got": got, "ok": ok})
+        except Exception as e:
+            case_result["pass"] = False
+            case_result["details"].append({"error": str(e)})
+
+        if case_result["pass"]:
+            report["passed"] += 1
+        else:
+            report["failed"] += 1
+        report["cases"].append(case_result)
+
+    return report
+
 def _extract_commands_block(text):
     if not isinstance(text, str):
         return ""
@@ -531,6 +683,9 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 6. CLEAR -- 清空画布
 7. TOGGLE <id_or_alias> -- 切换输入状态 (用于测试)
 8. DEFINE_FUNC <name> -- 将当前电路封装为函数
+9. SET <id_or_alias> <0|1> -- 将 INPUT 设置为指定电平（用于确定性测试）
+10. SIM -- 显式触发仿真
+11. SAMPLE [id_or_alias ...] -- 采样输出端口状态（默认采样全部 OUTPUT）
 
 逻辑参考 (标准门实现):
 - NAND(A, B): NOT(AND(A, B))
@@ -541,8 +696,9 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 规则:
 - 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
 - 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> CLEAR -> ADD <函数名> 复用。
-- 布局美观：使用 MOVE 调整位置，避免元件重叠。
+- 布局美观：每一轮都要美观地、不重叠地放置元件，必要时使用 MOVE 调整位置。
 - 验证驱动：如果你不确定电路是否正确，可以使用 TOGGLE 切换输入并观察 elements 的 state 变化。
+- 更推荐：用 SET 做确定性输入，然后用 SAMPLE 查看 OUTPUT 结果来验证，再决定 done。
 - 强烈建议：给关键元件设置 alias（ADD 第 5 个参数）。alias 会持久化，后续所有 <id_or_alias> 都可以直接使用 alias。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
 - 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
@@ -563,6 +719,10 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 <commands>
 命令列表
 </commands>
+<verify>
+可选：用 JSON 描述测试用例。示例：
+{"cases":[{"inputs":[{"id":"A","value":0},{"id":"B","value":1}],"expect":[{"id":"SUM","value":1},{"id":"CARRY","value":0}]}]}
+</verify>
 <done>true 或 false</done>
 
 当你确认电路逻辑正确（通过 state 验证）且布局合理时，done 设为 true。"""
@@ -671,6 +831,7 @@ def call_llm_stream(user_message):
             answer_text = _extract_answer_text(full_content)
             commands_text = _extract_commands_block(full_content)
             done_flag = _is_done_response(full_content)
+            verify_obj = _extract_verify_payload(full_content)
 
             if not answer_text:
                 answer_text = "已完成本轮处理。"
@@ -683,13 +844,19 @@ def call_llm_stream(user_message):
 
             executed_command_count = 0
             execution_error = ""
+            executed_success_count = 0
+            command_errors = []
+            command_results = []
             if commands_text:
                 try:
                     parsed_commands = _parse_commands_payload(commands_text)
                     executed_command_count = len(parsed_commands)
-                    _execute_commands_with_alias(parsed_commands)
+                    summary = _execute_commands_with_alias(parsed_commands)
+                    executed_success_count = int((summary or {}).get("executed_success") or 0)
+                    command_errors = list((summary or {}).get("errors") or [])
+                    command_results = list((summary or {}).get("results") or [])
                     aggregated_commands.append(commands_text)
-                    if executed_command_count > 0:
+                    if executed_success_count > 0:
                         yield STREAM_STATE_CHANGED_MARKER
                 except Exception as e:
                     execution_error = str(e)
@@ -698,6 +865,7 @@ def call_llm_stream(user_message):
             after_state = circuit_manager.get_state()
             compact_after_state = _build_compact_state(after_state)
             state_fingerprint = json.dumps(compact_after_state, ensure_ascii=False, separators=(',', ':'))
+            io_summary = _build_io_summary(after_state)
             if last_state_fingerprint is not None and state_fingerprint == last_state_fingerprint:
                 no_progress_rounds += 1
             else:
@@ -714,7 +882,10 @@ def call_llm_stream(user_message):
             element_count = len(compact_after_state.get('elements', []))
             wire_count = len(compact_after_state.get('wires', []))
             function_count = len(circuit_manager._load_functions())
-            yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}\n"
+            if command_errors:
+                yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}, ok={executed_success_count}, fail={len(command_errors)}\n"
+            else:
+                yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}\n"
 
             if execution_error:
                 if execution_error == last_execution_error:
@@ -735,6 +906,37 @@ def call_llm_stream(user_message):
                 continue
             last_execution_error = ""
             same_error_rounds = 0
+
+            if command_errors:
+                done_flag = False
+                preview = command_errors[:5]
+                lines = []
+                for err in preview:
+                    c = err.get("command")
+                    m = err.get("error")
+                    if c and m:
+                        lines.append(f"- {c}: {m}")
+                msg = "系统检查：本轮部分命令执行失败，请修复后继续。\n" + ("\n".join(lines) if lines else "")
+                request_messages.append({"role": "user", "content": msg})
+
+            sample_payloads = [r.get("result") for r in command_results if isinstance(r, dict) and r.get("command") == "sample_outputs"]
+            if sample_payloads:
+                latest = sample_payloads[-1]
+                request_messages.append({"role": "user", "content": f"系统采样结果：{json.dumps(latest, ensure_ascii=False, separators=(',', ':'))}"})
+            else:
+                request_messages.append({"role": "user", "content": f"系统IO摘要：{json.dumps(io_summary, ensure_ascii=False, separators=(',', ':'))}"})
+
+            verify_report = None
+            if verify_obj is not None:
+                verify_report = _run_verify_cases(verify_obj)
+                if verify_report is None:
+                    request_messages.append({"role": "user", "content": "系统验证失败：<verify> 内容无法解析或为空。请输出合法 JSON 并重试。"})
+                    done_flag = False
+                else:
+                    report_text = json.dumps(verify_report, ensure_ascii=False, separators=(',', ':'))
+                    request_messages.append({"role": "user", "content": f"系统验证报告：{report_text}"})
+                    if verify_report.get("failed", 0) > 0:
+                        done_flag = False
 
             if done_flag:
                 break
