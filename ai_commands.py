@@ -327,6 +327,15 @@ class CircuitManager:
         self._save_data(data)
         return True
 
+    def set_element_comment(self, element_id, comment):
+        data = self._load_data()
+        for e in data["elements"]:
+            if e["id"] == element_id:
+                e["comment"] = comment
+                break
+        self._save_data(data)
+        return True
+
     def toggle_input(self, element_id):
         data = self._load_data()
         for e in data["elements"]:

@@ -34,6 +34,11 @@ let zoom = 1; // 缩放级别
 let camera = { x: 0, y: 0 }; // 相机位置
 let signalAnimation = null;
 let isSignalAnimating = false;
+let isEditingComment = false; // 是否正在编辑注释
+let commentTargetElement = null; // 当前正在编辑注释的元件
+let lastClickedElement = null; // 最后点击的元件（用于区分拖动和点击）
+let lastClickTime = 0; // 最后点击时间（用于区分单击和双击）
+let dragStartPos = null; // 拖动开始时的鼠标位置
 
 const SIGNAL_ANIMATION_SETTINGS = {
     nodeEmitDelay: 60,
@@ -188,9 +193,13 @@ async function init() {
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCircuit);
+    document.getElementById('btn-ai-comment').addEventListener('click', aiAutoComment);
     
     // 初始化函数相关功能
     initFunctionPanel();
+    
+    // 初始化注释功能
+    initCommentModal();
     
     // 添加键盘事件监听器
     window.addEventListener('keydown', handleKeyDown);
@@ -205,6 +214,12 @@ async function init() {
                 isNameModalOpen = false;
             }
             return; // 屏蔽其他所有快捷键
+        }
+        
+        // 如果注释弹窗打开，屏蔽所有快捷键（保留 Ctrl+Enter 保存、Esc 关闭）
+        if (isEditingComment) {
+            e.preventDefault(); // 阻止默认行为，防止输入框外被触发
+            return;
         }
         
         // Ctrl+S 保存选中为函数
@@ -916,6 +931,27 @@ function handleMouseDown(e) {
     // 右键点击 - 始终启动拖动屏幕（无论点击哪里）
     // 只有 mousedown 事件会触发 panning，auxclick 不会
     if (e.button === 2 && e.type === 'mousedown') {
+        // 先检查是否点击了元件
+        let clickedElement = null;
+        for (const element of elements) {
+            if (worldX >= element.x && worldX <= element.x + element.width &&
+                worldY >= element.y && worldY <= element.y + element.height) {
+                clickedElement = element;
+                break;
+            }
+        }
+        
+        if (clickedElement) {
+            // 右键点击了元件，显示注释输入框（修改）
+            selectedElement = clickedElement;
+            selectedWire = null;
+            selectedElements = [];
+            showCommentModal(clickedElement);
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+            return;
+        }
+        
+        // 否则启动拖动屏幕
         e.preventDefault();
         isPanning = true;
         isSelecting = false; // 确保不会同时触发框选
@@ -1120,6 +1156,9 @@ function handleMouseDown(e) {
                     dragOffset.x = worldX - element.x;
                     dragOffset.y = worldY - element.y;
                     isDragging = true;
+                    lastClickedElement = element; // 记录点击的元件
+                    lastClickTime = Date.now(); // 记录点击时间
+                    dragStartPos = { x: mouseX, y: mouseY }; // 记录点击位置
                     document.getElementById('status-bar').textContent = `选中元件: ${element.type}`;
                 }
                 render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
@@ -1882,6 +1921,19 @@ function handleMouseUp(e) {
             updateWiresForElementPosition(selectedElement);
             saveState();
             document.getElementById('status-bar').textContent = '元素移动完成';
+            
+            // 检查是否是点击（而非拖动）
+            const moveDistance = dragStartPos ? Math.sqrt(
+                Math.pow(mouseX - dragStartPos.x, 2) + 
+                Math.pow(mouseY - dragStartPos.y, 2)
+            ) : 0;
+            if (moveDistance < 5 && lastClickedElement === selectedElement && Date.now() - lastClickTime < 300) {
+                // 这是点击，显示注释输入框
+                showCommentModal(selectedElement);
+                lastClickedElement = null;
+                dragStartPos = null;
+            }
+            
             isDragging = false;
         }
         
@@ -2093,6 +2145,45 @@ function clearCircuit() {
     
     // 重新渲染
     render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
+}
+
+/**
+ * AI 自动为所有元件添加注释
+ */
+async function aiAutoComment() {
+    if (elements.length === 0) {
+        document.getElementById('status-bar').textContent = '电路为空，没有元件需要注释';
+        return;
+    }
+    
+    document.getElementById('status-bar').textContent = 'AI 正在分析电路并生成注释...';
+    
+    try {
+        const response = await fetch('/api/ai/generate-comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            const comments = result.comments || {};
+            for (const element of elements) {
+                if (comments[element.id]) {
+                    element.comment = comments[element.id];
+                }
+            }
+            saveToServer();
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+            document.getElementById('status-bar').textContent = 'AI 注释已完成';
+        } else {
+            document.getElementById('status-bar').textContent = 'AI 注释失败: ' + (result.message || '未知错误');
+        }
+    } catch (e) {
+        console.error('AI 注释失败:', e);
+        document.getElementById('status-bar').textContent = 'AI 注释失败，请检查网络连接';
+    }
 }
 
 /**
@@ -2373,6 +2464,54 @@ async function initFunctionPanel() {
             document.getElementById('confirm-save-function').click();
         }
     });
+}
+
+/**
+ * 初始化注释弹窗
+ */
+function initCommentModal() {
+    const commentModal = document.getElementById('comment-modal');
+    const commentInput = document.getElementById('comment-input');
+    const confirmBtn = document.getElementById('confirm-comment');
+    const cancelBtn = document.getElementById('cancel-comment');
+    
+    confirmBtn.addEventListener('click', () => {
+        if (commentTargetElement) {
+            commentTargetElement.comment = commentInput.value;
+            saveState();
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+        }
+        commentModal.classList.remove('show');
+        isEditingComment = false;
+        commentTargetElement = null;
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+        commentModal.classList.remove('show');
+        isEditingComment = false;
+        commentTargetElement = null;
+    });
+    
+    commentInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            confirmBtn.click();
+        } else if (e.key === 'Escape') {
+            cancelBtn.click();
+        }
+    });
+}
+
+/**
+ * 显示注释编辑弹窗
+ */
+function showCommentModal(element) {
+    commentTargetElement = element;
+    const commentModal = document.getElementById('comment-modal');
+    const commentInput = document.getElementById('comment-input');
+    commentInput.value = element.comment || '';
+    commentModal.classList.add('show');
+    isEditingComment = true;
+    commentInput.focus();
 }
 
 /**

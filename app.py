@@ -118,6 +118,101 @@ def ai_execute():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/ai/generate-comments', methods=['POST'])
+def ai_generate_comments():
+    try:
+        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        
+        current_state = circuit_manager.get_state()
+        elements = current_state.get('elements', [])
+        wires = current_state.get('wires', [])
+        
+        if not elements:
+            return jsonify({'status': 'success', 'comments': {}})
+        
+        system_prompt = """你是一个电路分析专家。请分析下面的电路，为每个元件生成精准的注释，说明它在电路中的作用和功能。
+
+要求：
+1. 注释要简洁明了，不超过30个字
+2. 说明元件的具体功能，如"A输入：电路的第一个操作数"
+3. 如果是门电路，说明它的逻辑功能
+4. 如果是输出，说明它代表什么结果
+
+请以 JSON 格式输出，key 是元件 id，value 是注释内容。
+格式：{"元件id": "注释内容", ...}
+只输出 JSON，不要其他内容。"""
+
+        elements_info = []
+        for el in elements:
+            el_info = {
+                "id": el.get("id"),
+                "type": el.get("type"),
+                "alias": el.get("alias"),
+                "state": el.get("state"),
+                "functionName": el.get("name") if el.get("type") == "FUNCTION" else None
+            }
+            elements_info.append(el_info)
+        
+        wires_info = []
+        for w in wires:
+            start_el = next((e for e in elements if e.get("id") == w.get("start", {}).get("elementId")), None)
+            end_el = next((e for e in elements if e.get("id") == w.get("end", {}).get("elementId")), None)
+            wires_info.append({
+                "from": f"{start_el.get('type')}" if start_el else "unknown",
+                "to": f"{end_el.get('type')}" if end_el else "unknown"
+            })
+        
+        user_prompt = f"""电路中的元件：
+{json.dumps(elements_info, ensure_ascii=False, indent=2)}
+
+电路连接关系：
+{json.dumps(wires_info, ensure_ascii=False, indent=2)}
+
+请分析这个电路，为每个元件生成注释："""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response = requests.post(
+            f"{AI_CONFIG['base_url']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": AI_CONFIG.get("model", "default"),
+                "messages": messages,
+                "temperature": 0.3
+            },
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return jsonify({'status': 'error', 'message': f'AI API 错误: {response.text}'}), 500
+        
+        result = response.json()
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            comments = json.loads(json_match.group())
+        else:
+            comments = {}
+        
+        for el in elements:
+            el_id = el.get("id")
+            if el_id in comments:
+                el["comment"] = comments[el_id]
+        
+        circuit_manager._save_data(current_state)
+        
+        return jsonify({'status': 'success', 'comments': comments})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 def execute_circuit_command(cmd, params):
     """
     Helper to execute commands and return result
@@ -140,6 +235,8 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.set_input(params['id'], params.get('value'))
     elif cmd == 'move_element':
         return circuit_manager.move_element(params['id'], params['x'], params['y'])
+    elif cmd == 'set_element_comment':
+        return circuit_manager.set_element_comment(params['id'], params.get('comment', ''))
     elif cmd == 'get_state':
         return circuit_manager.get_state()
     elif cmd == 'simulate':
@@ -242,6 +339,16 @@ def _parse_commands_payload(commands_str):
                             'id': _clean_token(parts[1]),
                             'x': float(_clean_token(parts[2])),
                             'y': float(_clean_token(parts[3]))
+                        }
+                    })
+            elif cmd == 'COMMENT':
+                if len(parts) >= 3:
+                    comment_text = ' '.join(parts[2:]).replace('\\n', '\n')
+                    commands.append({
+                        'command': 'set_element_comment',
+                        'params': {
+                            'id': _clean_token(parts[1]),
+                            'comment': comment_text
                         }
                     })
         except:
@@ -686,6 +793,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 9. SET <id_or_alias> <0|1> -- 将 INPUT 设置为指定电平（用于确定性测试）
 10. SIM -- 显式触发仿真
 11. SAMPLE [id_or_alias ...] -- 采样输出端口状态（默认采样全部 OUTPUT）
+12. COMMENT <id_or_alias> <text> -- 设置元件的注释（text 可以包含换行，使用 \n 表示换行）
 
 逻辑参考 (标准门实现):
 - NAND(A, B): NOT(AND(A, B))

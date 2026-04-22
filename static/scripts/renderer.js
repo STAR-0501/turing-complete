@@ -233,6 +233,22 @@ export function render(ctx, elements, wires, selectedElement, selectedWire, sele
             ctx.arc(portX, portY, 5, 0, Math.PI * 2);
             ctx.fill();
         }
+        
+        // 绘制元件注释
+        if (element.comment && element.comment.trim()) {
+            ctx.save();
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            const commentX = element.x + element.width + 10;
+            const commentY = element.y;
+            ctx.fillStyle = '#ffff00';
+            const lines = element.comment.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                ctx.fillText(lines[i], commentX, commentY + i * 16);
+            }
+            ctx.restore();
+        }
     }
     
     // 绘制框选矩形

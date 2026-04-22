@@ -412,6 +412,25 @@ body {
     box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
+.modal-content textarea {
+    width: 100%;
+    padding: 10px 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    margin-bottom: 20px;
+    resize: vertical;
+    font-family: Arial, sans-serif;
+}
+
+.modal-content textarea:focus {
+    border-color: #00ffff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
 .modal-buttons {
     display: flex;
     gap: 12px;
