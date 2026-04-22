@@ -115,7 +115,7 @@ class CircuitManager:
         normalized = self._normalize_data(data)
         return normalized
 
-    def add_element(self, element_type, x, y):
+    def add_element(self, element_type, x, y, alias=None):
         data = self._load_data()
         
         # Define element structures (matching elements.js)
@@ -126,6 +126,8 @@ class CircuitManager:
             "y": y,
             "state": False
         }
+        if alias:
+            element["alias"] = str(alias)
 
         if element_type == 'AND':
             element.update({
@@ -301,11 +303,177 @@ class CircuitManager:
         self._save_functions(functions)
         return func_data
 
+    def move_element(self, element_id, x, y):
+        data = self._load_data()
+        for e in data["elements"]:
+            if e["id"] == element_id:
+                dx = x - e.get("x", 0)
+                dy = y - e.get("y", 0)
+                e["x"] = x
+                e["y"] = y
+                for w in data.get("wires", []):
+                    if w["start"]["elementId"] == element_id:
+                        w["start"]["x"] += dx
+                        w["start"]["y"] += dy
+                    if w["end"]["elementId"] == element_id:
+                        w["end"]["x"] += dx
+                        w["end"]["y"] += dy
+                break
+        self._save_data(data)
+        return True
+
     def toggle_input(self, element_id):
         data = self._load_data()
         for e in data["elements"]:
             if e["id"] == element_id and e["type"] == 'INPUT':
                 e["state"] = not e.get("state", False)
                 break
+        self._save_data(data)
+        self.simulate()
+        return True
+
+    def _get_input_source_state(self, elements, wires, target_element_id, target_port_id):
+        def _get_output_value(src_el, src_port_id):
+            if not src_el:
+                return False
+            if src_el.get("type") == "FUNCTION":
+                outputs = src_el.get("outputs") or []
+                out_idx = None
+                for i, p in enumerate(outputs):
+                    if p.get("id") == src_port_id:
+                        out_idx = i
+                        break
+                if out_idx is not None:
+                    output_states = src_el.get("outputStates") or []
+                    if out_idx < len(output_states):
+                        return bool(output_states[out_idx])
+            return bool(src_el.get("state", False))
+
+        for w in wires:
+            start = w.get("start", {})
+            end = w.get("end", {})
+            if end.get("elementId") == target_element_id and end.get("portId") == target_port_id:
+                src_id = start.get("elementId")
+                src_el = next((e for e in elements if e.get("id") == src_id), None)
+                if src_el:
+                    return _get_output_value(src_el, start.get("portId"))
+            if start.get("elementId") == target_element_id and start.get("portId") == target_port_id:
+                src_id = end.get("elementId")
+                src_el = next((e for e in elements if e.get("id") == src_id), None)
+                if src_el:
+                    return _get_output_value(src_el, end.get("portId"))
+        return None
+
+    def _has_input_connection(self, wires, target_element_id, target_port_id):
+        for w in wires:
+            start = w.get("start", {})
+            end = w.get("end", {})
+            if end.get("elementId") == target_element_id and end.get("portId") == target_port_id:
+                return True
+            if start.get("elementId") == target_element_id and start.get("portId") == target_port_id:
+                return True
+        return False
+
+    def _simulate_elements_until_stable(self, elements, wires, function_cache, max_iters=50, depth=0):
+        for _ in range(max_iters):
+            changed = False
+            for el in elements:
+                el_type = el.get("type")
+                if el_type == "INPUT":
+                    continue
+
+                old_state = bool(el.get("state", False))
+                new_state = old_state
+
+                if el_type == "AND":
+                    all_connected = True
+                    all_true = True
+                    for p in el.get("inputs", []):
+                        if not self._has_input_connection(wires, el.get("id"), p.get("id")):
+                            all_connected = False
+                            break
+                        v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
+                        if v is not True:
+                            all_true = False
+                            break
+                    new_state = bool(all_connected and all_true)
+                elif el_type == "OR":
+                    has_input = False
+                    any_true = False
+                    for p in el.get("inputs", []):
+                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
+                            has_input = True
+                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
+                            if v is True:
+                                any_true = True
+                                break
+                    new_state = bool(has_input and any_true)
+                elif el_type == "NOT":
+                    has_input = False
+                    input_true = False
+                    for p in el.get("inputs", []):
+                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
+                            has_input = True
+                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
+                            if v is True:
+                                input_true = True
+                                break
+                    new_state = bool(has_input and (not input_true))
+                elif el_type == "OUTPUT":
+                    input_true = False
+                    for p in el.get("inputs", []):
+                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
+                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
+                            if v is True:
+                                input_true = True
+                                break
+                    new_state = bool(input_true)
+                elif el_type == "FUNCTION":
+                    old_output_states = list(el.get("outputStates") or [])
+                    output_states = self._calculate_function_element(el, elements, wires, function_cache, depth=depth)
+                    el["outputStates"] = output_states
+                    new_state = bool(output_states[0]) if output_states else False
+                    if output_states != old_output_states:
+                        changed = True
+
+                if new_state != old_state:
+                    el["state"] = new_state
+                    changed = True
+                elif el_type == "FUNCTION":
+                    el["state"] = new_state
+
+            if not changed:
+                break
+
+    def _calculate_function_element(self, function_element, parent_elements, parent_wires, function_cache, depth=0):
+        if depth >= 10:
+            return []
+        function_data = function_element.get("functionData") or {}
+        func_elements = json.loads(json.dumps(function_data.get("elements") or []))
+        func_wires = json.loads(json.dumps(function_data.get("wires") or []))
+        input_element_ids = function_data.get("inputElementIds") or []
+        output_element_ids = function_data.get("outputElementIds") or []
+
+        for i, input_port in enumerate(function_element.get("inputs", []) or []):
+            input_state = self._get_input_source_state(parent_elements, parent_wires, function_element.get("id"), input_port.get("id"))
+            if i < len(input_element_ids):
+                internal_input = next((e for e in func_elements if e.get("id") == input_element_ids[i]), None)
+                if internal_input is not None:
+                    internal_input["state"] = bool(input_state) if input_state is not None else False
+
+        self._simulate_elements_until_stable(func_elements, func_wires, function_cache, depth=depth + 1)
+
+        output_states = []
+        for out_id in output_element_ids:
+            out_el = next((e for e in func_elements if e.get("id") == out_id), None)
+            output_states.append(bool(out_el.get("state", False)) if out_el else False)
+        return output_states
+
+    def simulate(self):
+        data = self._load_data()
+        elements = data.get("elements", [])
+        wires = data.get("wires", [])
+        function_cache = {}
+        self._simulate_elements_until_stable(elements, wires, function_cache)
         self._save_data(data)
         return True

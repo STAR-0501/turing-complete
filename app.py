@@ -26,6 +26,7 @@ CHAT_MEMORY_MAX_MESSAGES = 12
 CHAT_MESSAGE_MAX_CHARS = 1500
 STREAM_THINKING_MARKER = "__TC_THINKING__"
 STREAM_ANSWER_MARKER = "__TC_ANSWER__"
+STREAM_STATE_CHANGED_MARKER = "__TC_STATE_CHANGED__"
 chat_memory = []
 chat_memory_lock = threading.Lock()
 
@@ -122,7 +123,7 @@ def execute_circuit_command(cmd, params):
     Helper to execute commands and return result
     """
     if cmd == 'add_element':
-        return circuit_manager.add_element(params['type'], params['x'], params['y'])
+        return circuit_manager.add_element(params['type'], params['x'], params['y'], params.get('alias'))
     elif cmd == 'remove_element':
         return circuit_manager.remove_element(params['id'])
     elif cmd == 'add_wire':
@@ -135,6 +136,8 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.define_function(params['name'])
     elif cmd == 'toggle_input':
         return circuit_manager.toggle_input(params['id'])
+    elif cmd == 'move_element':
+        return circuit_manager.move_element(params['id'], params['x'], params['y'])
     elif cmd == 'get_state':
         return circuit_manager.get_state()
     else:
@@ -204,6 +207,16 @@ def _parse_commands_payload(commands_str):
             elif cmd == 'TOGGLE':
                 if len(parts) >= 2:
                     commands.append({'command': 'toggle_input', 'params': {'id': _clean_token(parts[1])}})
+            elif cmd == 'MOVE':
+                if len(parts) >= 4:
+                    commands.append({
+                        'command': 'move_element',
+                        'params': {
+                            'id': _clean_token(parts[1]),
+                            'x': float(_clean_token(parts[2])),
+                            'y': float(_clean_token(parts[3]))
+                        }
+                    })
         except:
             continue
 
@@ -237,6 +250,16 @@ def _execute_commands_with_alias(commands):
         alias_map[f'${alias.upper()}'] = element_id
         alias_map[alias.lower()] = element_id
         alias_map[f'${alias.lower()}'] = element_id
+
+    try:
+        state = circuit_manager.get_state() or {}
+        for el in (state.get('elements') or []):
+            alias = el.get('alias')
+            el_id = el.get('id')
+            if alias and el_id:
+                _bind_alias(alias, el_id)
+    except:
+        pass
 
     def _try_execute_wire(raw_params):
         params = dict(raw_params or {})
@@ -283,8 +306,11 @@ def _execute_commands_with_alias(commands):
         params = dict(cmd_data.get('params', {}) or {})
 
         if cmd == 'add_element':
-            alias = params.pop('alias', None) or params.pop('ref', None) or params.pop('name', None)
+            specified_alias = params.pop('alias', None) or params.pop('ref', None) or params.pop('name', None)
+            alias = specified_alias
             try:
+                if specified_alias:
+                    params['alias'] = specified_alias
                 result = execute_circuit_command(cmd, params)
             except:
                 continue
@@ -300,8 +326,11 @@ def _execute_commands_with_alias(commands):
             pending_wires.append(params)
             continue
 
-        # For commands that depend on previous elements/wires (like DEFINE_FUNC or CLEAR),
-        # we must execute pending wires first!
+        if 'id' in params:
+            params['id'] = _resolve_element_ref(params['id'], alias_map)
+            if params['id'] == '$last' and last_element_id:
+                params['id'] = last_element_id
+
         if cmd in ('clear_circuit', 'define_function', 'remove_element', 'remove_wire'):
             _flush_pending_wires()
 
@@ -311,6 +340,10 @@ def _execute_commands_with_alias(commands):
             continue
 
     _flush_pending_wires()
+    try:
+        circuit_manager.simulate()
+    except:
+        pass
 
 def _build_compact_state(state):
     elements = state.get('elements', [])
@@ -320,6 +353,7 @@ def _build_compact_state(state):
         compact_elements.append({
             'id': e.get('id'),
             'type': e.get('type'),
+            'alias': e.get('alias') or e.get('name'),
             'x': e.get('x'),
             'y': e.get('y'),
             'inputs': len(e.get('inputs', [])),
@@ -489,40 +523,49 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
     return """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
 
 可用指令集 (每行一条):
-1. ADD <type> <x> <y> [alias]
-2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx>
-3. DEL <id>
-4. DELW <id>
-5. CLEAR
-6. TOGGLE <id>
-7. DEFINE_FUNC <name>
+1. ADD <type> <x> <y> [alias]  -- 添加元件 (AND|OR|NOT|INPUT|OUTPUT 或自定义函数)
+2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx> -- 连接导线
+3. MOVE <id_or_alias> <x> <y> -- 移动元件位置
+4. DEL <id_or_alias> -- 删除元件
+5. DELW <wire_id> -- 删除导线
+6. CLEAR -- 清空画布
+7. TOGGLE <id_or_alias> -- 切换输入状态 (用于测试)
+8. DEFINE_FUNC <name> -- 将当前电路封装为函数
+
+逻辑参考 (标准门实现):
+- NAND(A, B): NOT(AND(A, B))
+- NOR(A, B): NOT(OR(A, B))
+- XOR(A, B): OR(AND(A, NOT(B)), AND(NOT(A), B))
+- HalfAdder(A, B): SUM = XOR(A, B), CARRY = AND(A, B)
 
 规则:
-- ADD 的 type 可以是 AND|OR|NOT|INPUT|OUTPUT 或已存在的自定义函数名。
-- 基础门只允许 AND、OR、NOT、INPUT、OUTPUT，不能直接使用 XOR、XNOR、NAND、NOR。
-- 处理复杂逻辑时必须使用函数思维：先拆分、再封装、再复用。
-- 需要封装时先搭建电路，再调用 DEFINE_FUNC，随后可 CLEAR 并 ADD <函数名> 复用。
-- 每轮都要先计划再执行，执行后必须自检是否满足用户目标。
+- 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
+- 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> CLEAR -> ADD <函数名> 复用。
+- 布局美观：使用 MOVE 调整位置，避免元件重叠。
+- 验证驱动：如果你不确定电路是否正确，可以使用 TOGGLE 切换输入并观察 elements 的 state 变化。
+- 强烈建议：给关键元件设置 alias（ADD 第 5 个参数）。alias 会持久化，后续所有 <id_or_alias> 都可以直接使用 alias。
+- done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
+- 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
 
 当前函数信息:
 """ + functions_str + """
 
-当前电路状态:
+当前电路状态 (含实时逻辑电平 state):
 """ + compact_state_json + """
 
 你必须严格输出以下结构:
 <plan>
-先写本轮计划（简洁、可执行）
+1. 分析当前状态 2. 制定本轮操作 3. 预期逻辑行为
 </plan>
 <answer>
 给用户的简短说明
 </answer>
 <commands>
-命令列表；若本轮无需执行则留空
+命令列表
 </commands>
 <done>true 或 false</done>
 
-当你确认目标已满足时，done 设为 true；否则为 false 并继续给出整改命令。"""
+当你确认电路逻辑正确（通过 state 验证）且布局合理时，done 设为 true。"""
 
 def _call_llm_once(system_prompt, request_messages):
     protocol = _get_ai_protocol()
@@ -582,14 +625,35 @@ def call_llm_stream(user_message):
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
         return
 
+    def _is_abab_cycle(fingerprints):
+        if len(fingerprints) < 4:
+            return False
+        a, b, c, d = fingerprints[-4:]
+        return a == c and b == d and a != b
+
     try:
-        max_rounds = int(AI_CONFIG.get("agent_max_rounds", 3))
+        max_rounds = int(AI_CONFIG.get("agent_max_rounds", 12))
+        if max_rounds < 1:
+            max_rounds = 1
+        if max_rounds > 30:
+            max_rounds = 30
         request_messages = _get_chat_messages_with_memory(user_message)
         aggregated_commands = []
         final_answer_text = ""
         finish_reason = ""
+        no_progress_rounds = 0
+        last_state_fingerprint = None
+        recent_state_fingerprints = []
+        cycle_rounds = 0
+        last_execution_error = ""
+        same_error_rounds = 0
+        no_progress_stop_rounds = int(AI_CONFIG.get("agent_no_progress_stop_rounds", 4))
+        if no_progress_stop_rounds < 3:
+            no_progress_stop_rounds = 3
+        if no_progress_stop_rounds > 10:
+            no_progress_stop_rounds = 10
         yield STREAM_THINKING_MARKER
-        yield "已进入自治执行模式：计划→执行→检查→整改。\n"
+        yield "已进入自治执行模式：计划→执行→检查→按需继续。\n"
 
         for round_idx in range(1, max_rounds + 1):
             current_state = circuit_manager.get_state()
@@ -625,36 +689,90 @@ def call_llm_stream(user_message):
                     executed_command_count = len(parsed_commands)
                     _execute_commands_with_alias(parsed_commands)
                     aggregated_commands.append(commands_text)
+                    if executed_command_count > 0:
+                        yield STREAM_STATE_CHANGED_MARKER
                 except Exception as e:
                     execution_error = str(e)
                     yield f"[第{round_idx}轮执行异常] {execution_error}\n"
 
             after_state = circuit_manager.get_state()
             compact_after_state = _build_compact_state(after_state)
+            state_fingerprint = json.dumps(compact_after_state, ensure_ascii=False, separators=(',', ':'))
+            if last_state_fingerprint is not None and state_fingerprint == last_state_fingerprint:
+                no_progress_rounds += 1
+            else:
+                no_progress_rounds = 0
+            last_state_fingerprint = state_fingerprint
+            recent_state_fingerprints.append(state_fingerprint)
+            if len(recent_state_fingerprints) > 6:
+                recent_state_fingerprints.pop(0)
+            if _is_abab_cycle(recent_state_fingerprints):
+                cycle_rounds += 1
+            else:
+                cycle_rounds = 0
+
             element_count = len(compact_after_state.get('elements', []))
             wire_count = len(compact_after_state.get('wires', []))
             function_count = len(circuit_manager._load_functions())
             yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}\n"
 
             if execution_error:
+                if execution_error == last_execution_error:
+                    same_error_rounds += 1
+                else:
+                    same_error_rounds = 1
+                last_execution_error = execution_error
+                if same_error_rounds >= 2:
+                    final_answer_text = (
+                        f"连续多轮执行命令失败（相同错误重复 {same_error_rounds} 次）：{execution_error}。"
+                        "为避免无效重试，我已停止自治循环。你可以要求我改用更保守的命令或先清理/重建相关部分。"
+                    )
+                    break
                 request_messages.append({
                     "role": "user",
                     "content": f"系统检查：第{round_idx}轮执行发生错误：{execution_error}。请修复并继续。"
                 })
                 continue
+            last_execution_error = ""
+            same_error_rounds = 0
 
             if done_flag:
                 break
 
-            request_messages.append({
-                "role": "user",
-                "content": (
-                    f"系统检查反馈：第{round_idx}轮执行后，当前状态为 "
-                    f"{json.dumps(compact_after_state, ensure_ascii=False, separators=(',', ':'))}。"
-                    f"请判断是否满足用户目标：{user_message}。"
-                    "若满足请输出 done=true 且无需新命令；若不满足请继续整改。"
+            if cycle_rounds >= 2:
+                final_answer_text = (
+                    "检测到电路状态在少数几个状态之间循环变化（可能反复 TOGGLE 或反复增删无效）。"
+                    "为避免无效调用，我已停止自治循环。你可以指定更明确的目标或允许我先重置关键输入再测试。"
                 )
-            })
+                break
+
+            if no_progress_rounds >= no_progress_stop_rounds:
+                final_answer_text = (
+                    f"已连续 {no_progress_rounds} 轮状态无变化（疑似停滞）。"
+                    "为避免无效调用，我已停止自治循环。你可以补充更具体的目标、允许我 CLEAR 重建、或指出需要保留的部分。"
+                )
+                break
+
+            if no_progress_rounds >= 2:
+                request_messages.append({
+                    "role": "user",
+                    "content": (
+                        "系统约束：你已连续两轮没有产生任何有效命令且状态也未变化。"
+                        "如果目标需要改动画布，你必须输出可执行命令并保持 done=false；"
+                        "如果确实无需改动，请明确解释原因并输出 done=true。"
+                    )
+                })
+                continue
+
+            if executed_command_count == 0 and not done_flag:
+                request_messages.append({
+                    "role": "user",
+                    "content": (
+                        "系统提醒：你本轮没有输出可执行命令且 done=false。"
+                        "如果确实无需改动，请把 done 设为 true 并解释原因；"
+                        "否则请输出下一步可执行命令。"
+                    )
+                })
 
         yield STREAM_ANSWER_MARKER
         final_output = final_answer_text.strip() if final_answer_text else "已完成处理。"

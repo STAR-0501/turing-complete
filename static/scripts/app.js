@@ -346,6 +346,122 @@ function resizeCanvas() {
     render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 }
 
+function isElementOverlappingAt(element, x, y, excludedIds = new Set(), extraElements = []) {
+    const padding = 12;
+    const left = x - padding;
+    const right = x + element.width + padding;
+    const top = y - padding;
+    const bottom = y + element.height + padding;
+    const targets = [...elements, ...extraElements];
+
+    for (const other of targets) {
+        if (!other) continue;
+        if (excludedIds.has(other.id)) continue;
+        const otherLeft = other.x;
+        const otherRight = other.x + other.width;
+        const otherTop = other.y;
+        const otherBottom = other.y + other.height;
+        if (left < otherRight && right > otherLeft && top < otherBottom && bottom > otherTop) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function findNonOverlappingPosition(element, desiredX, desiredY, excludedIds = new Set(), extraElements = []) {
+    if (!isElementOverlappingAt(element, desiredX, desiredY, excludedIds, extraElements)) {
+        return { x: desiredX, y: desiredY };
+    }
+
+    const step = 20;
+    const maxRing = 30;
+
+    for (let ring = 1; ring <= maxRing; ring++) {
+        const radius = ring * step;
+        const points = Math.max(12, ring * 10);
+        for (let i = 0; i < points; i++) {
+            const angle = (Math.PI * 2 * i) / points;
+            const candidateX = desiredX + Math.round((Math.cos(angle) * radius) / step) * step;
+            const candidateY = desiredY + Math.round((Math.sin(angle) * radius) / step) * step;
+            if (!isElementOverlappingAt(element, candidateX, candidateY, excludedIds, extraElements)) {
+                return { x: candidateX, y: candidateY };
+            }
+        }
+    }
+
+    return { x: desiredX, y: desiredY };
+}
+
+function moveElementWithAutoSeparation(element, desiredX, desiredY, excludedIds = new Set(), extraElements = []) {
+    const position = findNonOverlappingPosition(element, desiredX, desiredY, excludedIds, extraElements);
+    element.x = position.x;
+    element.y = position.y;
+}
+
+function updateWiresForElementPosition(element) {
+    for (const wire of wires) {
+        if (wire.start.elementId === element.id) {
+            const port = wire.start.isInput ?
+                element.inputs.find(p => p.id === wire.start.portId) :
+                element.outputs.find(p => p.id === wire.start.portId);
+            if (port) {
+                wire.start.x = element.x + port.x;
+                wire.start.y = element.y + port.y;
+            }
+        }
+        if (wire.end.elementId === element.id) {
+            const port = wire.end.isInput ?
+                element.inputs.find(p => p.id === wire.end.portId) :
+                element.outputs.find(p => p.id === wire.end.portId);
+            if (port) {
+                wire.end.x = element.x + port.x;
+                wire.end.y = element.y + port.y;
+            }
+        }
+    }
+}
+
+function resolveGroupOverlapAfterMove(groupElements) {
+    const groupIds = new Set(groupElements.map(el => el.id));
+    const others = elements.filter(el => !groupIds.has(el.id));
+    const step = 20;
+    const maxRing = 24;
+    const basePositions = groupElements.map(el => ({ element: el, x: el.x, y: el.y }));
+
+    const hasOverlapAtOffset = (offsetX, offsetY) => {
+        for (const item of basePositions) {
+            const testElement = item.element;
+            const testX = item.x + offsetX;
+            const testY = item.y + offsetY;
+            if (isElementOverlappingAt(testElement, testX, testY, groupIds, others)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (!hasOverlapAtOffset(0, 0)) {
+        return;
+    }
+
+    for (let ring = 1; ring <= maxRing; ring++) {
+        const radius = ring * step;
+        const points = Math.max(12, ring * 10);
+        for (let i = 0; i < points; i++) {
+            const angle = (Math.PI * 2 * i) / points;
+            const offsetX = Math.round((Math.cos(angle) * radius) / step) * step;
+            const offsetY = Math.round((Math.sin(angle) * radius) / step) * step;
+            if (hasOverlapAtOffset(offsetX, offsetY)) continue;
+            for (const item of basePositions) {
+                item.element.x = item.x + offsetX;
+                item.element.y = item.y + offsetY;
+                updateWiresForElementPosition(item.element);
+            }
+            return;
+        }
+    }
+}
+
 /**
  * 添加元件
  * @param {string} type - 元件类型
@@ -361,9 +477,9 @@ function addElement(type) {
     // 创建临时元素
     const element = createElement(type, worldX, worldY);
     if (element) {
-        // 设置元素位置为鼠标位置（世界坐标）
-        element.x = worldX - element.width / 2;
-        element.y = worldY - element.height / 2;
+        const desiredX = worldX - element.width / 2;
+        const desiredY = worldY - element.height / 2;
+        moveElementWithAutoSeparation(element, desiredX, desiredY);
         currentElementToPlace = element;
         isPlacingElement = true;
         document.getElementById('status-bar').textContent = '请点击鼠标左键放置元件';
@@ -436,8 +552,9 @@ function createElementForMiddleClickCopy(sourceElement, x, y) {
     }
     
     if (newElement) {
-        newElement.x = x - newElement.width / 2;
-        newElement.y = y - newElement.height / 2;
+        const desiredX = x - newElement.width / 2;
+        const desiredY = y - newElement.height / 2;
+        moveElementWithAutoSeparation(newElement, desiredX, desiredY);
         return newElement;
     }
     return null;
@@ -516,9 +633,9 @@ function duplicateElement(sourceElement) {
     }
     
     if (newElement) {
-        // 设置元素位置为鼠标位置（居中）
-        newElement.x = worldX - newElement.width / 2;
-        newElement.y = worldY - newElement.height / 2;
+        const desiredX = worldX - newElement.width / 2;
+        const desiredY = worldY - newElement.height / 2;
+        moveElementWithAutoSeparation(newElement, desiredX, desiredY);
         
         // 设置为正在放置状态，跟随鼠标
         currentElementToPlace = newElement;
@@ -840,7 +957,11 @@ function handleMouseDown(e) {
         // 检查点击是否在 canvas 上（不在工具栏等其他UI元素上）
         const target = e.target || e.srcElement;
         if (target && target.id === 'canvas') {
-            // 放置函数元件
+            moveElementWithAutoSeparation(
+                currentFunctionToPlace,
+                currentFunctionToPlace.x,
+                currentFunctionToPlace.y
+            );
             elements.push(currentFunctionToPlace);
             saveState();
             isPlacingFunction = false;
@@ -878,8 +999,12 @@ function handleMouseDown(e) {
     if (isPlacingElement && e.button === 0) {
         const target = e.target || e.srcElement;
         if (target && target.id === 'canvas') {
-            // 点击的是 canvas，执行放置
             const elementToPlace = currentElementToPlace;
+            moveElementWithAutoSeparation(
+                elementToPlace,
+                elementToPlace.x,
+                elementToPlace.y
+            );
             elements.push(elementToPlace);
             saveState();
             isPlacingElement = false;
@@ -1030,9 +1155,11 @@ function handleMouseDown(e) {
         e.preventDefault();
         e.stopPropagation();
         
-        // 更新位置到当前鼠标位置
-        currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
-        currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
+        moveElementWithAutoSeparation(
+            currentElementToPlace,
+            worldX - currentElementToPlace.width / 2,
+            worldY - currentElementToPlace.height / 2
+        );
         
         // 放置副本
         elements.push(currentElementToPlace);
@@ -1045,9 +1172,11 @@ function handleMouseDown(e) {
             const newElement = createElementForMiddleClickCopy(sourceElement, worldX, worldY);
             if (newElement) {
                 currentElementToPlace = newElement;
-                // 立即更新位置到鼠标位置
-                currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
-                currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
+                moveElementWithAutoSeparation(
+                    currentElementToPlace,
+                    worldX - currentElementToPlace.width / 2,
+                    worldY - currentElementToPlace.height / 2
+                );
             }
         }
         
@@ -1097,9 +1226,11 @@ function handleMouseMove(e) {
     
     // 如果正在放置函数元件
     if (isPlacingFunction && currentFunctionToPlace) {
-        // 更新函数元件位置
-        currentFunctionToPlace.x = worldX - currentFunctionToPlace.width / 2;
-        currentFunctionToPlace.y = worldY - currentFunctionToPlace.height / 2;
+        moveElementWithAutoSeparation(
+            currentFunctionToPlace,
+            worldX - currentFunctionToPlace.width / 2,
+            worldY - currentFunctionToPlace.height / 2
+        );
         // 先渲染背景
         render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         // 绘制临时函数元件
@@ -1109,9 +1240,11 @@ function handleMouseMove(e) {
     
     // 如果正在放置普通元件
     if (isPlacingElement && currentElementToPlace) {
-        // 更新元件位置
-        currentElementToPlace.x = worldX - currentElementToPlace.width / 2;
-        currentElementToPlace.y = worldY - currentElementToPlace.height / 2;
+        moveElementWithAutoSeparation(
+            currentElementToPlace,
+            worldX - currentElementToPlace.width / 2,
+            worldY - currentElementToPlace.height / 2
+        );
         // 先渲染背景
         render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
         // 绘制临时元件
@@ -1173,28 +1306,7 @@ function handleMouseMove(e) {
             const el = item.element;
             el.x = worldX - item.offsetX;
             el.y = worldY - item.offsetY;
-            
-            // 更新连接到该元件的导线
-            for (const wire of wires) {
-                if (wire.start.elementId === el.id) {
-                    const port = wire.start.isInput ? 
-                        el.inputs.find(p => p.id === wire.start.portId) :
-                        el.outputs.find(p => p.id === wire.start.portId);
-                    if (port) {
-                        wire.start.x = el.x + port.x;
-                        wire.start.y = el.y + port.y;
-                    }
-                }
-                if (wire.end.elementId === el.id) {
-                    const port = wire.end.isInput ? 
-                        el.inputs.find(p => p.id === wire.end.portId) :
-                        el.outputs.find(p => p.id === wire.end.portId);
-                    if (port) {
-                        wire.end.x = el.x + port.x;
-                        wire.end.y = el.y + port.y;
-                    }
-                }
-            }
+            updateWiresForElementPosition(el);
         }
         render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         return;
@@ -1208,31 +1320,13 @@ function handleMouseMove(e) {
     }
     
     if (isDragging && selectedElement) {
-        selectedElement.x = worldX - dragOffset.x;
-        selectedElement.y = worldY - dragOffset.y;
-        // 更新连接到该元件的导线
-        for (const wire of wires) {
-            if (wire.start.elementId === selectedElement.id) {
-                const element = selectedElement;
-                const port = wire.start.isInput ? 
-                    element.inputs.find(p => p.id === wire.start.portId) :
-                    element.outputs.find(p => p.id === wire.start.portId);
-                if (port) {
-                    wire.start.x = element.x + port.x;
-                    wire.start.y = element.y + port.y;
-                }
-            }
-            if (wire.end.elementId === selectedElement.id) {
-                const element = selectedElement;
-                const port = wire.end.isInput ? 
-                    element.inputs.find(p => p.id === wire.end.portId) :
-                    element.outputs.find(p => p.id === wire.end.portId);
-                if (port) {
-                    wire.end.x = element.x + port.x;
-                    wire.end.y = element.y + port.y;
-                }
-            }
-        }
+        moveElementWithAutoSeparation(
+            selectedElement,
+            worldX - dragOffset.x,
+            worldY - dragOffset.y,
+            new Set([selectedElement.id])
+        );
+        updateWiresForElementPosition(selectedElement);
         render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     }
     
@@ -1607,9 +1701,11 @@ function executePaste() {
         }
         
         if (newElement) {
-            // 复制属性，不应用缩放，保持与新元件放置相同的行为
-            newElement.x = pasteOffset.x + template._copyOffsetX;
-            newElement.y = pasteOffset.y + template._copyOffsetY;
+            moveElementWithAutoSeparation(
+                newElement,
+                pasteOffset.x + template._copyOffsetX,
+                pasteOffset.y + template._copyOffsetY
+            );
             newElement.state = template.state;
             
             // 使用与模板相同的大小，不进行缩放
@@ -1777,6 +1873,13 @@ function handleMouseUp(e) {
         
         // 处理单选拖动结束
         if (isDragging) {
+            moveElementWithAutoSeparation(
+                selectedElement,
+                selectedElement.x,
+                selectedElement.y,
+                new Set([selectedElement.id])
+            );
+            updateWiresForElementPosition(selectedElement);
             saveState();
             document.getElementById('status-bar').textContent = '元素移动完成';
             isDragging = false;
@@ -1785,6 +1888,7 @@ function handleMouseUp(e) {
         // 处理集体拖动结束
         if (isGroupDragging) {
             isGroupDragging = false;
+            resolveGroupOverlapAfterMove(selectedElements);
             saveState();
             document.getElementById('status-bar').textContent = `集体移动完成，共 ${selectedElements.length} 个元件`;
         }
@@ -1796,7 +1900,11 @@ function handleMouseUp(e) {
             if (target && target.closest && target.closest('.toolbar')) {
                 // 点击的是工具栏按钮，不执行放置，让工具栏按钮的处理函数来处理
             } else {
-                // 放置元素
+                moveElementWithAutoSeparation(
+                    currentElementToPlace,
+                    currentElementToPlace.x,
+                    currentElementToPlace.y
+                );
                 elements.push(currentElementToPlace);
                 saveState();
                 
