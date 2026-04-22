@@ -64,6 +64,14 @@ def init_functions_file():
 init_circuit_file()
 init_functions_file()
 
+def _atomic_write_json(path, data):
+    tmp_path = f"{path}.tmp.{int(time.time() * 1000)}"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, path)
+
 @app.after_request
 def after_request(response):
     # 添加CORS响应头
@@ -83,9 +91,7 @@ def save_circuit():
         return '', 200
     try:
         data = request.json
-        # 写入文件
-        with open(CIRCUIT_DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        _atomic_write_json(CIRCUIT_DATA_FILE, data)
         print(f"电路数据已保存到: {CIRCUIT_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Circuit saved successfully'})
     except Exception as e:
@@ -696,10 +702,18 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 规则:
 - 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
 - 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> CLEAR -> ADD <函数名> 复用。
-- 布局美观：每一轮都要美观地、不重叠地放置元件，必要时使用 MOVE 调整位置。
+- 布局美观：每一轮都要美观地、不重叠地放置元件，必要时使用 MOVE 调整位置。硬性要求：
+  - 新增元件时，优先选择“网格化坐标”（例如 x 为 80 的倍数，y 为 60 的倍数），避免零散坐标导致挤在一起。
+  - 任意两个元件的中心点至少相距：x 方向 ≥ 90，y 方向 ≥ 70（不足则必须 MOVE 拉开）。
+  - 同一列元件的 y 方向要错开；同一行元件的 x 方向要错开；禁止把多个元件放在相同或几乎相同的 (x,y)。
+  - 推荐布局：输入在左（x≈80），逻辑门在中（x≈240/400/560 分层），输出在右（x≈720）；每层按 y=60,120,180... 排列。
 - 验证驱动：如果你不确定电路是否正确，可以使用 TOGGLE 切换输入并观察 elements 的 state 变化。
 - 更推荐：用 SET 做确定性输入，然后用 SAMPLE 查看 OUTPUT 结果来验证，再决定 done。
 - 强烈建议：给关键元件设置 alias（ADD 第 5 个参数）。alias 会持久化，后续所有 <id_or_alias> 都可以直接使用 alias。
+- 先想后做：在输出命令前，先明确目标、关键假设与下一步；如果目标不清晰或存在多种解释，在 <answer> 里说明并提出最小化的下一步验证/操作。
+- 简单优先：用最少的元件与最少的命令达成目标；不要为了“看起来更好”进行无关重搭或大规模重排，除非用户明确要求。
+- 手术式修改：只改为完成当前目标必须改的部分；不要顺手重构/重命名/清理无关线路；如果发现无关问题，在 <answer> 提醒但不要擅自处理。
+- 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <verify> 跑用例确认；验证失败则解释差异并继续整改。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
 - 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
 
@@ -1054,15 +1068,16 @@ def save_function():
         # 读取现有的函数
         functions_data = {'functions': []}
         if os.path.exists(FUNCTIONS_DATA_FILE):
-            with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
-                functions_data = json.load(f)
+            try:
+                with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
+                    functions_data = json.load(f)
+            except json.JSONDecodeError:
+                functions_data = {'functions': []}
         
         # 添加新函数
         functions_data['functions'].append(new_function)
         
-        # 写入文件
-        with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(functions_data, f, indent=2, ensure_ascii=False)
+        _atomic_write_json(FUNCTIONS_DATA_FILE, functions_data)
         print(f"函数已保存到: {FUNCTIONS_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Function saved successfully'})
     except Exception as e:
@@ -1076,9 +1091,7 @@ def save_functions():
         return '', 200
     try:
         data = request.json
-        # 写入文件
-        with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        _atomic_write_json(FUNCTIONS_DATA_FILE, data)
         print(f"函数列表已保存到: {FUNCTIONS_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Functions saved successfully'})
     except Exception as e:
@@ -1093,8 +1106,11 @@ def load_functions():
     try:
         print(f"尝试加载函数数据 from: {FUNCTIONS_DATA_FILE}")
         if os.path.exists(FUNCTIONS_DATA_FILE):
-            with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            try:
+                with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except json.JSONDecodeError:
+                data = {'functions': []}
             print(f"函数数据已加载，包含 {len(data.get('functions', []))} 个函数")
             return jsonify(data)
         else:
