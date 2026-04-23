@@ -794,6 +794,71 @@ def _call_llm_once(system_prompt, request_messages):
     finish_reason = str(choices[0].get("finish_reason") or "")
     return str(message.get("content") or ""), finish_reason
 
+def _call_llm_streaming(system_prompt, request_messages):
+    protocol = _get_ai_protocol()
+    base_url = str(AI_CONFIG['base_url']).rstrip('/')
+    if protocol == "anthropic":
+        request_url = f"{base_url}/v1/messages"
+        request_headers = {
+            "x-api-key": AI_CONFIG['api_key'],
+            "anthropic-version": AI_CONFIG.get("anthropic_version", "2023-06-01"),
+            "Content-Type": "application/json"
+        }
+        request_payload = {
+            "model": AI_CONFIG["model"],
+            "system": system_prompt,
+            "messages": request_messages,
+            "temperature": 0.2,
+            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "stream": True
+        }
+    else:
+        request_url = f"{base_url}/chat/completions"
+        request_headers = {
+            "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+            "Content-Type": "application/json"
+        }
+        request_payload = {
+            "model": AI_CONFIG["model"],
+            "messages": [{"role": "system", "content": system_prompt}] + request_messages,
+            "temperature": 0.2,
+            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "stream": True
+        }
+
+    connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
+    read_timeout = float(AI_CONFIG.get("read_timeout", 180))
+    resp = requests.post(
+        request_url,
+        headers=request_headers,
+        json=request_payload,
+        stream=True,
+        timeout=(connect_timeout, read_timeout)
+    )
+    resp.raise_for_status()
+
+    finish_reason = ""
+    for raw_line in resp.iter_lines(decode_unicode=True):
+        if not raw_line:
+            continue
+        line = raw_line.strip()
+        if line.startswith("data:"):
+            line = line[len("data:"):].strip()
+        if not line or line == "[DONE]":
+            continue
+        try:
+            chunk_json = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        text_part, thinking_part = _extract_chunk_parts(chunk_json, protocol)
+        fr = _extract_finish_reason(chunk_json, protocol)
+        if fr:
+            finish_reason = fr
+        if thinking_part:
+            yield thinking_part, finish_reason
+        if text_part:
+            yield text_part, finish_reason
+
 def call_llm_stream(user_message):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
@@ -838,7 +903,104 @@ def call_llm_stream(user_message):
             functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
             system_prompt = _build_autonomous_system_prompt(compact_state_json, functions_str)
 
-            full_content, finish_reason = _call_llm_once(system_prompt, request_messages)
+            full_content = ""
+            last_cmd_last_id = None
+            executed_command_count = 0
+            executed_success_count = 0
+            command_errors = []
+            command_results = []
+            execution_error = ""
+            in_commands = False
+            outside_buf = ""
+            commands_buf = ""
+
+            def _execute_one_command(cmd_data):
+                nonlocal last_cmd_last_id, executed_command_count, executed_success_count, command_errors, command_results
+                cmd = cmd_data.get("command")
+                params = dict(cmd_data.get("params") or {})
+                for k in ("id", "from_id", "to_id"):
+                    if params.get(k) == "$last" and last_cmd_last_id:
+                        params[k] = last_cmd_last_id
+                cmd_data = {"command": cmd, "params": params}
+                summary = _execute_commands_with_alias([cmd_data]) or {}
+                executed_command_count += 1
+                executed_success_count += int(summary.get("executed_success") or 0)
+                command_errors.extend(list(summary.get("errors") or []))
+                command_results.extend(list(summary.get("results") or []))
+                if cmd == "add_element":
+                    for r in (summary.get("results") or []):
+                        if isinstance(r, dict) and r.get("command") == "add_element":
+                            res = r.get("result")
+                            if isinstance(res, dict) and res.get("id"):
+                                last_cmd_last_id = res.get("id")
+                                break
+                if int(summary.get("executed_success") or 0) > 0 and cmd not in ("sample_outputs", "simulate"):
+                    yield STREAM_STATE_CHANGED_MARKER
+
+            def _feed_stream_text(text):
+                nonlocal in_commands, outside_buf, commands_buf
+                remaining = text or ""
+                while remaining:
+                    if not in_commands:
+                        outside_buf += remaining
+                        idx = outside_buf.lower().find("<commands>")
+                        if idx == -1:
+                            if len(outside_buf) > 200:
+                                outside_buf = outside_buf[-200:]
+                            return
+                        after = outside_buf[idx + len("<commands>"):]
+                        outside_buf = ""
+                        in_commands = True
+                        remaining = after
+                        continue
+
+                    commands_buf += remaining
+                    remaining = ""
+
+                    close_idx = commands_buf.lower().find("</commands>")
+                    if close_idx != -1:
+                        segment = commands_buf[:close_idx]
+                        remainder = commands_buf[close_idx + len("</commands>"):]
+                        commands_buf = ""
+                        in_commands = False
+                        for line in segment.splitlines():
+                            line = line.strip()
+                            if not line or line.startswith("```"):
+                                continue
+                            parsed = _parse_commands_payload(line)
+                            for cmd_data in parsed:
+                                for marker in _execute_one_command(cmd_data):
+                                    yield marker
+                        remaining = remainder
+                        continue
+
+                    if "\n" not in commands_buf:
+                        return
+                    lines = commands_buf.split("\n")
+                    commands_buf = lines[-1]
+                    for raw_line in lines[:-1]:
+                        line = raw_line.strip()
+                        if not line or line.startswith("```"):
+                            continue
+                        parsed = _parse_commands_payload(line)
+                        for cmd_data in parsed:
+                            for marker in _execute_one_command(cmd_data):
+                                yield marker
+                    return
+
+            try:
+                for chunk, fr in _call_llm_streaming(system_prompt, request_messages):
+                    if fr:
+                        finish_reason = fr
+                    if chunk:
+                        full_content += chunk
+                        yield chunk
+                        for marker in _feed_stream_text(chunk):
+                            yield marker
+            except Exception as e:
+                execution_error = str(e)
+                yield f"[第{round_idx}轮调用异常] {execution_error}\n"
+
             request_messages.append({"role": "assistant", "content": full_content})
 
             plan_text = _extract_tag_text(full_content, "plan")
@@ -851,30 +1013,8 @@ def call_llm_stream(user_message):
                 answer_text = "已完成本轮处理。"
             final_answer_text = answer_text
 
-            if plan_text:
-                yield f"[第{round_idx}轮计划]\n{plan_text}\n"
-            else:
-                yield f"[第{round_idx}轮计划]\n先执行必要操作，再进行结果检查。\n"
-
-            executed_command_count = 0
-            execution_error = ""
-            executed_success_count = 0
-            command_errors = []
-            command_results = []
             if commands_text:
-                try:
-                    parsed_commands = _parse_commands_payload(commands_text)
-                    executed_command_count = len(parsed_commands)
-                    summary = _execute_commands_with_alias(parsed_commands)
-                    executed_success_count = int((summary or {}).get("executed_success") or 0)
-                    command_errors = list((summary or {}).get("errors") or [])
-                    command_results = list((summary or {}).get("results") or [])
-                    aggregated_commands.append(commands_text)
-                    if executed_success_count > 0:
-                        yield STREAM_STATE_CHANGED_MARKER
-                except Exception as e:
-                    execution_error = str(e)
-                    yield f"[第{round_idx}轮执行异常] {execution_error}\n"
+                aggregated_commands.append(commands_text)
 
             after_state = circuit_manager.get_state()
             compact_after_state = _build_compact_state(after_state)

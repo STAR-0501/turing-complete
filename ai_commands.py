@@ -1,11 +1,20 @@
+"""Circuit state management and simulation backend."""
+
+from __future__ import annotations
+
 import json
+import logging
 import os
 import random
 import string
 import time
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List
 
 def generate_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
+
+logger = logging.getLogger(__name__)
 
 def _atomic_write_json(path, data):
     tmp_path = f"{path}.tmp.{generate_id()}"
@@ -15,14 +24,23 @@ def _atomic_write_json(path, data):
         os.fsync(f.fileno())
     os.replace(tmp_path, path)
 
+@dataclass
+class SimulationContext:
+    elements: List[Dict[str, Any]]
+    wires: List[Dict[str, Any]]
+    function_cache: Dict[str, Any]
+    depth: int = 0
+
 class CircuitManager:
+    """Manages circuit persistence and boolean simulation."""
+
     def __init__(self, data_file, functions_file=None):
         self.data_file = data_file
         self.functions_file = functions_file
 
     def _load_functions(self):
         if self.functions_file and os.path.exists(self.functions_file):
-            for _ in range(3):
+            for attempt in range(3):
                 try:
                     if os.path.getsize(self.functions_file) == 0:
                         self._save_functions([])
@@ -30,6 +48,8 @@ class CircuitManager:
                     with open(self.functions_file, 'r', encoding='utf-8') as f:
                         return json.load(f).get("functions", [])
                 except json.JSONDecodeError:
+                    if attempt == 2:
+                        logger.warning("Failed to decode functions file: %s", self.functions_file)
                     time.sleep(0.01)
                 except (FileNotFoundError, PermissionError, OSError):
                     return []
@@ -42,11 +62,13 @@ class CircuitManager:
 
     def _load_data(self):
         if os.path.exists(self.data_file):
-            for _ in range(3):
+            for attempt in range(3):
                 try:
                     with open(self.data_file, 'r', encoding='utf-8') as f:
                         return json.load(f)
                 except json.JSONDecodeError:
+                    if attempt == 2:
+                        logger.warning("Failed to decode circuit data file: %s", self.data_file)
                     time.sleep(0.01)
                 except (FileNotFoundError, PermissionError):
                     break
@@ -68,59 +90,66 @@ class CircuitManager:
             "isInput": is_input
         }
 
+    def _normalize_wire_standard(self, wire, elements):
+        if "start" not in wire or "end" not in wire:
+            return None
+        start = wire.get("start", {})
+        end = wire.get("end", {})
+        start_el = next((e for e in elements if e.get("id") == start.get("elementId")), None)
+        end_el = next((e for e in elements if e.get("id") == end.get("elementId")), None)
+        if not start_el or not end_el:
+            return None
+
+        start_is_input = start.get("isInput")
+        if start_is_input is None:
+            start_is_input = any(p.get("id") == start.get("portId") for p in start_el.get("inputs", []))
+        end_is_input = end.get("isInput")
+        if end_is_input is None:
+            end_is_input = any(p.get("id") == end.get("portId") for p in end_el.get("inputs", []))
+
+        normalized_start = self._build_endpoint(start_el, start.get("portId"), start_is_input)
+        normalized_end = self._build_endpoint(end_el, end.get("portId"), end_is_input)
+        if not normalized_start or not normalized_end:
+            return None
+
+        normalized = {
+            "id": wire.get("id", generate_id()),
+            "start": normalized_start,
+            "end": normalized_end
+        }
+        if "state" in wire:
+            normalized["state"] = wire["state"]
+        return normalized
+
+    def _normalize_wire_legacy(self, wire, elements):
+        if "from" not in wire or "to" not in wire:
+            return None
+        from_data = wire.get("from", {})
+        to_data = wire.get("to", {})
+        from_el = next((e for e in elements if e.get("id") == from_data.get("elementId")), None)
+        to_el = next((e for e in elements if e.get("id") == to_data.get("elementId")), None)
+        if not from_el or not to_el:
+            return None
+
+        start = self._build_endpoint(from_el, from_data.get("portId"), False)
+        end = self._build_endpoint(to_el, to_data.get("portId"), True)
+        if not start or not end:
+            return None
+
+        normalized = {
+            "id": wire.get("id", generate_id()),
+            "start": start,
+            "end": end
+        }
+        if "state" in wire:
+            normalized["state"] = wire["state"]
+        return normalized
+
     def _normalize_wire(self, wire, elements):
-        if "start" in wire and "end" in wire:
-            start = wire.get("start", {})
-            end = wire.get("end", {})
-            start_el = next((e for e in elements if e.get("id") == start.get("elementId")), None)
-            end_el = next((e for e in elements if e.get("id") == end.get("elementId")), None)
-            if not start_el or not end_el:
-                return None
-
-            start_is_input = start.get("isInput")
-            if start_is_input is None:
-                start_is_input = any(p.get("id") == start.get("portId") for p in start_el.get("inputs", []))
-            end_is_input = end.get("isInput")
-            if end_is_input is None:
-                end_is_input = any(p.get("id") == end.get("portId") for p in end_el.get("inputs", []))
-
-            normalized_start = self._build_endpoint(start_el, start.get("portId"), start_is_input)
-            normalized_end = self._build_endpoint(end_el, end.get("portId"), end_is_input)
-            if not normalized_start or not normalized_end:
-                return None
-
-            normalized = {
-                "id": wire.get("id", generate_id()),
-                "start": normalized_start,
-                "end": normalized_end
-            }
-            if "state" in wire:
-                normalized["state"] = wire["state"]
+        normalized = self._normalize_wire_standard(wire, elements)
+        if normalized is not None:
             return normalized
-
-        if "from" in wire and "to" in wire:
-            from_data = wire.get("from", {})
-            to_data = wire.get("to", {})
-            from_el = next((e for e in elements if e.get("id") == from_data.get("elementId")), None)
-            to_el = next((e for e in elements if e.get("id") == to_data.get("elementId")), None)
-            if not from_el or not to_el:
-                return None
-
-            start = self._build_endpoint(from_el, from_data.get("portId"), False)
-            end = self._build_endpoint(to_el, to_data.get("portId"), True)
-            if not start or not end:
-                return None
-
-            normalized = {
-                "id": wire.get("id", generate_id()),
-                "start": start,
-                "end": end
-            }
-            if "state" in wire:
-                normalized["state"] = wire["state"]
-            return normalized
-
-        return None
+        return self._normalize_wire_legacy(wire, elements)
 
     def _normalize_data(self, data):
         elements = data.get("elements", [])
@@ -138,10 +167,86 @@ class CircuitManager:
         normalized = self._normalize_data(data)
         return normalized
 
+    def _get_element_template(self, element_type):
+        if element_type == 'AND':
+            return {
+                "width": 80, "height": 60,
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [
+                    {"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15},
+                    {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}
+                ],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
+            }
+        if element_type == 'OR':
+            return {
+                "width": 80, "height": 60,
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [
+                    {"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15},
+                    {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}
+                ],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
+            }
+        if element_type == 'NOT':
+            return {
+                "width": 80, "height": 60,
+                "realWidth": 80, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
+                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
+            }
+        if element_type == 'INPUT':
+            return {
+                "width": 60, "height": 60,
+                "realWidth": 60, "realHeight": 60,
+                "inputs": [],
+                "outputs": [{"id": generate_id(), "x": 65, "y": 30, "realX": 65, "realY": 30}]
+            }
+        if element_type == 'OUTPUT':
+            return {
+                "width": 60, "height": 60,
+                "realWidth": 60, "realHeight": 60,
+                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
+                "outputs": []
+            }
+
+        functions = self._load_functions()
+        func = next((f for f in functions if f.get("name") == element_type), None)
+        if not func:
+            raise ValueError(f"Unknown element type: {element_type}")
+
+        input_count = len(func.get("inputElementIds", []))
+        output_count = len(func.get("outputElementIds", []))
+        height = max(60, max(input_count, output_count) * 25 + 20)
+
+        inputs = [
+            {"id": generate_id(), "x": -5, "y": 20 + i * 25, "realX": -5, "realY": 20 + i * 25}
+            for i in range(input_count)
+        ]
+        outputs = [
+            {"id": generate_id(), "x": 105, "y": 20 + i * 25, "realX": 105, "realY": 20 + i * 25}
+            for i in range(output_count)
+        ]
+        return {
+            "type": "FUNCTION",
+            "name": element_type,
+            "width": 100,
+            "height": height,
+            "realWidth": 100,
+            "realHeight": height,
+            "inputs": inputs,
+            "outputs": outputs,
+            "functionData": {
+                "elements": func.get("elements", []),
+                "wires": func.get("wires", []),
+                "inputElementIds": func.get("inputElementIds", []),
+                "outputElementIds": func.get("outputElementIds", [])
+            }
+        }
+
     def add_element(self, element_type, x, y, alias=None):
         data = self._load_data()
         
-        # Define element structures (matching elements.js)
         element = {
             "id": generate_id(),
             "type": element_type,
@@ -151,89 +256,7 @@ class CircuitManager:
         }
         if alias:
             element["alias"] = str(alias)
-
-        if element_type == 'AND':
-            element.update({
-                "width": 80, "height": 60,
-                "realWidth": 80, "realHeight": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15}, {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
-            })
-        elif element_type == 'OR':
-            element.update({
-                "width": 80, "height": 60,
-                "realWidth": 80, "realHeight": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15}, {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
-            })
-        elif element_type == 'NOT':
-            element.update({
-                "width": 80, "height": 60,
-                "realWidth": 80, "realHeight": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
-                "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
-            })
-        elif element_type == 'INPUT':
-            element.update({
-                "width": 60, "height": 60,
-                "realWidth": 60, "realHeight": 60,
-                "inputs": [],
-                "outputs": [{"id": generate_id(), "x": 65, "y": 30, "realX": 65, "realY": 30}]
-            })
-        elif element_type == 'OUTPUT':
-            element.update({
-                "width": 60, "height": 60,
-                "realWidth": 60, "realHeight": 60,
-                "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
-                "outputs": []
-            })
-        else:
-            # Check if it's a function
-            functions = self._load_functions()
-            func = next((f for f in functions if f.get("name") == element_type), None)
-            if func:
-                input_count = len(func.get("inputElementIds", []))
-                output_count = len(func.get("outputElementIds", []))
-                height = max(60, max(input_count, output_count) * 25 + 20)
-                
-                inputs = []
-                for i in range(input_count):
-                    inputs.append({
-                        "id": generate_id(),
-                        "x": -5,
-                        "y": 20 + i * 25,
-                        "realX": -5,
-                        "realY": 20 + i * 25
-                    })
-                
-                outputs = []
-                for i in range(output_count):
-                    outputs.append({
-                        "id": generate_id(),
-                        "x": 105,
-                        "y": 20 + i * 25,
-                        "realX": 105,
-                        "realY": 20 + i * 25
-                    })
-                
-                element.update({
-                    "type": "FUNCTION",
-                    "name": element_type,
-                    "width": 100,
-                    "height": height,
-                    "realWidth": 100,
-                    "realHeight": height,
-                    "inputs": inputs,
-                    "outputs": outputs,
-                    "functionData": {
-                        "elements": func.get("elements", []),
-                        "wires": func.get("wires", []),
-                        "inputElementIds": func.get("inputElementIds", []),
-                        "outputElementIds": func.get("outputElementIds", [])
-                    }
-                })
-            else:
-                raise ValueError(f"Unknown element type: {element_type}")
+        element.update(self._get_element_template(element_type))
 
         data["elements"].append(element)
         self._save_data(data)
@@ -431,7 +454,53 @@ class CircuitManager:
                 return True
         return False
 
+    def _calc_and_state(self, el, ctx: SimulationContext) -> bool:
+        for p in el.get("inputs", []):
+            if not self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
+                return False
+            v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+            if v is not True:
+                return False
+        return True
+
+    def _calc_or_state(self, el, ctx: SimulationContext) -> bool:
+        has_input = False
+        for p in el.get("inputs", []):
+            if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
+                has_input = True
+                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                if v is True:
+                    return True
+        return False
+
+    def _calc_not_state(self, el, ctx: SimulationContext) -> bool:
+        has_input = False
+        input_true = False
+        for p in el.get("inputs", []):
+            if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
+                has_input = True
+                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                if v is True:
+                    input_true = True
+                    break
+        return bool(has_input and (not input_true))
+
+    def _calc_output_state(self, el, ctx: SimulationContext) -> bool:
+        for p in el.get("inputs", []):
+            if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
+                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                if v is True:
+                    return True
+        return False
+
     def _simulate_elements_until_stable(self, elements, wires, function_cache, max_iters=50, depth=0):
+        ctx = SimulationContext(elements=elements, wires=wires, function_cache=function_cache, depth=depth)
+        calculators: Dict[str, Callable[[Dict[str, Any], SimulationContext], bool]] = {
+            "AND": self._calc_and_state,
+            "OR": self._calc_or_state,
+            "NOT": self._calc_not_state,
+            "OUTPUT": self._calc_output_state
+        }
         for _ in range(max_iters):
             changed = False
             for el in elements:
@@ -442,56 +511,17 @@ class CircuitManager:
                 old_state = bool(el.get("state", False))
                 new_state = old_state
 
-                if el_type == "AND":
-                    all_connected = True
-                    all_true = True
-                    for p in el.get("inputs", []):
-                        if not self._has_input_connection(wires, el.get("id"), p.get("id")):
-                            all_connected = False
-                            break
-                        v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
-                        if v is not True:
-                            all_true = False
-                            break
-                    new_state = bool(all_connected and all_true)
-                elif el_type == "OR":
-                    has_input = False
-                    any_true = False
-                    for p in el.get("inputs", []):
-                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
-                            has_input = True
-                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
-                            if v is True:
-                                any_true = True
-                                break
-                    new_state = bool(has_input and any_true)
-                elif el_type == "NOT":
-                    has_input = False
-                    input_true = False
-                    for p in el.get("inputs", []):
-                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
-                            has_input = True
-                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
-                            if v is True:
-                                input_true = True
-                                break
-                    new_state = bool(has_input and (not input_true))
-                elif el_type == "OUTPUT":
-                    input_true = False
-                    for p in el.get("inputs", []):
-                        if self._has_input_connection(wires, el.get("id"), p.get("id")):
-                            v = self._get_input_source_state(elements, wires, el.get("id"), p.get("id"))
-                            if v is True:
-                                input_true = True
-                                break
-                    new_state = bool(input_true)
-                elif el_type == "FUNCTION":
+                if el_type == "FUNCTION":
                     old_output_states = list(el.get("outputStates") or [])
-                    output_states = self._calculate_function_element(el, elements, wires, function_cache, depth=depth)
+                    output_states = self._calculate_function_element(el, ctx)
                     el["outputStates"] = output_states
                     new_state = bool(output_states[0]) if output_states else False
                     if output_states != old_output_states:
                         changed = True
+                else:
+                    calc = calculators.get(str(el_type or ""))
+                    if calc:
+                        new_state = bool(calc(el, ctx))
 
                 if new_state != old_state:
                     el["state"] = new_state
@@ -502,8 +532,8 @@ class CircuitManager:
             if not changed:
                 break
 
-    def _calculate_function_element(self, function_element, parent_elements, parent_wires, function_cache, depth=0):
-        if depth >= 10:
+    def _calculate_function_element(self, function_element, parent_ctx: SimulationContext):
+        if parent_ctx.depth >= 10:
             return []
         function_data = function_element.get("functionData") or {}
         func_elements = json.loads(json.dumps(function_data.get("elements") or []))
@@ -512,13 +542,13 @@ class CircuitManager:
         output_element_ids = function_data.get("outputElementIds") or []
 
         for i, input_port in enumerate(function_element.get("inputs", []) or []):
-            input_state = self._get_input_source_state(parent_elements, parent_wires, function_element.get("id"), input_port.get("id"))
+            input_state = self._get_input_source_state(parent_ctx.elements, parent_ctx.wires, function_element.get("id"), input_port.get("id"))
             if i < len(input_element_ids):
                 internal_input = next((e for e in func_elements if e.get("id") == input_element_ids[i]), None)
                 if internal_input is not None:
                     internal_input["state"] = bool(input_state) if input_state is not None else False
 
-        self._simulate_elements_until_stable(func_elements, func_wires, function_cache, depth=depth + 1)
+        self._simulate_elements_until_stable(func_elements, func_wires, parent_ctx.function_cache, depth=parent_ctx.depth + 1)
 
         output_states = []
         for out_id in output_element_ids:
