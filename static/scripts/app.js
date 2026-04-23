@@ -103,8 +103,8 @@ async function init() {
     });
     
     canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
-    // 阻止右键菜单
-    canvas.addEventListener('contextmenu', (e) => {
+    // 阻止右键菜单（使用 window 监听确保捕获所有右键点击）
+    window.addEventListener('contextmenu', (e) => {
         e.preventDefault();
     });
     // 添加滚轮缩放功能
@@ -115,7 +115,7 @@ async function init() {
     setInterval(async () => {
         // 如果正在操作中，或者刚保存完（防止覆盖最新的本地改动），不从服务器加载
         const now = Date.now();
-        if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && !isSignalAnimating && (now - lastSaveTime > 3000)) {
+        if (!isDragging && !isDrawingWire && !isPlacingElement && !isPanning && !isSignalAnimating && !isEditingComment && (now - lastSaveTime > 3000)) {
             await loadFromServer();
             await loadFunctionsFromServer(); // 动态加载函数列表，以响应 AI 的封装操作
         }
@@ -194,6 +194,7 @@ async function init() {
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCircuit);
     document.getElementById('btn-ai-comment').addEventListener('click', aiAutoComment);
+    document.getElementById('btn-ai-layout').addEventListener('click', aiAutoLayout);
     
     // 初始化函数相关功能
     initFunctionPanel();
@@ -216,9 +217,19 @@ async function init() {
             return; // 屏蔽其他所有快捷键
         }
         
-        // 如果注释弹窗打开，屏蔽所有快捷键（保留 Ctrl+Enter 保存、Esc 关闭）
+        // 如果注释弹窗打开，屏蔽快捷键但允许文本输入
         if (isEditingComment) {
-            e.preventDefault(); // 阻止默认行为，防止输入框外被触发
+            // 检查是否是文本输入（INPUT 或 TEXTAREA）
+            const target = e.target;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                // 在文本框内：只阻止数字键 1-0（切换工具），不阻止 Ctrl 系列快捷键
+                if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                }
+            } else {
+                // 非文本输入，阻止所有
+                e.preventDefault();
+            }
             return;
         }
         
@@ -931,6 +942,8 @@ function handleMouseDown(e) {
     // 右键点击 - 始终启动拖动屏幕（无论点击哪里）
     // 只有 mousedown 事件会触发 panning，auxclick 不会
     if (e.button === 2 && e.type === 'mousedown') {
+        e.preventDefault(); // 阻止默认右键菜单
+        
         // 先检查是否点击了元件
         let clickedElement = null;
         for (const element of elements) {
@@ -943,16 +956,19 @@ function handleMouseDown(e) {
         
         if (clickedElement) {
             // 右键点击了元件，显示注释输入框（修改）
-            selectedElement = clickedElement;
+            // 从 elements 数组中获取最新的元素引用
+            const targetElement = elements.find(el => el.id === clickedElement.id);
+            if (!targetElement) return;
+            
+            selectedElement = targetElement;
             selectedWire = null;
             selectedElements = [];
-            showCommentModal(clickedElement);
+            showCommentModal(targetElement);
             render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
             return;
         }
         
         // 否则启动拖动屏幕
-        e.preventDefault();
         isPanning = true;
         isSelecting = false; // 确保不会同时触发框选
         panOffset = { x: mouseX, y: mouseY };
@@ -2156,33 +2172,165 @@ async function aiAutoComment() {
         return;
     }
     
-    document.getElementById('status-bar').textContent = 'AI 正在分析电路并生成注释...';
+    // 显示加载遮罩
+    const loadingEl = document.getElementById('ai-loading');
+    const loadingText = loadingEl.querySelector('.loading-text');
+    loadingText.textContent = 'AI 正在生成注释...';
+    loadingEl.style.display = 'flex';
     
     try {
-        const response = await fetch('/api/ai/generate-comments', {
+        // 构建提示词
+        const commentPrompt = `请为电路中的每个元件生成注释，说明它在电路中的作用。
+要求：
+1. 注释要简洁明了，不超过30个字
+2. 说明元件的具体功能
+3. 如果是门电路，说明它的逻辑功能
+4. 如果是输入/输出，说明它代表什么
+
+电路中的元件：
+${JSON.stringify(elements.map(el => ({
+    id: el.id,
+    type: el.type,
+    alias: el.alias,
+    functionName: el.name || null
+})), null, 2)}
+
+请直接输出 COMMENT 命令来添加注释，每行一个命令，例如：
+COMMENT input1 这是A输入
+COMMENT output1 这是求和输出
+只输出命令，不要其他解释内容。`;
+        
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
+            body: JSON.stringify({ message: commentPrompt, max_rounds: 2 })
         });
         
-        const result = await response.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiOutput = '';
         
-        if (result.status === 'success') {
-            const comments = result.comments || {};
-            for (const element of elements) {
-                if (comments[element.id]) {
-                    element.comment = comments[element.id];
-                }
-            }
-            saveToServer();
-            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
-            document.getElementById('status-bar').textContent = 'AI 注释已完成';
-        } else {
-            document.getElementById('status-bar').textContent = 'AI 注释失败: ' + (result.message || '未知错误');
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            aiOutput += decoder.decode(value, { stream: true });
         }
+        
+        console.log('AI 注释输出:', aiOutput);
+        
+        await loadFromServer();
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+        document.getElementById('status-bar').textContent = 'AI 注释已完成';
     } catch (e) {
         console.error('AI 注释失败:', e);
         document.getElementById('status-bar').textContent = 'AI 注释失败，请检查网络连接';
+    } finally {
+        // 隐藏加载遮罩
+        loadingEl.style.display = 'none';
+    }
+}
+
+/**
+ * AI 自动整理电路布局
+ */
+async function aiAutoLayout() {
+    if (elements.length === 0) {
+        document.getElementById('status-bar').textContent = '电路为空，无法整理';
+        return;
+    }
+    
+    // 显示加载遮罩
+    const loadingEl = document.getElementById('ai-loading');
+    const loadingText = loadingEl.querySelector('.loading-text');
+    loadingText.textContent = 'AI 正在整理电路...';
+    loadingEl.style.display = 'flex';
+    
+    try {
+        // 构建提示词
+        const layoutPrompt = `请整理这个电路的布局。
+要求：
+1. 尽可能保持正方形，不是一直向下或者向右；
+2. 尽可能体现这个电路的功能，让人一眼能看懂电路，符合人的阅读习惯；
+3. 如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入或者输出模块，那么最高位应当在最左边，最低为应当在最右边
+
+电路中的元件：
+${JSON.stringify(elements.map(el => ({
+    id: el.id,
+    type: el.type,
+    alias: el.alias,
+    comment: el.comment || '',
+    current_x: el.x,
+    current_y: el.y,
+    width: el.width || 80,
+    height: el.height || 60
+})), null, 2)}
+
+电路连接关系：
+${JSON.stringify(wires.map(w => {
+    const startEl = elements.find(e => e.id === w.start?.elementId);
+    const endEl = elements.find(e => e.id === w.end?.elementId);
+    return {
+        from: startEl ? startEl.type : 'unknown',
+        to: endEl ? endEl.type : 'unknown'
+    };
+}), null, 2)}
+
+请直接输出 MOVE 命令来整理布局，每行一个命令，例如：MOVE and1 100 200`;
+        
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: layoutPrompt, max_rounds: 2 })
+        });
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiOutput = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            aiOutput += decoder.decode(value, { stream: true });
+        }
+        
+        console.log('AI 整理输出:', aiOutput);
+        
+        await loadFromServer();
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+        document.getElementById('status-bar').textContent = 'AI 电路整理完成';
+    } catch (e) {
+        console.error('AI 整理失败:', e);
+        document.getElementById('status-bar').textContent = 'AI 整理失败，请检查网络连接';
+    } finally {
+        // 隐藏加载遮罩
+        loadingEl.style.display = 'none';
+    }
+}
+
+function updateWirePositions(wire) {
+    if (!wire.start || !wire.end) return;
+    
+    const startElement = elements.find(e => e.id === wire.start.elementId);
+    const endElement = elements.find(e => e.id === wire.end.elementId);
+    
+    if (!startElement || !endElement) return;
+    
+    if (wire.start.portId) {
+        const startPort = [...(startElement.outputs || []), ...(startElement.inputs || [])]
+            .find(p => p.id === wire.start.portId);
+        if (startPort) {
+            wire.start.x = startElement.x + startPort.x;
+            wire.start.y = startElement.y + startPort.y;
+        }
+    }
+    
+    if (wire.end.portId) {
+        const endPort = [...(endElement.outputs || []), ...(endElement.inputs || [])]
+            .find(p => p.id === wire.end.portId);
+        if (endPort) {
+            wire.end.x = endElement.x + endPort.x;
+            wire.end.y = endElement.y + endPort.y;
+        }
     }
 }
 
@@ -2477,7 +2625,11 @@ function initCommentModal() {
     
     confirmBtn.addEventListener('click', () => {
         if (commentTargetElement) {
-            commentTargetElement.comment = commentInput.value;
+            // 更新 elements 数组中的对应元件
+            const elementInArray = elements.find(el => el.id === commentTargetElement.id);
+            if (elementInArray) {
+                elementInArray.comment = commentInput.value;
+            }
             saveState();
             render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
         }
@@ -2505,10 +2657,12 @@ function initCommentModal() {
  * 显示注释编辑弹窗
  */
 function showCommentModal(element) {
-    commentTargetElement = element;
+    // 重新从 elements 数组获取最新数据，确保注释是最新的
+    const latestElement = elements.find(el => el.id === element.id) || element;
+    commentTargetElement = latestElement;
     const commentModal = document.getElementById('comment-modal');
     const commentInput = document.getElementById('comment-input');
-    commentInput.value = element.comment || '';
+    commentInput.value = latestElement.comment || '';
     commentModal.classList.add('show');
     isEditingComment = true;
     commentInput.focus();
