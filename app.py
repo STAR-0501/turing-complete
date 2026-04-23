@@ -48,8 +48,7 @@ def init_circuit_file():
                 json.dump({'elements': [], 'wires': []}, f, indent=2, ensure_ascii=False)
             # print(f"已创建空的电路数据文件: {CIRCUIT_DATA_FILE}")
         except Exception as e:
-            ...
-            # print(f"创建电路数据文件失败: {e}")
+            print(f"创建电路数据文件失败: {e}")
 
 # 初始化：如果文件不存在，创建一个空的函数数据文件
 def init_functions_file():
@@ -59,8 +58,7 @@ def init_functions_file():
                 json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
             # print(f"已创建空的函数数据文件: {FUNCTIONS_DATA_FILE}")
         except Exception as e:
-            ...
-            # print(f"创建函数数据文件失败: {e}")
+            print(f"创建函数数据文件失败: {e}")
 
 # 启动时初始化
 init_circuit_file()
