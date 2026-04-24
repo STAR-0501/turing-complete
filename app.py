@@ -13,7 +13,7 @@ import threading
 AI_CONFIG = {
     "api_key": "sk-38d03b2f9c8d44f886f9e146d179d933",
     "base_url": "https://api.deepseek.com", # 或者您的代理地址，例如 https://api.deepseek.com
-    "model": "deepseek-chat" # 或 deepseek-chat 等
+    "model": "deepseek-v4-flash" # 或 deepseek-chat 等
 }
 
 # 关闭Flask的HTTP请求日志
