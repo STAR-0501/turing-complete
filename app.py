@@ -46,7 +46,7 @@ def init_circuit_file():
         try:
             with open(CIRCUIT_DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump({'elements': [], 'wires': []}, f, indent=2, ensure_ascii=False)
-            print(f"已创建空的电路数据文件: {CIRCUIT_DATA_FILE}")
+            # print(f"已创建空的电路数据文件: {CIRCUIT_DATA_FILE}")
         except Exception as e:
             print(f"创建电路数据文件失败: {e}")
 
@@ -56,7 +56,7 @@ def init_functions_file():
         try:
             with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
-            print(f"已创建空的函数数据文件: {FUNCTIONS_DATA_FILE}")
+            # print(f"已创建空的函数数据文件: {FUNCTIONS_DATA_FILE}")
         except Exception as e:
             print(f"创建函数数据文件失败: {e}")
 
@@ -92,10 +92,10 @@ def save_circuit():
     try:
         data = request.json
         _atomic_write_json(CIRCUIT_DATA_FILE, data)
-        print(f"电路数据已保存到: {CIRCUIT_DATA_FILE}")
+#         print(f"电路数据已保存到: {CIRCUIT_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Circuit saved successfully'})
     except Exception as e:
-        print(f"保存电路数据失败: {e}")
+#         print(f"保存电路数据失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/load-circuit', methods=['GET', 'OPTIONS'])
@@ -104,12 +104,12 @@ def load_circuit():
     if request.method == 'OPTIONS':
         return '', 200
     try:
-        print(f"尝试加载电路数据 from: {CIRCUIT_DATA_FILE}")
+#         print(f"尝试加载电路数据 from: {CIRCUIT_DATA_FILE}")
         data = circuit_manager.get_state()
-        print(f"电路数据已加载，包含 {len(data.get('elements', []))} 个元件")
+#         print(f"电路数据已加载，包含 {len(data.get('elements', []))} 个元件")
         return jsonify(data)
     except Exception as e:
-        print(f"加载电路数据失败: {e}")
+#         print(f"加载电路数据失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/ai/execute', methods=['POST'])
@@ -121,6 +121,194 @@ def ai_execute():
         
         result = execute_circuit_command(cmd, params)
         return jsonify({'status': 'success', 'result': result})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/ai/generate-comments', methods=['POST'])
+def ai_generate_comments():
+    try:
+        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        
+        current_state = circuit_manager.get_state()
+        elements = current_state.get('elements', [])
+        wires = current_state.get('wires', [])
+        
+        if not elements:
+            return jsonify({'status': 'success', 'comments': {}})
+        
+        system_prompt = """你是一个电路分析专家。请分析下面的电路，为每个元件生成精准的注释，说明它在电路中的作用和功能。
+
+要求：
+1. 注释要简洁明了，不超过30个字
+2. 说明元件的具体功能，如"A输入：电路的第一个操作数"
+3. 如果是门电路，说明它的逻辑功能
+4. 如果是输出，说明它代表什么结果
+
+请以 JSON 格式输出，key 是元件 id，value 是注释内容。
+格式：{"元件id": "注释内容", ...}
+只输出 JSON，不要其他内容。"""
+
+        elements_info = []
+        for el in elements:
+            el_info = {
+                "id": el.get("id"),
+                "type": el.get("type"),
+                "alias": el.get("alias"),
+                "state": el.get("state"),
+                "functionName": el.get("name") if el.get("type") == "FUNCTION" else None
+            }
+            elements_info.append(el_info)
+        
+        wires_info = []
+        for w in wires:
+            start_el = next((e for e in elements if e.get("id") == w.get("start", {}).get("elementId")), None)
+            end_el = next((e for e in elements if e.get("id") == w.get("end", {}).get("elementId")), None)
+            wires_info.append({
+                "from": f"{start_el.get('type')}" if start_el else "unknown",
+                "to": f"{end_el.get('type')}" if end_el else "unknown"
+            })
+        
+        user_prompt = f"""电路中的元件：
+{json.dumps(elements_info, ensure_ascii=False, indent=2)}
+
+电路连接关系：
+{json.dumps(wires_info, ensure_ascii=False, indent=2)}
+
+请分析这个电路，为每个元件生成注释："""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response = requests.post(
+            f"{AI_CONFIG['base_url']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": AI_CONFIG.get("model", "default"),
+                "messages": messages,
+                "temperature": 0.3
+            },
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return jsonify({'status': 'error', 'message': f'AI API 错误: {response.text}'}), 500
+        
+        result = response.json()
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            comments = json.loads(json_match.group())
+        else:
+            comments = {}
+        
+        for el in elements:
+            el_id = el.get("id")
+            if el_id in comments:
+                el["comment"] = comments[el_id]
+        
+        circuit_manager._save_data(current_state)
+        
+        return jsonify({'status': 'success', 'comments': comments})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/ai/generate-layout', methods=['POST'])
+def ai_generate_layout():
+    """
+    根据当前电路结构，让AI整理布局
+    """
+    try:
+        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        
+        current_state = circuit_manager.get_state()
+        elements = current_state.get('elements', [])
+        wires = current_state.get('wires', [])
+        
+        if not elements:
+            return jsonify({'status': 'success', 'positions': {}})
+        
+        system_prompt = """请整理这个电路
+        要求：
+        1.尽可能保持正方形，不是一直向下或者向右；
+        2.尽可能体现这个电路的功能，让人一眼能看懂电路，符合人的阅读习惯；
+        3.如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入（或者输出）模块，那么最高位应当在最左边，最低为应当在最右边，不论是输入还是输出，都必须按这个要求排列，不能从上到下排。
+        """
+
+        elements_info = []
+        for el in elements:
+            el_info = {
+                "id": el.get("id"),
+                "type": el.get("type"),
+                "alias": el.get("alias"),
+                "comment": el.get("comment", ""),
+                "current_x": el.get("x"),
+                "current_y": el.get("y"),
+                "width": el.get("width", 80),
+                "height": el.get("height", 60)
+            }
+            elements_info.append(el_info)
+        
+        wires_info = []
+        for w in wires:
+            start_el = next((e for e in elements if e.get("id") == w.get("start", {}).get("elementId")), None)
+            end_el = next((e for e in elements if e.get("id") == w.get("end", {}).get("elementId")), None)
+            wires_info.append({
+                "from": f"{start_el.get('type')}" if start_el else "unknown",
+                "to": f"{end_el.get('type')}" if end_el else "unknown"
+            })
+        
+        user_prompt = f"""电路中的元件：
+{json.dumps(elements_info, ensure_ascii=False, indent=2)}
+
+电路连接关系：
+{json.dumps(wires_info, ensure_ascii=False, indent=2)}
+
+请设计合理的布局方案并输出MOVE命令："""
+
+        user_message = f"{system_prompt}\n\n{user_prompt}"
+        
+        def generate():
+            try:
+                for chunk in call_llm_stream(user_message, max_rounds_override=2):
+                    yield chunk
+            except Exception as e:
+                yield f"\n整理电路时出错: {str(e)}"
+        
+        return Response(generate(), mimetype='text/plain')
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/ai/generate-circuit', methods=['POST'])
+def ai_generate_circuit():
+    """
+    根据用户需求生成电路
+    """
+    try:
+        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
+            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        
+        data = request.json
+        user_requirement = data.get('requirement', '')
+        
+        if not user_requirement:
+            return jsonify({'status': 'error', 'message': '请提供电路需求描述'}), 400
+        
+        def generate():
+            try:
+                for chunk in call_llm_stream(user_requirement):
+                    yield chunk
+            except Exception as e:
+                yield f"\n生成电路时出错: {str(e)}"
+        
+        return Response(generate(), mimetype='text/plain')
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -146,6 +334,8 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.set_input(params['id'], params.get('value'))
     elif cmd == 'move_element':
         return circuit_manager.move_element(params['id'], params['x'], params['y'])
+    elif cmd == 'set_element_comment':
+        return circuit_manager.set_element_comment(params['id'], params.get('comment', ''))
     elif cmd == 'get_state':
         return circuit_manager.get_state()
     elif cmd == 'simulate':
@@ -248,6 +438,16 @@ def _parse_commands_payload(commands_str):
                             'id': _clean_token(parts[1]),
                             'x': float(_clean_token(parts[2])),
                             'y': float(_clean_token(parts[3]))
+                        }
+                    })
+            elif cmd == 'COMMENT':
+                if len(parts) >= 3:
+                    comment_text = ' '.join(parts[2:]).replace('\\n', '\n')
+                    commands.append({
+                        'command': 'set_element_comment',
+                        'params': {
+                            'id': _clean_token(parts[1]),
+                            'comment': comment_text
                         }
                     })
         except:
@@ -692,6 +892,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 9. SET <id_or_alias> <0|1> -- 将 INPUT 设置为指定电平（用于确定性测试）
 10. SIM -- 显式触发仿真
 11. SAMPLE [id_or_alias ...] -- 采样输出端口状态（默认采样全部 OUTPUT）
+12. COMMENT <id_or_alias> <text> -- 设置元件的注释（text 可以包含换行，使用 \n 表示换行）
 
 逻辑参考 (标准门实现):
 - NAND(A, B): NOT(AND(A, B))
@@ -871,7 +1072,11 @@ def call_llm_stream(user_message):
         return a == c and b == d and a != b
 
     try:
-        max_rounds = int(AI_CONFIG.get("agent_max_rounds", 12))
+        if max_rounds_override is not None:
+            max_rounds = int(max_rounds_override)
+            print(f"[DEBUG] 使用自定义轮数: {max_rounds}")
+        else:
+            max_rounds = int(AI_CONFIG.get("agent_max_rounds", 12))
         if max_rounds < 1:
             max_rounds = 1
         if max_rounds > 30:
@@ -1157,9 +1362,11 @@ def chat():
     try:
         data = request.json
         message = data.get('message', '')
+        max_rounds = data.get('max_rounds', None)  # 可选参数
+        print(f"[DEBUG] /api/chat 接收到的 max_rounds: {max_rounds}")
         
         def generate():
-            for chunk in call_llm_stream(message):
+            for chunk in call_llm_stream(message, max_rounds_override=max_rounds):
                 yield chunk
                 
         return Response(generate(), mimetype='text/plain')
@@ -1218,10 +1425,10 @@ def save_function():
         functions_data['functions'].append(new_function)
         
         _atomic_write_json(FUNCTIONS_DATA_FILE, functions_data)
-        print(f"函数已保存到: {FUNCTIONS_DATA_FILE}")
+#         print(f"函数已保存到: {FUNCTIONS_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Function saved successfully'})
     except Exception as e:
-        print(f"保存函数失败: {e}")
+#         print(f"保存函数失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/save-functions', methods=['POST', 'OPTIONS'])
@@ -1232,10 +1439,10 @@ def save_functions():
     try:
         data = request.json
         _atomic_write_json(FUNCTIONS_DATA_FILE, data)
-        print(f"函数列表已保存到: {FUNCTIONS_DATA_FILE}")
+#         print(f"函数列表已保存到: {FUNCTIONS_DATA_FILE}")
         return jsonify({'status': 'success', 'message': 'Functions saved successfully'})
     except Exception as e:
-        print(f"保存函数列表失败: {e}")
+#         print(f"保存函数列表失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/load-functions', methods=['GET', 'OPTIONS'])
@@ -1244,26 +1451,26 @@ def load_functions():
     if request.method == 'OPTIONS':
         return '', 200
     try:
-        print(f"尝试加载函数数据 from: {FUNCTIONS_DATA_FILE}")
+#         print(f"尝试加载函数数据 from: {FUNCTIONS_DATA_FILE}")
         if os.path.exists(FUNCTIONS_DATA_FILE):
             try:
                 with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
             except json.JSONDecodeError:
                 data = {'functions': []}
-            print(f"函数数据已加载，包含 {len(data.get('functions', []))} 个函数")
+#             print(f"函数数据已加载，包含 {len(data.get('functions', []))} 个函数")
             return jsonify(data)
         else:
             return jsonify({'functions': []})
     except Exception as e:
-        print(f"加载函数数据失败: {e}")
+#         print(f"加载函数数据失败: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"电路设计应用启动中...")
-    print(f"电路数据文件路径: {CIRCUIT_DATA_FILE}")
-    print(f"函数数据文件路径: {FUNCTIONS_DATA_FILE}")
-    print(f"打开软件: http://localhost:5000")
+#     print(f"电路设计应用启动中...")
+#     print(f"电路数据文件路径: {CIRCUIT_DATA_FILE}")
+#     print(f"函数数据文件路径: {FUNCTIONS_DATA_FILE}")
+#     print(f"打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None

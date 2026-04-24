@@ -23,6 +23,8 @@
             <button id="btn-grid"><span>网格</span><span>0</span></button>
             <button id="btn-undo"><span>撤销</span><span>Ctrl+Z</span></button>
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
+            <button id="btn-ai-comment"><span>AI注释</span><span>C</span></button>
+            <button id="btn-ai-layout"><span>AI整理</span><span>L</span></button>
         </div>
         <div class="status-bar" id="status-bar">就绪</div>
 
@@ -61,6 +63,24 @@
                     <button id="confirm-save-function" class="btn-confirm">保存</button>
                 </div>
             </div>
+        </div>
+
+        <!-- 注释弹窗 -->
+        <div id="comment-modal" class="modal">
+            <div class="modal-content">
+                <h3>编辑注释</h3>
+                <textarea id="comment-input" placeholder="请输入注释（支持多行）" rows="4"></textarea>
+                <div class="modal-buttons">
+                    <button id="cancel-comment" class="btn-cancel">取消</button>
+                    <button id="confirm-comment" class="btn-confirm">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI 加载遮罩 -->
+        <div id="ai-loading" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">AI 正在处理中...</div>
         </div>
     </div>
     <script type="module" src="{{ url_for('static', filename='scripts/app.js') }}"></script>
