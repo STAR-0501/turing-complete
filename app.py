@@ -1019,7 +1019,7 @@ def _call_llm_once(system_prompt, request_messages):
     finish_reason = str(choices[0].get("finish_reason") or "")
     return str(message.get("content") or ""), finish_reason
 
-def _call_llm_streaming(system_prompt, request_messages):
+def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
     protocol = _get_ai_protocol()
     base_url = str(AI_CONFIG['base_url']).rstrip('/')
     if protocol == "anthropic":
@@ -1046,10 +1046,14 @@ def _call_llm_streaming(system_prompt, request_messages):
         request_payload = {
             "model": AI_CONFIG["model"],
             "messages": [{"role": "system", "content": system_prompt}] + request_messages,
-            "temperature": 0.2,
             "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
             "stream": True
         }
+        if thinking_mode:
+            request_payload["reasoning_effort"] = "high"
+            request_payload["extra_body"] = {"thinking": {"type": "enabled"}}
+        else:
+            request_payload["temperature"] = 0.2
 
     connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
     read_timeout = float(AI_CONFIG.get("read_timeout", 180))
@@ -1084,7 +1088,7 @@ def _call_llm_streaming(system_prompt, request_messages):
         if text_part:
             yield text_part, finish_reason
 
-def call_llm_stream(user_message, max_rounds_override=None):
+def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
         return
@@ -1218,7 +1222,7 @@ def call_llm_stream(user_message, max_rounds_override=None):
                     return
 
             try:
-                for chunk, fr in _call_llm_streaming(system_prompt, request_messages):
+                for chunk, fr in _call_llm_streaming(system_prompt, request_messages, thinking_mode=thinking_mode):
                     if fr:
                         finish_reason = fr
                     if chunk:
@@ -1387,10 +1391,11 @@ def chat():
         data = request.json
         message = data.get('message', '')
         max_rounds = data.get('max_rounds', None)
-        logger.info("/api/chat 接收到的 max_rounds: %s", max_rounds)
+        thinking_mode = data.get('thinking_mode', False)
+        logger.info("/api/chat 接收到的 max_rounds=%s, thinking_mode=%s", max_rounds, thinking_mode)
         
         def generate():
-            for chunk in call_llm_stream(message, max_rounds_override=max_rounds):
+            for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode):
                 yield chunk
                 
         return Response(generate(), mimetype='text/plain')

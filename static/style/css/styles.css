@@ -289,6 +289,24 @@ body {
     background-color: rgba(0, 255, 255, 0.3);
 }
 
+.thinking-toggle {
+    font-size: 16px;
+    padding: 0 8px !important;
+    opacity: 0.5;
+    transition: opacity 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.thinking-toggle.active {
+    opacity: 1;
+    background-color: rgba(255, 200, 0, 0.25) !important;
+    border-color: rgba(255, 200, 0, 0.6) !important;
+    box-shadow: 0 0 8px rgba(255, 200, 0, 0.3);
+}
+
+.thinking-toggle:hover {
+    opacity: 0.8;
+}
+
 /* 隐藏聊天内容 */
 .collapsed .chat-messages,
 .collapsed .chat-input-area {

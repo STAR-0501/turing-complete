@@ -10,9 +10,12 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-chat');
 const toggleBtn = document.getElementById('toggle-chat');
 const chatHeader = document.querySelector('.chat-header');
+const thinkingToggle = document.getElementById('thinking-toggle');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
+
+let thinkingMode = false;
 
 // 初始化聊天窗口
 export function initChat() {
@@ -76,6 +79,15 @@ export function initChat() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
+
+    // 思考模式切换
+    if (thinkingToggle) {
+        thinkingToggle.addEventListener('click', () => {
+            thinkingMode = !thinkingMode;
+            thinkingToggle.classList.toggle('active', thinkingMode);
+            thinkingToggle.title = thinkingMode ? '深度思考模式已开启（DeepSeek深度推理）' : '开启DeepSeek思考模式（深度推理，耗时更长但结果更准确）';
+        });
+    }
 }
 
 // 发送消息到后端
@@ -152,7 +164,7 @@ async function sendMessage() {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
+            body: JSON.stringify({ message: text, thinking_mode: thinkingMode })
         });
 
         if (!response.ok) throw new Error('Network response was not ok');
