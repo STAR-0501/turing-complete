@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template, Response
+import glob
 import json
 import os
 import logging
@@ -6,6 +7,7 @@ import sys
 from ai_commands import CircuitManager
 import re
 import requests
+import tempfile
 import time
 import threading
 
@@ -19,6 +21,13 @@ AI_CONFIG = {
 # 关闭Flask的HTTP请求日志
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 app = Flask(__name__)
 
@@ -46,9 +55,9 @@ def init_circuit_file():
         try:
             with open(CIRCUIT_DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump({'elements': [], 'wires': []}, f, indent=2, ensure_ascii=False)
-            # print(f"已创建空的电路数据文件: {CIRCUIT_DATA_FILE}")
+            logger.info("已创建空的电路数据文件: %s", CIRCUIT_DATA_FILE)
         except Exception as e:
-            print(f"创建电路数据文件失败: {e}")
+            logger.error("创建电路数据文件失败: %s", e)
 
 # 初始化：如果文件不存在，创建一个空的函数数据文件
 def init_functions_file():
@@ -56,21 +65,37 @@ def init_functions_file():
         try:
             with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
-            # print(f"已创建空的函数数据文件: {FUNCTIONS_DATA_FILE}")
+            logger.info("已创建空的函数数据文件: %s", FUNCTIONS_DATA_FILE)
         except Exception as e:
-            print(f"创建函数数据文件失败: {e}")
+            logger.error("创建函数数据文件失败: %s", e)
 
 # 启动时初始化
 init_circuit_file()
 init_functions_file()
 
 def _atomic_write_json(path, data):
-    tmp_path = f"{path}.tmp.{int(time.time() * 1000)}"
-    with open(tmp_path, 'w', encoding='utf-8') as f:
+    for stale in glob.glob(f"{path}.tmp.*"):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    dir_name = os.path.dirname(path) or os.getcwd()
+    with tempfile.NamedTemporaryFile(
+        mode='w', encoding='utf-8', dir=dir_name, prefix=f".{os.path.basename(path)}.tmp.",
+        delete=False
+    ) as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp_path, path)
+        tmp_path = f.name
+    try:
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 @app.after_request
 def after_request(response):
@@ -92,10 +117,10 @@ def save_circuit():
     try:
         data = request.json
         _atomic_write_json(CIRCUIT_DATA_FILE, data)
-#         print(f"电路数据已保存到: {CIRCUIT_DATA_FILE}")
+        logger.info("电路数据已保存到: %s", CIRCUIT_DATA_FILE)
         return jsonify({'status': 'success', 'message': 'Circuit saved successfully'})
     except Exception as e:
-#         print(f"保存电路数据失败: {e}")
+        logger.error("保存电路数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/load-circuit', methods=['GET', 'OPTIONS'])
@@ -104,12 +129,11 @@ def load_circuit():
     if request.method == 'OPTIONS':
         return '', 200
     try:
-#         print(f"尝试加载电路数据 from: {CIRCUIT_DATA_FILE}")
         data = circuit_manager.get_state()
-#         print(f"电路数据已加载，包含 {len(data.get('elements', []))} 个元件")
+        logger.info("电路数据已加载，包含 %d 个元件", len(data.get('elements', [])))
         return jsonify(data)
     except Exception as e:
-#         print(f"加载电路数据失败: {e}")
+        logger.error("加载电路数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/ai/execute', methods=['POST'])
@@ -1060,7 +1084,7 @@ def _call_llm_streaming(system_prompt, request_messages):
         if text_part:
             yield text_part, finish_reason
 
-def call_llm_stream(user_message):
+def call_llm_stream(user_message, max_rounds_override=None):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
         return
@@ -1074,7 +1098,7 @@ def call_llm_stream(user_message):
     try:
         if max_rounds_override is not None:
             max_rounds = int(max_rounds_override)
-            print(f"[DEBUG] 使用自定义轮数: {max_rounds}")
+            logger.info("使用自定义轮数: %d", max_rounds)
         else:
             max_rounds = int(AI_CONFIG.get("agent_max_rounds", 12))
         if max_rounds < 1:
@@ -1362,8 +1386,8 @@ def chat():
     try:
         data = request.json
         message = data.get('message', '')
-        max_rounds = data.get('max_rounds', None)  # 可选参数
-        print(f"[DEBUG] /api/chat 接收到的 max_rounds: {max_rounds}")
+        max_rounds = data.get('max_rounds', None)
+        logger.info("/api/chat 接收到的 max_rounds: %s", max_rounds)
         
         def generate():
             for chunk in call_llm_stream(message, max_rounds_override=max_rounds):
@@ -1425,10 +1449,10 @@ def save_function():
         functions_data['functions'].append(new_function)
         
         _atomic_write_json(FUNCTIONS_DATA_FILE, functions_data)
-#         print(f"函数已保存到: {FUNCTIONS_DATA_FILE}")
+        logger.info("函数已保存到: %s", FUNCTIONS_DATA_FILE)
         return jsonify({'status': 'success', 'message': 'Function saved successfully'})
     except Exception as e:
-#         print(f"保存函数失败: {e}")
+        logger.error("保存函数失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/save-functions', methods=['POST', 'OPTIONS'])
@@ -1439,10 +1463,10 @@ def save_functions():
     try:
         data = request.json
         _atomic_write_json(FUNCTIONS_DATA_FILE, data)
-#         print(f"函数列表已保存到: {FUNCTIONS_DATA_FILE}")
+        logger.info("函数列表已保存到: %s", FUNCTIONS_DATA_FILE)
         return jsonify({'status': 'success', 'message': 'Functions saved successfully'})
     except Exception as e:
-#         print(f"保存函数列表失败: {e}")
+        logger.error("保存函数列表失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/load-functions', methods=['GET', 'OPTIONS'])
@@ -1451,26 +1475,26 @@ def load_functions():
     if request.method == 'OPTIONS':
         return '', 200
     try:
-#         print(f"尝试加载函数数据 from: {FUNCTIONS_DATA_FILE}")
         if os.path.exists(FUNCTIONS_DATA_FILE):
             try:
                 with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
             except json.JSONDecodeError:
+                logger.warning("函数数据文件损坏，使用空结构: %s", FUNCTIONS_DATA_FILE)
                 data = {'functions': []}
-#             print(f"函数数据已加载，包含 {len(data.get('functions', []))} 个函数")
+            logger.info("函数数据已加载，包含 %d 个函数", len(data.get('functions', [])))
             return jsonify(data)
         else:
             return jsonify({'functions': []})
     except Exception as e:
-#         print(f"加载函数数据失败: {e}")
+        logger.error("加载函数数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-#     print(f"电路设计应用启动中...")
-#     print(f"电路数据文件路径: {CIRCUIT_DATA_FILE}")
-#     print(f"函数数据文件路径: {FUNCTIONS_DATA_FILE}")
-#     print(f"打开软件: http://localhost:5000")
+    logger.info("电路设计应用启动中...")
+    logger.info("电路数据文件路径: %s", CIRCUIT_DATA_FILE)
+    logger.info("函数数据文件路径: %s", FUNCTIONS_DATA_FILE)
+    logger.info("打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None

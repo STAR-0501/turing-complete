@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import os
 import random
 import string
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
@@ -17,12 +19,28 @@ def generate_id():
 logger = logging.getLogger(__name__)
 
 def _atomic_write_json(path, data):
-    tmp_path = f"{path}.tmp.{generate_id()}"
-    with open(tmp_path, 'w', encoding='utf-8') as f:
+    for stale in glob.glob(f"{path}.tmp.*"):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    dir_name = os.path.dirname(path) or os.getcwd()
+    with tempfile.NamedTemporaryFile(
+        mode='w', encoding='utf-8', dir=dir_name, prefix=f".{os.path.basename(path)}.tmp.",
+        delete=False
+    ) as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp_path, path)
+        tmp_path = f.name
+    try:
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 @dataclass
 class SimulationContext:
@@ -37,6 +55,7 @@ class CircuitManager:
     def __init__(self, data_file, functions_file=None):
         self.data_file = data_file
         self.functions_file = functions_file
+        logger.debug("CircuitManager 初始化: data_file=%s, functions_file=%s", data_file, functions_file)
 
     def _load_functions(self):
         if self.functions_file and os.path.exists(self.functions_file):
@@ -98,6 +117,10 @@ class CircuitManager:
         start_el = next((e for e in elements if e.get("id") == start.get("elementId")), None)
         end_el = next((e for e in elements if e.get("id") == end.get("elementId")), None)
         if not start_el or not end_el:
+            if not start_el:
+                logger.debug("连线标准化: 找不到起始元件 %s", start.get("elementId"))
+            if not end_el:
+                logger.debug("连线标准化: 找不到目标元件 %s", end.get("elementId"))
             return None
 
         start_is_input = start.get("isInput")
@@ -129,6 +152,10 @@ class CircuitManager:
         from_el = next((e for e in elements if e.get("id") == from_data.get("elementId")), None)
         to_el = next((e for e in elements if e.get("id") == to_data.get("elementId")), None)
         if not from_el or not to_el:
+            if not from_el:
+                logger.debug("旧格式连线: 找不到起始元件 %s", from_data.get("elementId"))
+            if not to_el:
+                logger.debug("旧格式连线: 找不到目标元件 %s", to_data.get("elementId"))
             return None
 
         start = self._build_endpoint(from_el, from_data.get("portId"), False)
@@ -264,6 +291,10 @@ class CircuitManager:
 
     def remove_element(self, element_id):
         data = self._normalize_data(self._load_data())
+        found = any(e["id"] == element_id for e in data["elements"])
+        if not found:
+            logger.warning("尝试删除不存在的元件: %s", element_id)
+            return False
         data["elements"] = [e for e in data["elements"] if e["id"] != element_id]
         data["wires"] = [
             w for w in data["wires"]
@@ -542,7 +573,10 @@ class CircuitManager:
                 break
 
     def _calculate_function_element(self, function_element, parent_ctx: SimulationContext):
+        if function_element.get("name"):
+            logger.debug("计算函数元件 %s (深度 %d)", function_element.get("name"), parent_ctx.depth)
         if parent_ctx.depth >= 10:
+            logger.warning("函数深度达到上限 (10)，返回空输出: %s", function_element.get("id"))
             return []
         function_data = function_element.get("functionData") or {}
         func_elements = json.loads(json.dumps(function_data.get("elements") or []))
