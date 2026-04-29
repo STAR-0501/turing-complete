@@ -926,17 +926,17 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 
 规则:
 - 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
-- 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> CLEAR -> ADD <函数名> 复用。
-- 布局美观：每一轮都要美观地、不重叠地放置元件，必要时使用 MOVE 调整位置。硬性要求：
-  - 新增元件时，优先选择“网格化坐标”（例如 x 为 80 的倍数，y 为 60 的倍数），避免零散坐标导致挤在一起。
-  - 任意两个元件的中心点至少相距：x 方向 ≥ 90，y 方向 ≥ 70（不足则必须 MOVE 拉开）。
-  - 同一列元件的 y 方向要错开；同一行元件的 x 方向要错开；禁止把多个元件放在相同或几乎相同的 (x,y)。
-  - 推荐布局：输入在左（x≈80），逻辑门在中（x≈240/400/560 分层），输出在右（x≈720）；每层按 y=60,120,180... 排列。
-- 验证驱动：如果你不确定电路是否正确，可以使用 TOGGLE 切换输入并观察 elements 的 state 变化。
-- 更推荐：用 SET 做确定性输入，然后用 SAMPLE 查看 OUTPUT 结果来验证，再决定 done。
+- 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> SET+SAMPLE 验证 -> 通过后 CLEAR -> ADD <函数名> 复用。DEFINE_FUNC 后未经验证就 CLEAR 视为错误。
+- 每轮最多输出 30 条命令。如果目标需要超过 30 条命令，分多轮完成，每轮完成后先验证再继续。
+- 坐标规则：不要手动为每个元件算精确坐标，使用"基准坐标 + 相对偏移"策略。
+  - 输入：x 固定 80，y 从 60 开始递增 80（60, 140, 220, 300...）
+  - 门电路：x 固定 240，y 与对应输入的 y 对齐
+  - 输出：x 固定 560，y 与对应信号的 y 对齐
+  - 同一类元件的 y 间距固定为 80，确保不会重叠
+- 验证驱动：用 SET 做确定性输入，然后用 SAMPLE 查看 OUTPUT 结果来验证，再决定 done。
 - 强烈建议：给关键元件设置 alias（ADD 第 5 个参数）。alias 会持久化，后续所有 <id_or_alias> 都可以直接使用 alias。
 - 先想后做：在输出命令前，先明确目标、关键假设与下一步；如果目标不清晰或存在多种解释，在 <answer> 里说明并提出最小化的下一步验证/操作。
-- 简单优先：用最少的元件与最少的命令达成目标；不要为了“看起来更好”进行无关重搭或大规模重排，除非用户明确要求。
+- 简单优先：用最少的元件与最少的命令达成目标；不要为了"看起来更好"进行无关重搭或大规模重排，除非用户明确要求。
 - 手术式修改：只改为完成当前目标必须改的部分；不要顺手重构/重命名/清理无关线路；如果发现无关问题，在 <answer> 提醒但不要擅自处理。
 - 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <verify> 跑用例确认；验证失败则解释差异并继续整改。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
@@ -950,7 +950,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 
 你必须严格输出以下结构:
 <plan>
-1. 分析当前状态 2. 制定本轮操作 3. 预期逻辑行为
+不超过 80 字，只写"本轮做什么 + 坐标策略"。不需要解释逻辑门原理、不需要推导真值表、不需要讨论可不用的方案。
 </plan>
 <answer>
 给用户的简短说明
@@ -1088,9 +1088,78 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
         if text_part:
             yield text_part, finish_reason
 
+def _quick_classify(user_message):
+    """Quickly determine if user wants circuit work or just casual chat."""
+    compact_state = circuit_manager.get_state()
+    compact_json = json.dumps(_build_compact_state(compact_state), ensure_ascii=False, separators=(',', ':'))
+    sys_prompt = (
+        "你是一个电路设计助手。根据用户的输入和当前电路状态，判断用户是:\n"
+        "1. 需要构建/修改/验证电路 → 模式 circuit\n"
+        "2. 只是日常聊天、打招呼、提问（不需要改动画布） → 模式 chat\n\n"
+        f"当前电路: {compact_json}\n\n"
+        "仅输出一行JSON: {\"mode\": \"circuit\" 或 \"chat\"}"
+    )
+    messages = [{"role": "user", "content": user_message}]
+    try:
+        text, _ = _call_llm_once(sys_prompt, messages)
+    except requests.ConnectionError as e:
+        logger.warning("分类请求网络连接失败，默认走 circuit 模式: %s", e)
+        return "circuit"
+    except requests.Timeout as e:
+        logger.warning("分类请求超时，默认走 circuit 模式: %s", e)
+        return "circuit"
+    except requests.HTTPError as e:
+        logger.warning("分类请求 API 错误 (HTTP %s)，默认走 circuit 模式", e.response.status_code if e.response else "?")
+        return "circuit"
+    except Exception as e:
+        logger.warning("分类请求发生未知异常 (%s: %s)，默认走 circuit 模式", type(e).__name__, e)
+        return "circuit"
+
+    if not text or not text.strip():
+        logger.warning("分类请求返回空内容，默认走 circuit 模式")
+        return "circuit"
+
+    try:
+        text = text.strip()
+        json_start = text.index('{')
+        json_end = text.rindex('}') + 1
+        parsed = json.loads(text[json_start:json_end])
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.warning("分类响应 JSON 解析失败 (%s)，原始响应: %.100s", e, text.replace('\n', ' '))
+        if "聊天" in text or "打招呼" in text or circuit_manager.get_state().get("elements"):
+            return "circuit"
+        return "chat" if len(text) < 50 else "circuit"
+
+    mode = parsed.get("mode", "circuit")
+    if mode not in ("circuit", "chat"):
+        logger.warning("分类响应 mode 值异常: %s，默认走 circuit", mode)
+        return "circuit"
+    return mode
+
 def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
+        return
+
+    mode = _quick_classify(user_message)
+    logger.info("用户消息分类: %s", mode)
+
+    if mode == "chat":
+        compact_state = circuit_manager.get_state()
+        compact_json = json.dumps(_build_compact_state(compact_state), ensure_ascii=False, separators=(',', ':'))
+        sys_prompt = (
+            "你是一个电路设计助手。用中文友好、简洁地回答用户。"
+            "不需要输出任何指令或特殊格式。"
+            "如果用户问关于当前电路的问题，可以参考以下状态回答：\n"
+            f"{compact_json}"
+        )
+        request_messages = _get_chat_messages_with_memory(user_message)
+        text, fr = _call_llm_once(sys_prompt, request_messages)
+        response_text = text if text else "(无法获取回答)"
+        for line in response_text.splitlines():
+            yield line + "\n"
+        _append_chat_memory("assistant", response_text)
+        yield "\n"
         return
 
     def _is_abab_cycle(fingerprints):
@@ -1146,9 +1215,14 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             in_commands = False
             outside_buf = ""
             commands_buf = ""
+            commands_truncated = False
+            MAX_CMDS_PER_ROUND = 30
 
             def _execute_one_command(cmd_data):
-                nonlocal last_cmd_last_id, executed_command_count, executed_success_count, command_errors, command_results
+                nonlocal last_cmd_last_id, executed_command_count, executed_success_count, command_errors, command_results, commands_truncated
+                if executed_command_count >= MAX_CMDS_PER_ROUND:
+                    commands_truncated = True
+                    return
                 cmd = cmd_data.get("command")
                 params = dict(cmd_data.get("params") or {})
                 for k in ("id", "from_id", "to_id"):
@@ -1273,6 +1347,14 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}, ok={executed_success_count}, fail={len(command_errors)}\n"
             else:
                 yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}\n"
+
+            if commands_truncated:
+                yield f"[系统] 本轮命令数已达上限({MAX_CMDS_PER_ROUND})，剩余命令截断不执行，请在下轮继续。\n"
+                request_messages.append({
+                    "role": "user",
+                    "content": f"系统：本轮命令数已达上限({MAX_CMDS_PER_ROUND}条)，你的后续命令已被截断。请在下轮补充剩余命令。"
+                })
+                done_flag = False
 
             if execution_error:
                 if execution_error == last_execution_error:

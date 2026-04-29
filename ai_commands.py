@@ -273,12 +273,32 @@ class CircuitManager:
 
     def add_element(self, element_type, x, y, alias=None):
         data = self._load_data()
-        
+
+        # Overlap auto-correction: if new element overlaps an existing one, shift y down by 80
+        def _find_non_overlapping_y(desired_x, desired_y):
+            candidate_y = desired_y
+            max_attempts = 50
+            for _ in range(max_attempts):
+                overlap = False
+                for existing in data.get("elements", []):
+                    ex, ey = existing.get("x", 0), existing.get("y", 0)
+                    if abs(desired_x - ex) < 90 and abs(candidate_y - ey) < 70:
+                        overlap = True
+                        break
+                if not overlap:
+                    return candidate_y
+                candidate_y += 80
+            return desired_y
+
+        corrected_y = _find_non_overlapping_y(x, y)
+        if corrected_y != y:
+            logger.debug("元件 %s 坐标修正: (%d,%d) -> (%d,%d)", element_type, x, y, x, corrected_y)
+
         element = {
             "id": generate_id(),
             "type": element_type,
             "x": x,
-            "y": y,
+            "y": corrected_y,
             "state": False
         }
         if alias:
@@ -287,7 +307,9 @@ class CircuitManager:
 
         data["elements"].append(element)
         self._save_data(data)
-        return element
+        result = dict(element)
+        result["_adjusted_y"] = corrected_y != y
+        return result
 
     def remove_element(self, element_id):
         data = self._normalize_data(self._load_data())
