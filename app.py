@@ -1126,9 +1126,19 @@ def _quick_classify(user_message):
         parsed = json.loads(text[json_start:json_end])
     except (ValueError, json.JSONDecodeError) as e:
         logger.warning("分类响应 JSON 解析失败 (%s)，原始响应: %.100s", e, text.replace('\n', ' '))
-        if "聊天" in text or "打招呼" in text or circuit_manager.get_state().get("elements"):
+        safe = user_message.strip().lower()
+        circuit_keywords = ["add", "wire", "del", "move", "clear", "toggle", "set", "sim", "sample",
+                            "define_func", "comment", "and", "or", "not", "input", "output",
+                            "搭", "放", "做", "加", "连接", "删除", "移动", "清空", "验证",
+                            "电路", "门", "仿真", "测试", "乘法", "加法", "函数"]
+        has_circuit_intent = any(kw in safe for kw in circuit_keywords)
+        has_chat_intent = any(kw in safe for kw in ["你好", "嗨", "早上好", "晚上好", "谢谢", "再见",
+                                                      "你是谁", "能做什么", "hello", "hi"])
+        if has_circuit_intent:
             return "circuit"
-        return "chat" if len(text) < 50 else "circuit"
+        if has_chat_intent or len(safe) < 10:
+            return "chat"
+        return "chat"
 
     mode = parsed.get("mode", "circuit")
     if mode not in ("circuit", "chat"):
