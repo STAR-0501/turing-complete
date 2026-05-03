@@ -12,6 +12,13 @@ import time
 import threading
 
 # AI 配置 (请在此填入您的 API Key)
+# 可选的 agent 参数:
+#   agent_max_rounds: 自治循环最大轮数 (默认 100，无硬上限，最小 1)
+#   agent_max_cmds_per_round: 每轮最多执行命令数 (默认 200，无硬上限，最小 10)
+#   agent_no_progress_stop_rounds: 连续无变化多少轮后停止 (默认 30，无硬上限，最小 3)
+#   max_tokens: 每次 LLM 调用的输出长度上限 (默认 4000)
+#   connect_timeout: 连接超时秒数 (默认 10)
+#   read_timeout: 读取超时秒数 (默认 180)
 AI_CONFIG = {
     "api_key": "sk-38d03b2f9c8d44f886f9e146d179d933",
     "base_url": "https://api.deepseek.com", # 或者您的代理地址，例如 https://api.deepseek.com
@@ -637,6 +644,7 @@ def _build_compact_state(state):
             'id': e.get('id'),
             'type': e.get('type'),
             'alias': e.get('alias') or e.get('name'),
+            'name': e.get('name') if e.get('type') == 'FUNCTION' else None,
             'x': e.get('x'),
             'y': e.get('y'),
             'inputs': len(e.get('inputs', [])),
@@ -666,13 +674,16 @@ def _build_io_summary(state):
     elements = (state or {}).get("elements") or []
     inputs = []
     outputs = []
+    functions = []
     for e in elements:
         t = e.get("type")
         if t == "INPUT":
             inputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
         elif t == "OUTPUT":
             outputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
-    return {"inputs": inputs, "outputs": outputs}
+        elif t == "FUNCTION":
+            functions.append({"id": e.get("id"), "alias": e.get("alias"), "name": e.get("name"), "state": bool(e.get("state", False))})
+    return {"inputs": inputs, "outputs": outputs, "functions": functions}
 
 def _strip_commands_from_reply(text):
     if not isinstance(text, str):
@@ -905,7 +916,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
     return """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
 
 可用指令集 (每行一条):
-1. ADD <type> <x> <y> [alias]  -- 添加元件 (AND|OR|NOT|INPUT|OUTPUT 或自定义函数)
+1. ADD <type> <x> <y> [alias]  -- 添加元件。type=AND|OR|NOT|INPUT|OUTPUT 或自定义函数名（如 FullAdder、HalfAdder）。添加后元件以 type="FUNCTION" 形式出现在电路状态中。
 2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx> -- 连接导线
 3. MOVE <id_or_alias> <x> <y> -- 移动元件位置
 4. DEL <id_or_alias> -- 删除元件
@@ -941,6 +952,8 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 - 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <verify> 跑用例确认；验证失败则解释差异并继续整改。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
 - 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
+- 查看电路状态时注意：自定义函数元件在 IO 摘要中显示为 functions 列表，在完整电路状态中显示为 type="FUNCTION" 且 name 字段为函数名（如 "FullAdder"）。不要因为 IO 摘要中没有列出它们就以为添加失败。
+- 如果你添加了自定义函数元件（如 FullAdder），它们会在下一轮的状态中正常出现。只需检查完整电路状态中的 elements 列表即可确认。
 
 当前函数信息:
 """ + functions_str + """
@@ -1183,11 +1196,9 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             max_rounds = int(max_rounds_override)
             logger.info("使用自定义轮数: %d", max_rounds)
         else:
-            max_rounds = int(AI_CONFIG.get("agent_max_rounds", 12))
+            max_rounds = int(AI_CONFIG.get("agent_max_rounds", 100))
         if max_rounds < 1:
             max_rounds = 1
-        if max_rounds > 30:
-            max_rounds = 30
         request_messages = _get_chat_messages_with_memory(user_message)
         aggregated_commands = []
         final_answer_text = ""
@@ -1198,11 +1209,9 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
         cycle_rounds = 0
         last_execution_error = ""
         same_error_rounds = 0
-        no_progress_stop_rounds = int(AI_CONFIG.get("agent_no_progress_stop_rounds", 4))
+        no_progress_stop_rounds = int(AI_CONFIG.get("agent_no_progress_stop_rounds", 30))
         if no_progress_stop_rounds < 3:
             no_progress_stop_rounds = 3
-        if no_progress_stop_rounds > 10:
-            no_progress_stop_rounds = 10
         yield STREAM_THINKING_MARKER
         yield "已进入自治执行模式：计划→执行→检查→按需继续。\n"
 
@@ -1226,7 +1235,9 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             outside_buf = ""
             commands_buf = ""
             commands_truncated = False
-            MAX_CMDS_PER_ROUND = 30
+            MAX_CMDS_PER_ROUND = int(AI_CONFIG.get("agent_max_cmds_per_round", 200))
+            if MAX_CMDS_PER_ROUND < 10:
+                MAX_CMDS_PER_ROUND = 10
 
             def _execute_one_command(cmd_data):
                 nonlocal last_cmd_last_id, executed_command_count, executed_success_count, command_errors, command_results, commands_truncated
@@ -1318,6 +1329,12 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 execution_error = str(e)
                 yield f"[第{round_idx}轮调用异常] {execution_error}\n"
 
+            if finish_reason in {"length", "max_tokens"}:
+                request_messages.append({
+                    "role": "user",
+                    "content": "系统：你的上轮输出因达到 token 上限而被截断，部分命令遗漏。请在回复中保持精简，优先输出命令。如果电路未完成请继续。"
+                })
+
             request_messages.append({"role": "assistant", "content": full_content})
 
             plan_text = _extract_tag_text(full_content, "plan")
@@ -1372,7 +1389,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 else:
                     same_error_rounds = 1
                 last_execution_error = execution_error
-                if same_error_rounds >= 2:
+                if same_error_rounds >= 5:
                     final_answer_text = (
                         f"连续多轮执行命令失败（相同错误重复 {same_error_rounds} 次）：{execution_error}。"
                         "为避免无效重试，我已停止自治循环。你可以要求我改用更保守的命令或先清理/重建相关部分。"
@@ -1420,7 +1437,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             if done_flag:
                 break
 
-            if cycle_rounds >= 2:
+            if cycle_rounds >= 20:
                 final_answer_text = (
                     "检测到电路状态在少数几个状态之间循环变化（可能反复 TOGGLE 或反复增删无效）。"
                     "为避免无效调用，我已停止自治循环。你可以指定更明确的目标或允许我先重置关键输入再测试。"
@@ -1454,6 +1471,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                         "否则请输出下一步可执行命令。"
                     )
                 })
+
+            MAX_CONTEXT_LEN = 30
+            if len(request_messages) > MAX_CONTEXT_LEN:
+                request_messages = [request_messages[0]] + request_messages[-(MAX_CONTEXT_LEN - 1):]
 
         yield STREAM_ANSWER_MARKER
         final_output = final_answer_text.strip() if final_answer_text else "已完成处理。"
