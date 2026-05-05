@@ -261,50 +261,18 @@ def ai_generate_layout():
         
         current_state = circuit_manager.get_state()
         elements = current_state.get('elements', [])
-        wires = current_state.get('wires', [])
         
         if not elements:
             return jsonify({'status': 'success', 'positions': {}})
         
-        system_prompt = """请整理这个电路
-        要求：
-        1.尽可能保持正方形，不是一直向下或者向右；
-        2.尽可能体现这个电路的功能，让人一眼能看懂电路，符合人的阅读习惯；
-        3.如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入（或者输出）模块，那么最高位应当在最左边，最低为应当在最右边，不论是输入还是输出，都必须按这个要求排列，不能从上到下排。
-        """
+        user_message = """请整理这个电路的布局。
 
-        elements_info = []
-        for el in elements:
-            el_info = {
-                "id": el.get("id"),
-                "type": el.get("type"),
-                "alias": el.get("alias"),
-                "comment": el.get("comment", ""),
-                "current_x": el.get("x"),
-                "current_y": el.get("y"),
-                "width": el.get("width", 80),
-                "height": el.get("height", 60)
-            }
-            elements_info.append(el_info)
-        
-        wires_info = []
-        for w in wires:
-            start_el = next((e for e in elements if e.get("id") == w.get("start", {}).get("elementId")), None)
-            end_el = next((e for e in elements if e.get("id") == w.get("end", {}).get("elementId")), None)
-            wires_info.append({
-                "from": f"{start_el.get('type')}" if start_el else "unknown",
-                "to": f"{end_el.get('type')}" if end_el else "unknown"
-            })
-        
-        user_prompt = f"""电路中的元件：
-{json.dumps(elements_info, ensure_ascii=False, indent=2)}
+要求：
+1. 尽可能保持正方形，不是一直向下或者向右；
+2. 尽可能体现这个电路的功能，让人一眼能看懂电路，符合人的阅读习惯；
+3. 如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入（或者输出）模块，那么最高位应当在最左边，最低为应当在最右边，不论是输入还是输出，都必须按这个要求排列，不能从上到下排。
 
-电路连接关系：
-{json.dumps(wires_info, ensure_ascii=False, indent=2)}
-
-请设计合理的布局方案并输出MOVE命令："""
-
-        user_message = f"{system_prompt}\n\n{user_prompt}"
+请根据当前电路状态分析布局，输出 MOVE 命令来调整元件位置。"""
         
         def generate():
             try:

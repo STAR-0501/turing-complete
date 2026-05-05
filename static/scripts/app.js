@@ -353,6 +353,12 @@ async function init() {
                     redo();
                 }
                 break;
+            case 'c':
+                document.getElementById('btn-ai-comment').click();
+                break;
+            case 'l':
+                document.getElementById('btn-ai-layout').click();
+                break;
         }
     }
     
@@ -2163,6 +2169,17 @@ function clearCircuit() {
     render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
 }
 
+function showLoading(text) {
+    const el = document.getElementById('ai-loading');
+    el.querySelector('.loading-text').textContent = text;
+    el.style.display = 'flex';
+    return el;
+}
+
+function hideLoading(el) {
+    el.style.display = 'none';
+}
+
 /**
  * AI 自动为所有元件添加注释
  */
@@ -2172,61 +2189,23 @@ async function aiAutoComment() {
         return;
     }
     
-    // 显示加载遮罩
-    const loadingEl = document.getElementById('ai-loading');
-    const loadingText = loadingEl.querySelector('.loading-text');
-    loadingText.textContent = 'AI 正在生成注释...';
-    loadingEl.style.display = 'flex';
-    
+    const loadingEl = showLoading('AI 正在生成注释...');
     try {
-        // 构建提示词
-        const commentPrompt = `请为电路中的每个元件生成注释，说明它在电路中的作用。
-要求：
-1. 注释要简洁明了，不超过30个字
-2. 说明元件的具体功能
-3. 如果是门电路，说明它的逻辑功能
-4. 如果是输入/输出，说明它代表什么
-
-电路中的元件：
-${JSON.stringify(elements.map(el => ({
-    id: el.id,
-    type: el.type,
-    alias: el.alias,
-    functionName: el.name || null
-})), null, 2)}
-
-请直接输出 COMMENT 命令来添加注释，每行一个命令，例如：
-COMMENT input1 这是A输入
-COMMENT output1 这是求和输出
-只输出命令，不要其他解释内容。`;
-        
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: commentPrompt, max_rounds: 2 })
-        });
-        
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let aiOutput = '';
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            aiOutput += decoder.decode(value, { stream: true });
+        const response = await fetch('/api/ai/generate-comments', { method: 'POST' });
+        const result = await response.json();
+        if (result.status === 'success') {
+            await loadFromServer();
+            render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+            const count = Object.keys(result.comments || {}).length;
+            document.getElementById('status-bar').textContent = `AI 注释已完成 (${count} 个元件)`;
+        } else {
+            document.getElementById('status-bar').textContent = 'AI 注释失败：' + (result.message || '未知错误');
         }
-        
-        console.log('AI 注释输出:', aiOutput);
-        
-        await loadFromServer();
-        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
-        document.getElementById('status-bar').textContent = 'AI 注释已完成';
     } catch (e) {
         console.error('AI 注释失败:', e);
         document.getElementById('status-bar').textContent = 'AI 注释失败，请检查网络连接';
     } finally {
-        // 隐藏加载遮罩
-        loadingEl.style.display = 'none';
+        hideLoading(loadingEl);
     }
 }
 
@@ -2239,61 +2218,16 @@ async function aiAutoLayout() {
         return;
     }
     
-    // 显示加载遮罩
-    const loadingEl = document.getElementById('ai-loading');
-    const loadingText = loadingEl.querySelector('.loading-text');
-    loadingText.textContent = 'AI 正在整理电路...';
-    loadingEl.style.display = 'flex';
-    
+    const loadingEl = showLoading('AI 正在整理电路...');
     try {
-        // 构建提示词
-        const layoutPrompt = `请整理这个电路的布局。
-要求：
-1. 尽可能保持正方形，不是一直向下或者向右；
-2. 尽可能体现这个电路的功能，让人一眼能看懂电路，符合人的阅读习惯；
-3. 如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入或者输出模块，那么最高位应当在最左边，最低为应当在最右边
-
-电路中的元件：
-${JSON.stringify(elements.map(el => ({
-    id: el.id,
-    type: el.type,
-    alias: el.alias,
-    comment: el.comment || '',
-    current_x: el.x,
-    current_y: el.y,
-    width: el.width || 80,
-    height: el.height || 60
-})), null, 2)}
-
-电路连接关系：
-${JSON.stringify(wires.map(w => {
-    const startEl = elements.find(e => e.id === w.start?.elementId);
-    const endEl = elements.find(e => e.id === w.end?.elementId);
-    return {
-        from: startEl ? startEl.type : 'unknown',
-        to: endEl ? endEl.type : 'unknown'
-    };
-}), null, 2)}
-
-请直接输出 MOVE 命令来整理布局，每行一个命令，例如：MOVE and1 100 200`;
-        
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: layoutPrompt, max_rounds: 2 })
-        });
-        
+        const response = await fetch('/api/ai/generate-layout', { method: 'POST' });
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let aiOutput = '';
         
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            aiOutput += decoder.decode(value, { stream: true });
         }
-        
-        console.log('AI 整理输出:', aiOutput);
         
         await loadFromServer();
         render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
@@ -2302,8 +2236,7 @@ ${JSON.stringify(wires.map(w => {
         console.error('AI 整理失败:', e);
         document.getElementById('status-bar').textContent = 'AI 整理失败，请检查网络连接';
     } finally {
-        // 隐藏加载遮罩
-        loadingEl.style.display = 'none';
+        hideLoading(loadingEl);
     }
 }
 
