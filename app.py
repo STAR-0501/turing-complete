@@ -10,6 +10,7 @@ import requests
 import tempfile
 import time
 import threading
+import copy
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -373,6 +374,19 @@ def _parse_commands_payload(commands_str):
         line = re.sub(r'^\s*\d+[\.\)]\s*', '', line)
         if not line or line.startswith('#'):
             continue
+
+        # JSON tool call format: {"tool": "add_element", "params": {...}}
+        if line.startswith('{'):
+            try:
+                j = json.loads(line)
+                tool = j.get('tool')
+                params = j.get('params', {})
+                if tool and isinstance(params, dict):
+                    commands.append({'command': tool, 'params': params})
+                    continue
+            except json.JSONDecodeError:
+                pass
+
         parts = [_clean_token(p) for p in line.split() if _clean_token(p)]
         if not parts:
             continue
@@ -638,6 +652,52 @@ def _build_compact_state(state):
         'wires': compact_wires
     }
 
+def _compute_state_diff(old_state, new_state):
+    old_el = {e["id"]: e for e in (old_state or {}).get("elements", [])}
+    new_el = {e["id"]: e for e in (new_state or {}).get("elements", [])}
+
+    added = []
+    for eid, e in new_el.items():
+        if eid not in old_el:
+            added.append({"id": e["id"], "type": e["type"], "alias": e.get("alias"), "pos": [e.get("x"), e.get("y")]})
+
+    removed = [{"id": e["id"], "type": e["type"]} for eid, e in old_el.items() if eid not in new_el]
+
+    changed = []
+    for eid, e in new_el.items():
+        if eid in old_el:
+            o = old_el[eid]
+            if e.get("x") != o.get("x") or e.get("y") != o.get("y"):
+                changed.append({"id": eid, "change": "position", "from": [o.get("x"), o.get("y")], "to": [e.get("x"), e.get("y")]})
+            if e.get("state") != o.get("state"):
+                changed.append({"id": eid, "change": "state", "from": o.get("state"), "to": e.get("state")})
+            if e.get("comment") != o.get("comment"):
+                changed.append({"id": eid, "change": "comment", "from": o.get("comment"), "to": e.get("comment")})
+
+    old_wires = {}
+    for w in (old_state or {}).get("wires", []):
+        if "start" in w and "end" in w:
+            key = (w["start"].get("elementId"), w["end"].get("elementId"))
+            old_wires[key] = w.get("id")
+
+    new_wires = {}
+    for w in (new_state or {}).get("wires", []):
+        if "start" in w and "end" in w:
+            key = (w["start"].get("elementId"), w["end"].get("elementId"))
+            new_wires[key] = w.get("id")
+
+    wires_added = [{"id": wid, "from": conn[0], "to": conn[1]} for conn, wid in new_wires.items() if conn not in old_wires]
+    wires_removed = [{"id": wid, "from": conn[0], "to": conn[1]} for conn, wid in old_wires.items() if conn not in new_wires]
+
+    return {
+        "elements_added": added,
+        "elements_removed": removed,
+        "elements_changed": changed,
+        "wires_added": wires_added,
+        "wires_removed": wires_removed,
+        "io_summary": _build_io_summary(new_state)
+    }
+
 def _build_io_summary(state):
     elements = (state or {}).get("elements") or []
     inputs = []
@@ -812,46 +872,50 @@ def _run_verify_cases(verify_obj):
     max_cases = 16
     cases = cases[:max_cases]
 
-    report = {"total": len(cases), "passed": 0, "failed": 0, "cases": []}
-    for idx, case in enumerate(cases, start=1):
-        inputs = (case or {}).get("inputs") or []
-        expect = (case or {}).get("expect") or []
-        case_result = {"index": idx, "pass": True, "details": []}
-        try:
-            state = circuit_manager.get_state()
-            for inp in inputs:
-                ref = (inp or {}).get("id")
-                val = (inp or {}).get("value")
-                el_id = _resolve_ref_to_id(ref, state)
-                circuit_manager.set_input(el_id, bool(val))
-            circuit_manager.simulate()
-            out_sample = circuit_manager.sample_outputs(None)
-            out_map = {}
-            for o in (out_sample.get("outputs") or []):
-                out_map[o.get("id")] = bool(o.get("state", False))
-                if o.get("alias"):
-                    out_map[o.get("alias")] = bool(o.get("state", False))
-
-            for exp in expect:
-                ref = (exp or {}).get("id")
-                want = bool((exp or {}).get("value"))
-                got = out_map.get(ref)
-                if got is None:
+    snapshot = copy.deepcopy(circuit_manager.get_state())
+    try:
+        report = {"total": len(cases), "passed": 0, "failed": 0, "cases": []}
+        for idx, case in enumerate(cases, start=1):
+            inputs = (case or {}).get("inputs") or []
+            expect = (case or {}).get("expect") or []
+            case_result = {"index": idx, "pass": True, "details": []}
+            try:
+                state = circuit_manager.get_state()
+                for inp in inputs:
+                    ref = (inp or {}).get("id")
+                    val = (inp or {}).get("value")
                     el_id = _resolve_ref_to_id(ref, state)
-                    got = out_map.get(el_id)
-                ok = (got is not None and bool(got) == want)
-                if not ok:
-                    case_result["pass"] = False
-                case_result["details"].append({"id": ref, "want": want, "got": got, "ok": ok})
-        except Exception as e:
-            case_result["pass"] = False
-            case_result["details"].append({"error": str(e)})
+                    circuit_manager.set_input(el_id, bool(val))
+                circuit_manager.simulate()
+                out_sample = circuit_manager.sample_outputs(None)
+                out_map = {}
+                for o in (out_sample.get("outputs") or []):
+                    out_map[o.get("id")] = bool(o.get("state", False))
+                    if o.get("alias"):
+                        out_map[o.get("alias")] = bool(o.get("state", False))
 
-        if case_result["pass"]:
-            report["passed"] += 1
-        else:
-            report["failed"] += 1
-        report["cases"].append(case_result)
+                for exp in expect:
+                    ref = (exp or {}).get("id")
+                    want = bool((exp or {}).get("value"))
+                    got = out_map.get(ref)
+                    if got is None:
+                        el_id = _resolve_ref_to_id(ref, state)
+                        got = out_map.get(el_id)
+                    ok = (got is not None and bool(got) == want)
+                    if not ok:
+                        case_result["pass"] = False
+                    case_result["details"].append({"id": ref, "want": want, "got": got, "ok": ok})
+            except Exception as e:
+                case_result["pass"] = False
+                case_result["details"].append({"error": str(e)})
+
+            if case_result["pass"]:
+                report["passed"] += 1
+            else:
+                report["failed"] += 1
+            report["cases"].append(case_result)
+    finally:
+        circuit_manager._save_data(snapshot)
 
     return report
 
@@ -880,24 +944,186 @@ def _extract_answer_text(text):
     stripped = _strip_commands_from_reply(stripped)
     return stripped
 
-def _build_autonomous_system_prompt(compact_state_json, functions_str):
-    return """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
+TOOL_SCHEMAS = {
+    "add_element": {
+        "description": "添加元件到电路",
+        "params": {"type": "enum(AND|OR|NOT|INPUT|OUTPUT|FUNCTION)", "x": "number", "y": "number", "alias": "string(可选)"},
+        "text": "ADD <type> <x> <y> [alias]",
+        "json_example": '{"tool": "add_element", "params": {"type": "AND", "x": 240, "y": 60, "alias": "g1"}}'
+    },
+    "add_wire": {
+        "description": "连接两个元件的端口",
+        "params": {"from_ref": "string", "from_port_idx": "int", "to_ref": "string", "to_port_idx": "int"},
+        "text": "WIRE <from> <from_port> <to> <to_port>",
+        "json_example": '{"tool": "add_wire", "params": {"from_ref": "g1", "from_port_idx": 0, "to_ref": "g2", "to_port_idx": 1}}'
+    },
+    "move_element": {
+        "description": "移动元件位置",
+        "params": {"id": "string", "x": "number", "y": "number"},
+        "text": "MOVE <id> <x> <y>",
+        "json_example": '{"tool": "move_element", "params": {"id": "abc123", "x": 300, "y": 100}}'
+    },
+    "remove_element": {
+        "description": "删除元件及关联导线",
+        "params": {"id": "string"},
+        "text": "DEL <id>",
+        "json_example": '{"tool": "remove_element", "params": {"id": "abc123"}}'
+    },
+    "remove_wire": {
+        "description": "删除单根导线",
+        "params": {"id": "string"},
+        "text": "DELW <wire_id>",
+        "json_example": '{"tool": "remove_wire", "params": {"id": "wire123"}}'
+    },
+    "clear_circuit": {
+        "description": "清空画布所有元件和导线",
+        "params": {},
+        "text": "CLEAR",
+        "json_example": '{"tool": "clear_circuit", "params": {}}'
+    },
+    "toggle_input": {
+        "description": "切换 INPUT 元件的电平",
+        "params": {"id": "string"},
+        "text": "TOGGLE <id>",
+        "json_example": '{"tool": "toggle_input", "params": {"id": "input1"}}'
+    },
+    "set_input": {
+        "description": "将 INPUT 设置为指定电平",
+        "params": {"id": "string", "value": "bool"},
+        "text": "SET <id> <0|1>",
+        "json_example": '{"tool": "set_input", "params": {"id": "A", "value": 1}}'
+    },
+    "simulate": {
+        "description": "显式触发仿真传播",
+        "params": {},
+        "text": "SIM",
+        "json_example": '{"tool": "simulate", "params": {}}'
+    },
+    "sample_outputs": {
+        "description": "采样 OUTPUT 状态",
+        "params": {"ids": "string[](可选,默认全部)"},
+        "text": "SAMPLE [id ...]",
+        "json_example": '{"tool": "sample_outputs", "params": {"ids": ["SUM", "CARRY"]}}'
+    },
+    "define_function": {
+        "description": "将当前电路封装为自定义函数",
+        "params": {"name": "string"},
+        "text": "DEFINE_FUNC <name>",
+        "json_example": '{"tool": "define_function", "params": {"name": "HalfAdder"}}'
+    },
+    "set_element_comment": {
+        "description": "设置元件注释",
+        "params": {"id": "string", "comment": "string"},
+        "text": "COMMENT <id> <text>",
+        "json_example": '{"tool": "set_element_comment", "params": {"id": "and1", "comment": "A与B相与"}}'
+    }
+}
 
-可用指令集 (每行一条):
-1. ADD <type> <x> <y> [alias]  -- 添加元件。type=AND|OR|NOT|INPUT|OUTPUT 或自定义函数名（如 FullAdder、HalfAdder）。添加后元件以 type="FUNCTION" 形式出现在电路状态中。
-2. WIRE <from_id_or_alias> <from_port_idx> <to_id_or_alias> <to_port_idx> -- 连接导线
-3. MOVE <id_or_alias> <x> <y> -- 移动元件位置
-4. DEL <id_or_alias> -- 删除元件
-5. DELW <wire_id> -- 删除导线
-6. CLEAR -- 清空画布
-7. TOGGLE <id_or_alias> -- 切换输入状态 (用于测试)
-8. DEFINE_FUNC <name> -- 将当前电路封装为函数
-9. SET <id_or_alias> <0|1> -- 将 INPUT 设置为指定电平（用于确定性测试）
-10. SIM -- 显式触发仿真
-11. SAMPLE [id_or_alias ...] -- 采样输出端口状态（默认采样全部 OUTPUT）
-12. COMMENT <id_or_alias> <text> -- 设置元件的注释（text 可以包含换行，使用 \n 表示换行）
+def _format_feedback_text(feedback):
+    if not feedback:
+        return ""
+    lines = []
+    exe = feedback.get("execution", {})
+    if exe:
+        errors = exe.get("errors") or []
+        lines.append("--- 本轮操作反馈 ---")
+        lines.append(f"执行: {exe.get('success_count', 0)}/{exe.get('command_count', 0)} 条命令成功")
+        if errors:
+            lines.append(f"错误 ({len(errors)}):")
+            for err in errors[:5]:
+                c = err.get("command", "?")
+                m = err.get("error", "?")
+                lines.append(f"  - {c}: {m}")
 
-逻辑参考 (标准门实现):
+    diff = feedback.get("state_diff")
+    if diff:
+        added = diff.get("elements_added") or []
+        removed = diff.get("elements_removed") or []
+        changed = diff.get("elements_changed") or []
+        wires_added = diff.get("wires_added") or []
+        wires_removed = diff.get("wires_removed") or []
+
+        if added:
+            lines.append(f"新增元件 ({len(added)}):")
+            for el in added:
+                alias = f" ({el.get('alias')})" if el.get("alias") else ""
+                lines.append(f"  + {el.get('type')} {el.get('id')}{alias} @ {el.get('pos')}")
+        if removed:
+            lines.append(f"移除元件 ({len(removed)}):")
+            for el in removed:
+                lines.append(f"  - {el.get('type')} {el.get('id')}")
+        if changed:
+            for c in changed:
+                ct = c.get("change")
+                if ct == "position":
+                    lines.append(f"  ~ {c.get('id')} 位置: {c.get('from')} -> {c.get('to')}")
+                elif ct == "state":
+                    lines.append(f"  ~ {c.get('id')} 电平: {c.get('from')} -> {c.get('to')}")
+                elif ct == "comment":
+                    lines.append(f"  ~ {c.get('id')} 注释已更新")
+        if wires_added:
+            lines.append(f"新增连线 ({len(wires_added)}):")
+            for w in wires_added:
+                lines.append(f"  + {w.get('from')} -> {w.get('to')}")
+        if wires_removed:
+            lines.append(f"移除连线 ({len(wires_removed)}):")
+            for w in wires_removed:
+                lines.append(f"  - {w.get('from')} -> {w.get('to')}")
+
+        io = diff.get("io_summary") or {}
+        inputs = io.get("inputs") or []
+        outputs = io.get("outputs") or []
+        functions = io.get("functions") or []
+        io_parts = []
+        if inputs:
+            in_strs = []
+            for i in inputs:
+                label = i.get("alias") or i.get("id")
+                val = 1 if i.get("state") else 0
+                in_strs.append(f"{label}={val}")
+            io_parts.append("输入: " + ", ".join(in_strs))
+        if outputs:
+            out_strs = []
+            for o in outputs:
+                label = o.get("alias") or o.get("id")
+                val = 1 if o.get("state") else 0
+                out_strs.append(f"{label}={val}")
+            io_parts.append("输出: " + ", ".join(out_strs))
+        if functions:
+            fn_strs = [f.get('name') or f.get('id') for f in functions]
+            io_parts.append("函数: " + ", ".join(fn_strs))
+        if io_parts:
+            lines.append("当前 IO: " + " | ".join(io_parts))
+
+    verify = feedback.get("verify_results")
+    if verify:
+        lines.append("--- 测试验证结果 ---")
+        for v in (verify.get("cases") or []):
+            icon = "✅" if v.get("pass") else "❌"
+            lines.append(f"{icon} 测试 {v.get('index')}: {'通过' if v.get('pass') else '失败'}")
+            for d in v.get("details") or []:
+                if "error" in d:
+                    lines.append(f"  ⚠️ {d['error']}")
+                else:
+                    status = "✅" if d.get("ok") else "❌"
+                    lines.append(f"  {status} {d['id']}: 期望={d.get('want')}, 实际={d.get('got')}")
+
+    return "\n".join(lines)
+
+def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=None):
+    base = """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
+
+可用工具（支持两种格式：传统文本 或 JSON）：
+
+"""
+
+    for tool_name, schema in TOOL_SCHEMAS.items():
+        params_str = ", ".join(f"{k}({v})" for k, v in schema["params"].items())
+        base += f"{schema['text']}\n"
+        base += f"  JSON: {schema['json_example']}\n"
+        base += f"  说明: {schema['description']}\n\n"
+
+    base += """逻辑参考 (标准门实现):
 - NAND(A, B): NOT(AND(A, B))
 - NOR(A, B): NOT(OR(A, B))
 - XOR(A, B): OR(AND(A, NOT(B)), AND(NOT(A), B))
@@ -926,8 +1152,13 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 当前函数信息:
 """ + functions_str + """
 
-当前电路状态 (含实时逻辑电平 state):
-""" + compact_state_json + """
+"""
+    if feedback:
+        base += _format_feedback_text(feedback)
+    else:
+        base += "当前电路状态 (含实时逻辑电平 state):\n" + compact_state_json
+
+    base += """
 
 你必须严格输出以下结构:
 <plan>
@@ -937,7 +1168,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 给用户的简短说明
 </answer>
 <commands>
-命令列表
+命令列表（每行一条，支持传统文本格式或 JSON 格式）
 </commands>
 <verify>
 可选：用 JSON 描述测试用例。示例：
@@ -946,6 +1177,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str):
 <done>true 或 false</done>
 
 当你确认电路逻辑正确（通过 state 验证）且布局合理时，done 设为 true。"""
+    return base
 
 def _call_llm_once(system_prompt, request_messages):
     protocol = _get_ai_protocol()
@@ -1183,6 +1415,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
         yield STREAM_THINKING_MARKER
         yield "已进入自治执行模式：计划→执行→检查→按需继续。\n"
 
+        previous_feedback = None
+
         for round_idx in range(1, max_rounds + 1):
             current_state = circuit_manager.get_state()
             compact_state = _build_compact_state(current_state)
@@ -1190,7 +1424,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             functions_data = circuit_manager._load_functions()
             available_functions = [f.get('name') for f in functions_data] if functions_data else []
             functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
-            system_prompt = _build_autonomous_system_prompt(compact_state_json, functions_str)
+            system_prompt = _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=previous_feedback)
 
             full_content = ""
             last_cmd_last_id = None
@@ -1401,6 +1635,18 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     request_messages.append({"role": "user", "content": f"系统验证报告：{report_text}"})
                     if verify_report.get("failed", 0) > 0:
                         done_flag = False
+
+            # 构建下一轮的反馈（state_diff + 执行摘要 + 验证结果）
+            state_diff = _compute_state_diff(current_state, after_state) if round_idx > 1 else None
+            previous_feedback = {
+                "execution": {
+                    "command_count": executed_command_count,
+                    "success_count": executed_success_count,
+                    "errors": command_errors[:5]
+                },
+                "state_diff": state_diff,
+                "verify_results": verify_report
+            }
 
             if done_flag:
                 break
