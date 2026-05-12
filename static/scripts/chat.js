@@ -14,6 +14,7 @@ const thinkingToggle = document.getElementById('thinking-toggle');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
+const ROUND_MARKER = '__TC_ROUND__';
 
 let thinkingMode = false;
 
@@ -100,7 +101,7 @@ async function sendMessage() {
     chatInput.value = '';
 
     // 创建 AI 消息容器
-    const aiMsgDiv = addMessage('', 'ai');
+    let aiMsgDiv = addMessage('', 'ai');
     let fullContent = '';
     let lastRenderTime = 0;
     const renderInterval = 50;
@@ -111,52 +112,102 @@ async function sendMessage() {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
-    const splitThinkingAndAnswer = (raw) => {
-        const cleaned = raw
-            .replace(/<commands>[\s\S]*?<\/commands>/g, '')
-            .replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
-        const thinkIdx = cleaned.indexOf(THINKING_MARKER);
-        const answerIdx = cleaned.indexOf(ANSWER_MARKER);
-        let thinking = '';
-        let answer = '';
-        if (thinkIdx === -1 && answerIdx === -1) {
-            answer = cleaned.trim();
-            return { thinking, answer };
-        }
-        if (thinkIdx !== -1) {
-            const fromThink = cleaned.slice(thinkIdx + THINKING_MARKER.length);
-            const answerPosInThink = fromThink.indexOf(ANSWER_MARKER);
-            if (answerPosInThink === -1) {
-                thinking = fromThink.trim();
-            } else {
-                thinking = fromThink.slice(0, answerPosInThink).trim();
-                answer = fromThink.slice(answerPosInThink + ANSWER_MARKER.length).trim();
+    const parseSections = (raw) => {
+        // Extract LAST occurrence of each tag (to show the latest round's content)
+        const extractLastTag = (text, tag) => {
+            const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'gi');
+            let match;
+            let lastMatch = '';
+            while ((match = regex.exec(text)) !== null) {
+                lastMatch = match[1].trim();
             }
-            return { thinking, answer };
+            return lastMatch;
+        };
+        // Extract new 5-mode sections - use LAST occurrence for multi-round display
+        let think = extractLastTag(raw, 'think');
+        let plan = extractLastTag(raw, 'plan');
+        let build = extractLastTag(raw, 'build');
+        let observe = extractLastTag(raw, 'observe');
+        let sum = extractLastTag(raw, 'sum');
+        // Fallback to old formats for backward compat
+        if (!build) build = extractLastTag(raw, 'commands');
+        if (!observe) observe = extractLastTag(raw, 'verify');
+        let answer = extractLastTag(raw, 'answer');
+
+        // If no <answer> tag found, fall back to stripped answer text
+        if (!answer) {
+            answer = raw
+                .replace(/<think>[\s\S]*?<\/think>/gi, '')
+                .replace(/<plan>[\s\S]*?<\/plan>/gi, '')
+                .replace(/<build>[\s\S]*?<\/build>/gi, '')
+                .replace(/<observe>[\s\S]*?<\/observe>/gi, '')
+                .replace(/<sum>[\s\S]*?<\/sum>/gi, '')
+                .replace(/<answer>[\s\S]*?<\/answer>/gi, '')
+                .replace(/<commands>[\s\S]*?<\/commands>/gi, '')
+                .replace(/<verify>[\s\S]*?<\/verify>/gi, '')
+                .replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '')
+                .trim();
         }
-        answer = cleaned.slice(answerIdx + ANSWER_MARKER.length).trim();
-        return { thinking, answer };
+
+        return { think, plan, build, observe, sum, answer };
     };
 
     const renderContent = () => {
-        const { thinking, answer } = splitThinkingAndAnswer(fullContent);
-        if (!thinking && !answer) {
+        const sections = parseSections(fullContent);
+        const hasContent = sections.think || sections.plan || sections.build || sections.observe || sections.sum || sections.answer;
+        if (!hasContent) {
             aiMsgDiv.textContent = '正在思考...';
             chatMessages.scrollTop = chatMessages.scrollHeight;
             return;
         }
-        const sections = [];
-        if (thinking) {
-            sections.push(
-                `<div style="margin-bottom:8px;"><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">思考过程</div><div style="white-space:pre-wrap;">${escapeHtml(thinking)}</div></div>`
+        const html = [];
+        if (sections.think) {
+            html.push(
+                `<details open style="margin-bottom:6px;font-size:12px;">` +
+                `<summary style="cursor:pointer;opacity:0.7;font-size:11px;">🤔 思考分析</summary>` +
+                `<div style="white-space:pre-wrap;margin-top:4px;padding:4px 8px;background:rgba(255,255,200,0.15);border-radius:4px;">${escapeHtml(sections.think)}</div>` +
+                `</details>`
             );
         }
-        if (answer) {
-            sections.push(
-                `<div><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">正式输出</div><div style="white-space:pre-wrap;">${escapeHtml(answer)}</div></div>`
+        if (sections.plan) {
+            html.push(
+                `<details style="margin-bottom:6px;font-size:12px;">` +
+                `<summary style="cursor:pointer;opacity:0.7;font-size:11px;">📋 计划</summary>` +
+                `<div style="white-space:pre-wrap;margin-top:4px;padding:4px 8px;background:rgba(200,255,200,0.15);border-radius:4px;">${escapeHtml(sections.plan)}</div>` +
+                `</details>`
             );
         }
-        aiMsgDiv.innerHTML = sections.join('');
+        if (sections.build) {
+            html.push(
+                `<details style="margin-bottom:6px;font-size:12px;">` +
+                `<summary style="cursor:pointer;opacity:0.7;font-size:11px;">🔧 构建命令</summary>` +
+                `<div style="white-space:pre-wrap;margin-top:4px;padding:4px 8px;background:rgba(200,200,255,0.15);border-radius:4px;font-family:monospace;font-size:11px;">${escapeHtml(sections.build)}</div>` +
+                `</details>`
+            );
+        }
+        if (sections.observe) {
+            html.push(
+                `<details style="margin-bottom:6px;font-size:12px;">` +
+                `<summary style="cursor:pointer;opacity:0.7;font-size:11px;">🔍 观察/验证</summary>` +
+                `<div style="white-space:pre-wrap;margin-top:4px;padding:4px 8px;background:rgba(255,200,255,0.15);border-radius:4px;">${escapeHtml(sections.observe)}</div>` +
+                `</details>`
+            );
+        }
+        if (sections.sum) {
+            html.push(
+                `<details style="margin-bottom:6px;font-size:12px;">` +
+                `<summary style="cursor:pointer;opacity:0.7;font-size:11px;">📝 总结</summary>` +
+                `<div style="white-space:pre-wrap;margin-top:4px;padding:4px 8px;background:rgba(200,255,255,0.15);border-radius:4px;">${escapeHtml(sections.sum)}</div>` +
+                `</details>`
+            );
+        }
+        if (sections.answer) {
+            html.push(
+                `<div><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">💬 输出</div>` +
+                `<div style="white-space:pre-wrap;">${escapeHtml(sections.answer)}</div></div>`
+            );
+        }
+        aiMsgDiv.innerHTML = html.join('');
         chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
@@ -178,6 +229,24 @@ async function sendMessage() {
             
             const chunk = decoder.decode(value, { stream: true });
             
+            // Detect round boundaries: finalize current div, create new one per round
+            if (chunk.includes(ROUND_MARKER)) {
+                renderContent();
+                aiMsgDiv = addMessage('', 'ai');
+                fullContent = '';
+                // Extract round number for display
+                const rm = chunk.match(/__TC_ROUND__(\d+)/);
+                if (rm) {
+                    const label = document.createElement('div');
+                    label.className = 'message system';
+                    label.style.fontSize = '10px';
+                    label.style.opacity = '0.6';
+                    label.textContent = `--- 第 ${rm[1]} 轮 ---`;
+                    chatMessages.appendChild(label);
+                }
+                continue;
+            }
+            
             if (chunk.includes(STATE_CHANGED_MARKER)) {
                 loadFromServer();
             }
@@ -191,9 +260,12 @@ async function sendMessage() {
         }
         renderContent();
 
-        // 检查是否执行了指令（提取标签内容并检查是否为空列表）
-        const match = fullContent.match(/<commands>([\s\S]*?)<\/commands>/);
-        if (match && match[1].trim() !== '[]') {
+        // 检查是否执行了指令（检查 <build> 或 <commands> 标签）
+        const buildMatch = fullContent.match(/<build>([\s\S]*?)<\/build>/i);
+        const cmdMatch = fullContent.match(/<commands>([\s\S]*?)<\/commands>/);
+        const hasBuild = buildMatch && buildMatch[1].trim() && buildMatch[1].trim() !== '[]';
+        const hasCmd = cmdMatch && cmdMatch[1].trim() && cmdMatch[1].trim() !== '[]';
+        if (hasBuild || hasCmd) {
             // 立即触发状态加载和渲染
             await loadFromServer();
 

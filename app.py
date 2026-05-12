@@ -44,6 +44,7 @@ CHAT_MESSAGE_MAX_CHARS = 1500
 STREAM_THINKING_MARKER = "__TC_THINKING__"
 STREAM_ANSWER_MARKER = "__TC_ANSWER__"
 STREAM_STATE_CHANGED_MARKER = "__TC_STATE_CHANGED__"
+ROUND_MARKER = "__TC_ROUND__"
 chat_memory = []
 chat_memory_lock = threading.Lock()
 
@@ -53,6 +54,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CIRCUIT_DATA_FILE = os.path.join(BASE_DIR, 'circuit_data.json')
 # 存储函数数据的文件
 FUNCTIONS_DATA_FILE = os.path.join(BASE_DIR, 'functions_data.json')
+# AI 模式持久化文件
+PLAN_FILE = os.path.join(BASE_DIR, 'plan.md')
+SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
+# 日志文件夹
+LOG_DIR = os.path.join(BASE_DIR, 'log')
 
 # 初始化电路管理器
 circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, FUNCTIONS_DATA_FILE)
@@ -77,9 +83,95 @@ def init_functions_file():
         except Exception as e:
             logger.error("创建函数数据文件失败: %s", e)
 
+# 初始化 AI 计划文件
+def init_plan_file():
+    if not os.path.exists(PLAN_FILE):
+        try:
+            with open(PLAN_FILE, 'w', encoding='utf-8') as f:
+                f.write("# AI Circuit Building Plan\n\n## Objective\n\n\n## Tasks\n\n")
+            logger.info("已创建 AI 计划文件: %s", PLAN_FILE)
+        except Exception as e:
+            logger.error("创建计划文件失败: %s", e)
+
+def init_summary_file():
+    if not os.path.exists(SUMMARY_FILE):
+        try:
+            with open(SUMMARY_FILE, 'w', encoding='utf-8') as f:
+                f.write("# AI Session Summary\n\n## State\n\n\n## Progress\n\n\n## Issues\n\n")
+            logger.info("已创建 AI 摘要文件: %s", SUMMARY_FILE)
+        except Exception as e:
+            logger.error("创建摘要文件失败: %s", e)
+
+def _atomic_write_md(path, content):
+    """Atomic write for markdown files (plan.md / summary.md)."""
+    dir_name = os.path.dirname(path) or os.getcwd()
+    for stale in glob.glob(f"{path}.tmp.*"):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    with tempfile.NamedTemporaryFile(
+        mode='w', encoding='utf-8', dir=dir_name, prefix=f".{os.path.basename(path)}.tmp.",
+        delete=False
+    ) as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+        tmp_path = f.name
+    try:
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+def _load_md_file(path):
+    """Load a markdown file, return empty string if missing."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except (FileNotFoundError, OSError):
+        return ""
+
+# ========== 对话日志系统 ==========
+
+def _init_log_dir():
+    """Ensure log/ directory exists."""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+    except Exception as e:
+        logger.error("创建日志目录失败: %s", e)
+
+def _log_conversation(entry_type, content, session_id=None, round_num=None):
+    """Append a JSONL log entry to the daily log file.
+    
+    entry_type: one of 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary'
+    """
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        today = time.strftime('%Y%m%d')
+        log_file = os.path.join(LOG_DIR, f'conversation_{today}.jsonl')
+        entry = {
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "type": entry_type,
+            "content": content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+        }
+        if session_id:
+            entry["session"] = session_id
+        if round_num is not None:
+            entry["round"] = round_num
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    except Exception as e:
+        logger.error("写入日志失败: %s", e)
+
 # 启动时初始化
 init_circuit_file()
 init_functions_file()
+init_plan_file()
+init_summary_file()
 
 def _atomic_write_json(path, data):
     for stale in glob.glob(f"{path}.tmp.*"):
@@ -716,7 +808,10 @@ def _build_io_summary(state):
 def _strip_commands_from_reply(text):
     if not isinstance(text, str):
         return ""
-    return re.sub(r'<commands>[\s\S]*?(</commands>|$)', '', text, flags=re.DOTALL).strip()
+    text = re.sub(r'<commands>[\s\S]*?(</commands>|$)', '', text, flags=re.DOTALL)
+    text = re.sub(r'<(think|plan|build|observe|sum)>[\s\S]*?(</\1>|$)', '', text, flags=re.DOTALL)
+    text = text.replace(ROUND_MARKER, '').replace('---\n', '')
+    return text.strip()
 
 def _normalize_memory_text(text):
     if not isinstance(text, str):
@@ -836,6 +931,19 @@ def _extract_verify_payload(text):
         return json.loads(payload)
     except:
         return None
+
+def _extract_verify_payload_from_text(text):
+    """Parse observe/verify content (the text inside <observe> tags) as JSON test cases."""
+    if not text or not text.strip():
+        return None
+    # Try to find JSON in the text (it might have surrounding text)
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except:
+            return None
+    return None
 
 def _resolve_ref_to_id(value, state):
     if value is None:
@@ -1110,8 +1218,10 @@ def _format_feedback_text(feedback):
 
     return "\n".join(lines)
 
-def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=None):
-    base = """你是一个电路模拟器自治执行助手。你不仅要生成指令，还要在每轮执行后检查结果并决定是否继续整改。
+def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=None,
+                                     plan_content="", summary_content=""):
+    base = """你是一个电路模拟器自治执行助手。你以 5 阶段循环工作：Think→Plan→Build→Observe→Sum。
+每轮都必须依次输出这 5 个阶段的内容，系统会分别处理每个阶段。
 
 可用工具（支持两种格式：传统文本 或 JSON）：
 
@@ -1143,7 +1253,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
 - 先想后做：在输出命令前，先明确目标、关键假设与下一步；如果目标不清晰或存在多种解释，在 <answer> 里说明并提出最小化的下一步验证/操作。
 - 简单优先：用最少的元件与最少的命令达成目标；不要为了"看起来更好"进行无关重搭或大规模重排，除非用户明确要求。
 - 手术式修改：只改为完成当前目标必须改的部分；不要顺手重构/重命名/清理无关线路；如果发现无关问题，在 <answer> 提醒但不要擅自处理。
-- 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <verify> 跑用例确认；验证失败则解释差异并继续整改。
+- 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <observe> 跑用例确认；验证失败则解释差异并继续整改。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
 - 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
 - 查看电路状态时注意：自定义函数元件在 IO 摘要中显示为 functions 列表，在完整电路状态中显示为 type="FUNCTION" 且 name 字段为函数名（如 "FullAdder"）。不要因为 IO 摘要中没有列出它们就以为添加失败。
@@ -1158,25 +1268,62 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
     else:
         base += "当前电路状态 (含实时逻辑电平 state):\n" + compact_state_json
 
+    # 注入 plan.md 和 summary.md 内容（如果存在）
+    if plan_content:
+        base += "\n\n--- 当前计划 (plan.md) ---\n" + plan_content
+    if summary_content:
+        base += "\n\n--- 历史摘要 (summary.md) ---\n" + summary_content
+
     base += """
 
-你必须严格输出以下结构:
+你必须严格按以下 5 阶段结构输出。每轮都必须包含所有 5 个阶段：
+
+<think>
+综合分析：用户需求、计划文件(plan.md)中的TODO、摘要文件(summary.md)的历史进展、
+上一轮观察结果（如有），以及当前电路状态。
+明确本轮要解决什么、关键假设、可能的方案对比。不超过 200 字。
+</think>
 <plan>
-不超过 80 字，只写"本轮做什么 + 坐标策略"。不需要解释逻辑门原理、不需要推导真值表、不需要讨论可不用的方案。
+根据 think 的分析结果，创建或更新 TODO 列表。
+格式为 Markdown 任务列表，例如：
+# Plan
+## Objective
+[本轮目标]
+
+## Tasks
+- [ ] 步骤 1
+- [ ] 步骤 2
+- [x] 已完成步骤
+
+注意：这是会被保存到 plan.md 文件的内容，请包含完整的 TODO 结构。
 </plan>
+<build>
+要执行的电路命令列表（每行一条，支持传统文本格式或 JSON 格式）。
+如果本轮不需要构建，输出空内容。
+</build>
+<observe>
+可选：用 JSON 描述测试用例，系统会自动执行并返回结果。
+示例：{"cases":[{"inputs":[{"id":"A","value":0},{"id":"B","value":1}],"expect":[{"id":"SUM","value":1},{"id":"CARRY","value":0}]}]}
+如果不需验证，输出空内容。
+</observe>
+<sum>
+将本轮的思考成果、构建结果、观察结果，以及当前电路状态，压缩为简洁的文字总结。
+格式为 Markdown，包含：当前状态摘要、进展、遇到的问题。
+这是会被保存到 summary.md 文件的内容，请包含足够上下文以便后续轮次快速恢复。
+</sum>
 <answer>
-给用户的简短说明
+给用户的简短中文说明（进展、问题、下一步）
 </answer>
-<commands>
-命令列表（每行一条，支持传统文本格式或 JSON 格式）
-</commands>
-<verify>
-可选：用 JSON 描述测试用例。示例：
-{"cases":[{"inputs":[{"id":"A","value":0},{"id":"B","value":1}],"expect":[{"id":"SUM","value":1},{"id":"CARRY","value":0}]}]}
-</verify>
 <done>true 或 false</done>
 
-当你确认电路逻辑正确（通过 state 验证）且布局合理时，done 设为 true。"""
+阶段说明:
+- Think: 综合分析，不产生文件
+- Plan: 输出结果会保存到 plan.md（覆盖之前内容）
+- Build: 命令会被立即执行，结果在下一轮反馈
+- Observe: 测试用例会被自动运行，结果在下一轮反馈
+- Sum: 输出结果会保存到 summary.md（覆盖之前内容）
+
+当你确认电路逻辑正确（通过 state 验证）且所有 TODO 完成时，done 设为 true。"""
     return base
 
 def _call_llm_once(system_prompt, request_messages):
@@ -1413,9 +1560,16 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
         if no_progress_stop_rounds < 3:
             no_progress_stop_rounds = 3
         yield STREAM_THINKING_MARKER
-        yield "已进入自治执行模式：计划→执行→检查→按需继续。\n"
+        yield "已进入自治执行模式：思考→计划→构建→观察→总结。\n"
 
         previous_feedback = None
+
+        # 加载持久化文件（plan.md、summary.md），实现跨会话连续性
+        plan_content = _load_md_file(PLAN_FILE)
+        summary_content = _load_md_file(SUMMARY_FILE)
+        # 用于收集每轮的 plan/summary 内容
+        plan_text_accumulator = ""
+        sum_text_accumulator = ""
 
         for round_idx in range(1, max_rounds + 1):
             current_state = circuit_manager.get_state()
@@ -1424,7 +1578,16 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             functions_data = circuit_manager._load_functions()
             available_functions = [f.get('name') for f in functions_data] if functions_data else []
             functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
-            system_prompt = _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=previous_feedback)
+            system_prompt = _build_autonomous_system_prompt(
+                compact_state_json, functions_str,
+                feedback=previous_feedback,
+                plan_content=plan_content,
+                summary_content=summary_content
+            )
+            # 记录本轮 LLM 请求
+            _log_conversation("llm_request",
+                f"[Round {round_idx}] System prompt ({len(system_prompt)} chars)\nUser messages: {len(request_messages)} msgs",
+                round_num=round_idx)
 
             full_content = ""
             last_cmd_last_id = None
@@ -1433,9 +1596,6 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             command_errors = []
             command_results = []
             execution_error = ""
-            in_commands = False
-            outside_buf = ""
-            commands_buf = ""
             commands_truncated = False
             MAX_CMDS_PER_ROUND = int(AI_CONFIG.get("agent_max_cmds_per_round", 200))
             if MAX_CMDS_PER_ROUND < 10:
@@ -1457,6 +1617,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 executed_success_count += int(summary.get("executed_success") or 0)
                 command_errors.extend(list(summary.get("errors") or []))
                 command_results.extend(list(summary.get("results") or []))
+                if cmd not in ("simulate",):
+                    _log_conversation("command",
+                        f"{cmd} {json.dumps(params, ensure_ascii=False)} -> ok={summary.get('executed_success', 0)}",
+                        round_num=round_idx)
                 if cmd == "add_element":
                     for r in (summary.get("results") or []):
                         if isinstance(r, dict) and r.get("command") == "add_element":
@@ -1467,57 +1631,20 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 if int(summary.get("executed_success") or 0) > 0 and cmd not in ("sample_outputs", "simulate"):
                     yield STREAM_STATE_CHANGED_MARKER
 
-            def _feed_stream_text(text):
-                nonlocal in_commands, outside_buf, commands_buf
-                remaining = text or ""
-                while remaining:
-                    if not in_commands:
-                        outside_buf += remaining
-                        idx = outside_buf.lower().find("<commands>")
-                        if idx == -1:
-                            if len(outside_buf) > 200:
-                                outside_buf = outside_buf[-200:]
-                            return
-                        after = outside_buf[idx + len("<commands>"):]
-                        outside_buf = ""
-                        in_commands = True
-                        remaining = after
+            def _execute_commands_text(commands_text):
+                """Execute all commands from a text block (post-hoc)."""
+                for line in commands_text.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("```"):
                         continue
+                    parsed = _parse_commands_payload(line)
+                    for cmd_data in parsed:
+                        for marker in _execute_one_command(cmd_data):
+                            yield marker
 
-                    commands_buf += remaining
-                    remaining = ""
-
-                    close_idx = commands_buf.lower().find("</commands>")
-                    if close_idx != -1:
-                        segment = commands_buf[:close_idx]
-                        remainder = commands_buf[close_idx + len("</commands>"):]
-                        commands_buf = ""
-                        in_commands = False
-                        for line in segment.splitlines():
-                            line = line.strip()
-                            if not line or line.startswith("```"):
-                                continue
-                            parsed = _parse_commands_payload(line)
-                            for cmd_data in parsed:
-                                for marker in _execute_one_command(cmd_data):
-                                    yield marker
-                        remaining = remainder
-                        continue
-
-                    if "\n" not in commands_buf:
-                        return
-                    lines = commands_buf.split("\n")
-                    commands_buf = lines[-1]
-                    for raw_line in lines[:-1]:
-                        line = raw_line.strip()
-                        if not line or line.startswith("```"):
-                            continue
-                        parsed = _parse_commands_payload(line)
-                        for cmd_data in parsed:
-                            for marker in _execute_one_command(cmd_data):
-                                yield marker
-                    return
-
+            # ═══ Stream LLM response (no section parsing during streaming) ═══
+            yield f"{ROUND_MARKER}{round_idx}\n"
+            yield "---\n"
             try:
                 for chunk, fr in _call_llm_streaming(system_prompt, request_messages, thinking_mode=thinking_mode):
                     if fr:
@@ -1525,32 +1652,58 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     if chunk:
                         full_content += chunk
                         yield chunk
-                        for marker in _feed_stream_text(chunk):
-                            yield marker
             except Exception as e:
                 execution_error = str(e)
+                logger.error("[Round %d] Stream error: %s", round_idx, e)
                 yield f"[第{round_idx}轮调用异常] {execution_error}\n"
 
             if finish_reason in {"length", "max_tokens"}:
                 request_messages.append({
                     "role": "user",
-                    "content": "系统：你的上轮输出因达到 token 上限而被截断，部分命令遗漏。请在回复中保持精简，优先输出命令。如果电路未完成请继续。"
+                    "content": "系统：你的上轮输出因达到 token 上限而被截断。请在回复中保持精简，优先输出命令。"
                 })
 
             request_messages.append({"role": "assistant", "content": full_content})
+            _log_conversation("llm_response",
+                f"[Round {round_idx}] Response ({len(full_content)} chars)\n{full_content[:500]}",
+                round_num=round_idx)
 
-            plan_text = _extract_tag_text(full_content, "plan")
-            answer_text = _extract_answer_text(full_content)
-            commands_text = _extract_commands_block(full_content)
+            # ═══ Post-hoc extraction of ALL sections from the full response ═══
+            # Extract new 5-mode sections (with old format fallbacks)
+            build_text = _extract_tag_text(full_content, "build") or _extract_tag_text(full_content, "commands")
+            observe_text = _extract_tag_text(full_content, "observe") or _extract_tag_text(full_content, "verify")
+            raw_plan_text = _extract_tag_text(full_content, "plan")
+            raw_sum_text = _extract_tag_text(full_content, "sum")
+            answer_text = _extract_tag_text(full_content, "answer")
             done_flag = _is_done_response(full_content)
-            verify_obj = _extract_verify_payload(full_content)
 
+            # Execute build commands (reliable post-hoc extraction)
+            if build_text.strip():
+                logger.info("[Round %d] Executing %d build lines (post-hoc)", round_idx, len(build_text.splitlines()))
+                for marker in _execute_commands_text(build_text):
+                    if marker is not None:
+                        yield marker
+                aggregated_commands.append(build_text)
+            else:
+                logger.info("[Round %d] No build/commands content found", round_idx)
+
+            # Save plan.md and summary.md
+            if raw_plan_text.strip():
+                _atomic_write_md(PLAN_FILE, raw_plan_text.strip())
+                plan_content = raw_plan_text.strip()
+                logger.info("已更新 plan.md")
+            if raw_sum_text.strip():
+                _atomic_write_md(SUMMARY_FILE, raw_sum_text.strip())
+                summary_content = raw_sum_text.strip()
+                logger.info("已更新 summary.md")
+
+            # Fallback for answer
             if not answer_text:
                 answer_text = "已完成本轮处理。"
             final_answer_text = answer_text
 
-            if commands_text:
-                aggregated_commands.append(commands_text)
+            # Prepare verify/observe object
+            verify_obj = _extract_verify_payload_from_text(observe_text) if observe_text else None
 
             after_state = circuit_manager.get_state()
             compact_after_state = _build_compact_state(after_state)
@@ -1628,7 +1781,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             if verify_obj is not None:
                 verify_report = _run_verify_cases(verify_obj)
                 if verify_report is None:
-                    request_messages.append({"role": "user", "content": "系统验证失败：<verify> 内容无法解析或为空。请输出合法 JSON 并重试。"})
+                    request_messages.append({"role": "user", "content": "系统验证失败：observe 内容无法解析或为空。请输出合法 JSON 并重试。"})
                     done_flag = False
                 else:
                     report_text = json.dumps(verify_report, ensure_ascii=False, separators=(',', ':'))
@@ -1636,7 +1789,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     if verify_report.get("failed", 0) > 0:
                         done_flag = False
 
-            # 构建下一轮的反馈（state_diff + 执行摘要 + 验证结果）
+            # Build feedback for next round
             state_diff = _compute_state_diff(current_state, after_state) if round_idx > 1 else None
             previous_feedback = {
                 "execution": {
@@ -1649,6 +1802,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             }
 
             if done_flag:
+                _log_conversation("system", f"[Round {round_idx}] Agent done: {final_answer_text[:200]}", round_num=round_idx)
                 break
 
             if cycle_rounds >= 20:
@@ -1656,6 +1810,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     "检测到电路状态在少数几个状态之间循环变化（可能反复 TOGGLE 或反复增删无效）。"
                     "为避免无效调用，我已停止自治循环。你可以指定更明确的目标或允许我先重置关键输入再测试。"
                 )
+                _log_conversation("system", f"Loop terminated: cycle detected after {round_idx} rounds", round_num=round_idx)
                 break
 
             if no_progress_rounds >= no_progress_stop_rounds:
@@ -1663,6 +1818,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     f"已连续 {no_progress_rounds} 轮状态无变化（疑似停滞）。"
                     "为避免无效调用，我已停止自治循环。你可以补充更具体的目标、允许我 CLEAR 重建、或指出需要保留的部分。"
                 )
+                _log_conversation("system", f"Loop terminated: no progress after {round_idx} rounds", round_num=round_idx)
                 break
 
             if no_progress_rounds >= 2:
@@ -1720,13 +1876,20 @@ def chat():
         max_rounds = data.get('max_rounds', None)
         thinking_mode = data.get('thinking_mode', False)
         logger.info("/api/chat 接收到的 max_rounds=%s, thinking_mode=%s", max_rounds, thinking_mode)
+        _log_conversation("user", message)
+        
+        full_response = [""]
         
         def generate():
             for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode):
+                full_response[0] += chunk
                 yield chunk
+            # After streaming, log the assistant's full response
+            _log_conversation("assistant", full_response[0])
                 
         return Response(generate(), mimetype='text/plain')
     except Exception as e:
+        _log_conversation("system", f"Chat error: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def fallback_chat(message, error_msg):

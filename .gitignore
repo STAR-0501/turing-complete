@@ -1,8 +1,11 @@
 circuit_data.json
 functions_data.json
+plan.md
+summary.md
 build/
 dist/
 venv/
 .venv/
 __pycache__/
 .sisyphus/
+log/
