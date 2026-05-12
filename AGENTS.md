@@ -8,7 +8,7 @@
 
 ```
 ./
-├── app.py                  # Flask server: routes, SSE streaming, LLM agent loop
+├── app.py                  # Flask server: routes, SSE streaming, LLM agent loop (5-mode)
 ├── ai_commands.py          # CircuitManager, simulation engine, command execution
 ├── templates/
 │   └── index.html          # Single-page app shell
@@ -17,18 +17,21 @@
 │   │   ├── app.js          # (2765L) Canvas editor: events, tools, drag-drop, state
 │   │   ├── circuit.js      # (331L)  Element evaluation / propagation
 │   │   ├── renderer.js     # (377L)  Canvas draw: elements, wires, overlays
-│   │   ├── chat.js         # (210L)  Chat UI + SSE streaming display
+│   │   ├── chat.js         # (~290L) Chat UI + SSE streaming + multi-round display
 │   │   ├── elements.js     # (220L)  Element type defs & DOM creation
 │   │   └── utils.js        # (39L)   generateId, distance, isPointOnWire
 │   └── style/css/
 │       └── styles.css      # (456L)
 ├── circuit_data.json       # Persisted circuit state
 ├── functions_data.json     # Persisted custom function blocks
+├── plan.md                 # AI plan persistence (5-mode: Think→Plan→Build→Observe→Sum)
+├── summary.md              # AI session summary persistence
 ├── requirements.txt        # flask, requests
 ├── app.spec                # PyInstaller config
 ├── AI_INSTRUCTIONS.md      # Command protocol for AI agents
 ├── CLAUDE.md               # Behavioral guidelines for coding LLMs
-└── agenda.md               # Scratchpad / TODO
+├── agenda.md               # Scratchpad / TODO
+└── log/                    # AI conversation logs (JSONL, gitignored)
 ```
 
 ## Where To Look
@@ -43,6 +46,11 @@
 | Circuit state management | `ai_commands.py`: `CircuitManager` | Simulation context, commands |
 | Command protocol | `AI_INSTRUCTIONS.md` | Text & JSON formats for AI tools |
 | Add/change function blocks | `ai_commands.py` + frontend `elements.js` | Both sides need updates |
+| Change AI 5-mode loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Think→Plan→Build→Observe→Sum |
+| AI plan/summary persistence | `app.py`: `PLAN_FILE` / `SUMMARY_FILE` | Atomic markdown writes to plan.md/summary.md |
+| Streaming command execution | `app.py`: `_feed_stream_commands` | Real-time build execution during LLM streaming |
+| Conversation logging | `app.py`: `_log_conversation` | JSONL logs in `log/` (gitignored) |
+| Frontend round markers | `chat.js`: `ROUND_MARKER` | `__TC_ROUND__` markers create per-round message divs |
 
 ## Conventions
 
@@ -79,8 +87,13 @@ python app.py                      # dev server (http://localhost:5000)
 ## Notes
 
 - `_quick_classify()` branches into **circuit mode** (agent loop) or **chat mode** (freeform)
-- Agent uses tags: `<plan>`, `<commands>`, `<verify>`, `<done>`, `<think>`, `<answer>`
+- Agent uses 5-mode tags: `<think>`, `<plan>`, `<build>`, `<observe>`, `<sum>`, `<answer>`, `<done>`
 - Supports dual-format commands: traditional text AND JSON (parsed more stably)
 - Dual format also applies to *diff feedback* from verify steps
 - Frontend `history[]`/`historyIndex` for undo (limited depth)
 - `.sisyphus/` and `.trae/` are tool config dirs — not project code
+- `log/` stores JSONL conversation logs; gitignored — safe to delete for reset
+- `plan.md` and `summary.md` provide session continuity across restarts
+- `__TC_ROUND__` markers create separate message divs per round in the chat UI
+- `__TC_STATE_CHANGED__` triggers canvas reload when circuit state changes
+- Streaming command executor (`_feed_stream_commands`) executes build commands in real-time during LLM output; post-hoc extraction serves as fallback

@@ -1642,9 +1642,85 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                         for marker in _execute_one_command(cmd_data):
                             yield marker
 
-            # ═══ Stream LLM response (no section parsing during streaming) ═══
+            # ═══ Stream LLM response ═══
             yield f"{ROUND_MARKER}{round_idx}\n"
             yield "---\n"
+
+            # Streaming command executor: execute build commands in real-time
+            in_build = False
+            build_outside_buf = ""
+            build_commands_buf = ""
+
+            def _feed_stream_commands(text):
+                """Execute build/commands as they stream (for real-time canvas updates)."""
+                nonlocal in_build, build_outside_buf, build_commands_buf
+                remaining = text or ""
+                while remaining:
+                    if not in_build:
+                        build_outside_buf += remaining
+                        # Check for <build> or <commands>
+                        bpos = build_outside_buf.lower().find("<build>")
+                        cpos = build_outside_buf.lower().find("<commands>")
+                        positions = [p for p in (bpos, cpos) if p != -1]
+                        if not positions:
+                            if len(build_outside_buf) > 200:
+                                build_outside_buf = build_outside_buf[-200:]
+                            return
+                        pos = min(positions)
+                        # Determine which tag was found first
+                        if pos == bpos:
+                            tag_len = 7   # len("<build>")
+                        else:
+                            tag_len = 10  # len("<commands>")
+                        build_outside_buf = build_outside_buf[pos + tag_len:]
+                        in_build = True
+                        remaining = build_outside_buf
+                        build_outside_buf = ""
+                        continue
+
+                    # Inside build section, process line by line
+                    build_commands_buf += remaining
+                    remaining = ""
+
+                    # Check for closing tag
+                    bclose = build_commands_buf.lower().find("</build>")
+                    cclose = build_commands_buf.lower().find("</commands>")
+                    cpositions = [p for p in (bclose, cclose) if p != -1]
+
+                    if cpositions:
+                        close_pos = min(cpositions)
+                        close_len = 8 if close_pos == bclose else 11  # </build>=8, </commands>=11
+                        # Found closing tag - execute remaining commands
+                        segment = build_commands_buf[:close_pos]
+                        remainder = build_commands_buf[close_pos + close_len:]
+                        build_commands_buf = ""
+                        in_build = False
+                        for line in segment.splitlines():
+                            line = line.strip()
+                            if not line or line.startswith("```"):
+                                continue
+                            parsed = _parse_commands_payload(line)
+                            for cmd_data in parsed:
+                                for marker in _execute_one_command(cmd_data):
+                                    yield marker
+                        remaining = remainder
+                        continue
+
+                    # No closing tag - execute complete lines, keep incomplete line
+                    if "\n" not in build_commands_buf:
+                        return
+                    lines = build_commands_buf.split("\n")
+                    build_commands_buf = lines[-1]  # keep last incomplete line
+                    for raw_line in lines[:-1]:
+                        line = raw_line.strip()
+                        if not line or line.startswith("```"):
+                            continue
+                        parsed = _parse_commands_payload(line)
+                        for cmd_data in parsed:
+                            for marker in _execute_one_command(cmd_data):
+                                yield marker
+                    return
+
             try:
                 for chunk, fr in _call_llm_streaming(system_prompt, request_messages, thinking_mode=thinking_mode):
                     if fr:
@@ -1652,6 +1728,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     if chunk:
                         full_content += chunk
                         yield chunk
+                        # Execute commands in real-time during streaming
+                        for marker in _feed_stream_commands(chunk):
+                            if marker is not None:
+                                yield marker
             except Exception as e:
                 execution_error = str(e)
                 logger.error("[Round %d] Stream error: %s", round_idx, e)
@@ -1677,13 +1757,19 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             answer_text = _extract_tag_text(full_content, "answer")
             done_flag = _is_done_response(full_content)
 
-            # Execute build commands (reliable post-hoc extraction)
+            # Execute build commands (post-hoc fallback if streaming didn't execute them)
+            streaming_executed = executed_command_count
             if build_text.strip():
-                logger.info("[Round %d] Executing %d build lines (post-hoc)", round_idx, len(build_text.splitlines()))
-                for marker in _execute_commands_text(build_text):
-                    if marker is not None:
-                        yield marker
+                if streaming_executed == 0:
+                    logger.info("[Round %d] Executing %d build lines (post-hoc fallback)", round_idx, len(build_text.splitlines()))
+                    for marker in _execute_commands_text(build_text):
+                        if marker is not None:
+                            yield marker
+                else:
+                    logger.info("[Round %d] %d commands already executed during streaming, skipping post-hoc", round_idx, streaming_executed)
                 aggregated_commands.append(build_text)
+            elif streaming_executed > 0:
+                logger.info("[Round %d] %d commands executed during streaming (no post-hoc needed)", round_idx, streaming_executed)
             else:
                 logger.info("[Round %d] No build/commands content found", round_idx)
 
