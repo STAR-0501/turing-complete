@@ -57,6 +57,7 @@ FUNCTIONS_DATA_FILE = os.path.join(BASE_DIR, 'functions_data.json')
 # AI 模式持久化文件
 PLAN_FILE = os.path.join(BASE_DIR, 'plan.md')
 SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
+RULES_FILE = os.path.join(BASE_DIR, 'rules.md')
 # 日志文件夹
 LOG_DIR = os.path.join(BASE_DIR, 'log')
 
@@ -64,16 +65,21 @@ LOG_DIR = os.path.join(BASE_DIR, 'log')
 circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, FUNCTIONS_DATA_FILE)
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
+
+
 def init_circuit_file():
     if not os.path.exists(CIRCUIT_DATA_FILE):
         try:
             with open(CIRCUIT_DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump({'elements': [], 'wires': []}, f, indent=2, ensure_ascii=False)
+                json.dump({'elements': [], 'wires': []},
+                          f, indent=2, ensure_ascii=False)
             logger.info("已创建空的电路数据文件: %s", CIRCUIT_DATA_FILE)
         except Exception as e:
             logger.error("创建电路数据文件失败: %s", e)
 
 # 初始化：如果文件不存在，创建一个空的函数数据文件
+
+
 def init_functions_file():
     if not os.path.exists(FUNCTIONS_DATA_FILE):
         try:
@@ -84,26 +90,43 @@ def init_functions_file():
             logger.error("创建函数数据文件失败: %s", e)
 
 # 初始化 AI 计划文件
+
+
 def init_plan_file():
     if not os.path.exists(PLAN_FILE):
         try:
             with open(PLAN_FILE, 'w', encoding='utf-8') as f:
-                f.write("# AI Circuit Building Plan\n\n## Objective\n\n\n## Tasks\n\n")
+                f.write(
+                    "# AI Circuit Building Plan\n\n## Objective\n\n\n## Tasks\n\n")
             logger.info("已创建 AI 计划文件: %s", PLAN_FILE)
         except Exception as e:
             logger.error("创建计划文件失败: %s", e)
+
 
 def init_summary_file():
     if not os.path.exists(SUMMARY_FILE):
         try:
             with open(SUMMARY_FILE, 'w', encoding='utf-8') as f:
-                f.write("# AI Session Summary\n\n## State\n\n\n## Progress\n\n\n## Issues\n\n")
+                f.write(
+                    "# AI Session Summary\n\n## State\n\n\n## Progress\n\n\n## Issues\n\n")
             logger.info("已创建 AI 摘要文件: %s", SUMMARY_FILE)
         except Exception as e:
             logger.error("创建摘要文件失败: %s", e)
 
+
+def init_rules_file():
+    if not os.path.exists(RULES_FILE):
+        try:
+            with open(RULES_FILE, 'w', encoding='utf-8') as f:
+                f.write(
+                    "# Agent Rules (Self-Evolving Knowledge Base)\n\n_Last updated: 2026-05-14_\n_Total rules: 0_\n\n")
+            logger.info("已创建自学规则文件: %s", RULES_FILE)
+        except Exception as e:
+            logger.error("创建规则文件失败: %s", e)
+
+
 def _atomic_write_md(path, content):
-    """Atomic write for markdown files (plan.md / summary.md)."""
+    """原子写入 Markdown 文件（plan.md / summary.md）。"""
     dir_name = os.path.dirname(path) or os.getcwd()
     for stale in glob.glob(f"{path}.tmp.*"):
         try:
@@ -127,8 +150,9 @@ def _atomic_write_md(path, content):
             pass
         raise
 
+
 def _load_md_file(path):
-    """Load a markdown file, return empty string if missing."""
+    """加载 Markdown 文件，若不存在返回空字符串。"""
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
@@ -137,17 +161,19 @@ def _load_md_file(path):
 
 # ========== 对话日志系统 ==========
 
+
 def _init_log_dir():
-    """Ensure log/ directory exists."""
+    """确保日志目录存在。"""
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
     except Exception as e:
         logger.error("创建日志目录失败: %s", e)
 
+
 def _log_conversation(entry_type, content, session_id=None, round_num=None):
-    """Append a JSONL log entry to the daily log file.
-    
-    entry_type: one of 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary'
+    """将 JSONL 日志条目追加到每日日志文件中。
+
+    entry_type: 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary' 之一
     """
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -167,11 +193,14 @@ def _log_conversation(entry_type, content, session_id=None, round_num=None):
     except Exception as e:
         logger.error("写入日志失败: %s", e)
 
+
 # 启动时初始化
 init_circuit_file()
 init_functions_file()
 init_plan_file()
 init_summary_file()
+init_rules_file()
+
 
 def _atomic_write_json(path, data):
     for stale in glob.glob(f"{path}.tmp.*"):
@@ -197,17 +226,22 @@ def _atomic_write_json(path, data):
             pass
         raise
 
+
 @app.after_request
 def after_request(response):
     # 添加CORS响应头
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers',
+                         'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods',
+                         'GET,PUT,POST,DELETE,OPTIONS')
     return response
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/api/save-circuit', methods=['POST', 'OPTIONS'])
 def save_circuit():
@@ -223,6 +257,7 @@ def save_circuit():
         logger.error("保存电路数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+
 @app.route('/api/load-circuit', methods=['GET', 'OPTIONS'])
 def load_circuit():
     # 处理OPTIONS预检请求
@@ -236,31 +271,33 @@ def load_circuit():
         logger.error("加载电路数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+
 @app.route('/api/ai/execute', methods=['POST'])
 def ai_execute():
     try:
         data = request.json
         cmd = data.get('command')
         params = data.get('params', {})
-        
+
         result = execute_circuit_command(cmd, params)
         return jsonify({'status': 'success', 'result': result})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/ai/generate-comments', methods=['POST'])
 def ai_generate_comments():
     try:
         if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
             return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
-        
+
         current_state = circuit_manager.get_state()
         elements = current_state.get('elements', [])
         wires = current_state.get('wires', [])
-        
+
         if not elements:
             return jsonify({'status': 'success', 'comments': {}})
-        
+
         system_prompt = """你是一个电路分析专家。请分析下面的电路，为每个元件生成精准的注释，说明它在电路中的作用和功能。
 
 要求：
@@ -283,16 +320,18 @@ def ai_generate_comments():
                 "functionName": el.get("name") if el.get("type") == "FUNCTION" else None
             }
             elements_info.append(el_info)
-        
+
         wires_info = []
         for w in wires:
-            start_el = next((e for e in elements if e.get("id") == w.get("start", {}).get("elementId")), None)
-            end_el = next((e for e in elements if e.get("id") == w.get("end", {}).get("elementId")), None)
+            start_el = next((e for e in elements if e.get(
+                "id") == w.get("start", {}).get("elementId")), None)
+            end_el = next((e for e in elements if e.get("id") ==
+                          w.get("end", {}).get("elementId")), None)
             wires_info.append({
                 "from": f"{start_el.get('type')}" if start_el else "unknown",
                 "to": f"{end_el.get('type')}" if end_el else "unknown"
             })
-        
+
         user_prompt = f"""电路中的元件：
 {json.dumps(elements_info, ensure_ascii=False, indent=2)}
 
@@ -305,7 +344,7 @@ def ai_generate_comments():
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
-        
+
         response = requests.post(
             f"{AI_CONFIG['base_url']}/chat/completions",
             headers={
@@ -319,29 +358,31 @@ def ai_generate_comments():
             },
             timeout=30
         )
-        
+
         if response.status_code != 200:
             return jsonify({'status': 'error', 'message': f'AI API 错误: {response.text}'}), 500
-        
+
         result = response.json()
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-        
+        content = result.get("choices", [{}])[0].get(
+            "message", {}).get("content", "{}")
+
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             comments = json.loads(json_match.group())
         else:
             comments = {}
-        
+
         for el in elements:
             el_id = el.get("id")
             if el_id in comments:
                 el["comment"] = comments[el_id]
-        
+
         circuit_manager._save_data(current_state)
-        
+
         return jsonify({'status': 'success', 'comments': comments})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/ai/generate-layout', methods=['POST'])
 def ai_generate_layout():
@@ -351,13 +392,13 @@ def ai_generate_layout():
     try:
         if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
             return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
-        
+
         current_state = circuit_manager.get_state()
         elements = current_state.get('elements', [])
-        
+
         if not elements:
             return jsonify({'status': 'success', 'positions': {}})
-        
+
         user_message = """请整理这个电路的布局。
 
 要求：
@@ -366,17 +407,18 @@ def ai_generate_layout():
 3. 如果是二进制数字，应当保证把高位到低位按照从左到右的顺序排，比如一个三位数，用了三个输入（或者输出）模块，那么最高位应当在最左边，最低为应当在最右边，不论是输入还是输出，都必须按这个要求排列，不能从上到下排。
 
 请根据当前电路状态分析布局，输出 MOVE 命令来调整元件位置。"""
-        
+
         def generate():
             try:
                 for chunk in call_llm_stream(user_message, max_rounds_override=2):
                     yield chunk
             except Exception as e:
                 yield f"\n整理电路时出错: {str(e)}"
-        
+
         return Response(generate(), mimetype='text/plain')
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/ai/generate-circuit', methods=['POST'])
 def ai_generate_circuit():
@@ -386,27 +428,28 @@ def ai_generate_circuit():
     try:
         if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
             return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
-        
+
         data = request.json
         user_requirement = data.get('requirement', '')
-        
+
         if not user_requirement:
             return jsonify({'status': 'error', 'message': '请提供电路需求描述'}), 400
-        
+
         def generate():
             try:
                 for chunk in call_llm_stream(user_requirement):
                     yield chunk
             except Exception as e:
                 yield f"\n生成电路时出错: {str(e)}"
-        
+
         return Response(generate(), mimetype='text/plain')
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+
 def execute_circuit_command(cmd, params):
     """
-    Helper to execute commands and return result
+    执行命令并返回结果的辅助函数
     """
     if cmd == 'add_element':
         return circuit_manager.add_element(params['type'], params['x'], params['y'], params.get('alias'))
@@ -436,6 +479,7 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.sample_outputs(params.get('ids'))
     else:
         raise ValueError(f'Unknown command: {cmd}')
+
 
 def _parse_commands_payload(commands_str):
     content = commands_str.strip()
@@ -467,7 +511,7 @@ def _parse_commands_payload(commands_str):
         if not line or line.startswith('#'):
             continue
 
-        # JSON tool call format: {"tool": "add_element", "params": {...}}
+        # JSON 工具调用格式: {"tool": "add_element", "params": {...}}
         if line.startswith('{'):
             try:
                 j = json.loads(line)
@@ -489,8 +533,8 @@ def _parse_commands_payload(commands_str):
             if cmd == 'ADD':
                 if len(parts) >= 4:
                     element_type = _clean_token(parts[1]).upper()
-                    # We remove the strict type check here to allow custom function names
-                    # Or check if it's in the allowed basic types OR let CircuitManager handle it
+                    # 此处移除严格类型检查，以允许自定义函数名
+                    # 或者检查是否在允许的基础类型中，或交由 CircuitManager 处理
                     params = {
                         'type': element_type if element_type in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT'} else _clean_token(parts[1]),
                         'x': float(_clean_token(parts[2])),
@@ -498,7 +542,8 @@ def _parse_commands_payload(commands_str):
                     }
                     if len(parts) >= 5:
                         params['alias'] = _clean_token(parts[4])
-                    commands.append({'command': 'add_element', 'params': params})
+                    commands.append(
+                        {'command': 'add_element', 'params': params})
             elif cmd == 'WIRE':
                 if len(parts) >= 5:
                     commands.append({
@@ -512,29 +557,36 @@ def _parse_commands_payload(commands_str):
                     })
             elif cmd == 'DEL':
                 if len(parts) >= 2:
-                    commands.append({'command': 'remove_element', 'params': {'id': _clean_token(parts[1])}})
+                    commands.append({'command': 'remove_element', 'params': {
+                                    'id': _clean_token(parts[1])}})
             elif cmd == 'DELW':
                 if len(parts) >= 2:
-                    commands.append({'command': 'remove_wire', 'params': {'id': _clean_token(parts[1])}})
+                    commands.append({'command': 'remove_wire', 'params': {
+                                    'id': _clean_token(parts[1])}})
             elif cmd == 'CLEAR':
                 commands.append({'command': 'clear_circuit', 'params': {}})
             elif cmd == 'DEFINE_FUNC':
                 if len(parts) >= 2:
-                    commands.append({'command': 'define_function', 'params': {'name': _clean_token(parts[1])}})
+                    commands.append({'command': 'define_function', 'params': {
+                                    'name': _clean_token(parts[1])}})
             elif cmd == 'TOGGLE':
                 if len(parts) >= 2:
-                    commands.append({'command': 'toggle_input', 'params': {'id': _clean_token(parts[1])}})
+                    commands.append({'command': 'toggle_input', 'params': {
+                                    'id': _clean_token(parts[1])}})
             elif cmd == 'SET':
                 if len(parts) >= 3:
                     v = _parse_bool_token(parts[2])
                     if v is not None:
-                        commands.append({'command': 'set_input', 'params': {'id': _clean_token(parts[1]), 'value': v}})
+                        commands.append({'command': 'set_input', 'params': {
+                                        'id': _clean_token(parts[1]), 'value': v}})
             elif cmd in ('SIM', 'SIMULATE'):
                 commands.append({'command': 'simulate', 'params': {}})
             elif cmd == 'SAMPLE':
-                ids = [_clean_token(p) for p in parts[1:]] if len(parts) > 1 else []
+                ids = [_clean_token(p)
+                       for p in parts[1:]] if len(parts) > 1 else []
                 params = {'ids': ids} if ids else {}
-                commands.append({'command': 'sample_outputs', 'params': params})
+                commands.append(
+                    {'command': 'sample_outputs', 'params': params})
             elif cmd == 'MOVE':
                 if len(parts) >= 4:
                     commands.append({
@@ -560,6 +612,7 @@ def _parse_commands_payload(commands_str):
 
     return commands
 
+
 def _resolve_element_ref(value, alias_map):
     if not isinstance(value, str):
         return value
@@ -573,6 +626,7 @@ def _resolve_element_ref(value, alias_map):
     if value.startswith("$") and value[1:] in alias_map:
         return alias_map[value[1:]]
     return value
+
 
 def _execute_commands_with_alias(commands):
     alias_map = {}
@@ -604,18 +658,21 @@ def _execute_commands_with_alias(commands):
 
     def _try_execute_wire(raw_params):
         params = dict(raw_params or {})
-        from_ref = params.pop('from_ref', None) or params.pop('from_alias', None)
+        from_ref = params.pop('from_ref', None) or params.pop(
+            'from_alias', None)
         to_ref = params.pop('to_ref', None) or params.pop('to_alias', None)
 
         if from_ref and not params.get('from_id'):
             params['from_id'] = _resolve_element_ref(from_ref, alias_map)
         else:
-            params['from_id'] = _resolve_element_ref(params.get('from_id'), alias_map)
+            params['from_id'] = _resolve_element_ref(
+                params.get('from_id'), alias_map)
 
         if to_ref and not params.get('to_id'):
             params['to_id'] = _resolve_element_ref(to_ref, alias_map)
         else:
-            params['to_id'] = _resolve_element_ref(params.get('to_id'), alias_map)
+            params['to_id'] = _resolve_element_ref(
+                params.get('to_id'), alias_map)
 
         if params.get('from_id') == '$last' and last_element_id:
             params['from_id'] = last_element_id
@@ -648,8 +705,10 @@ def _execute_commands_with_alias(commands):
                 break
         if pending_wires:
             for idx, wire_params in enumerate(pending_wires):
-                msg = last_failures[idx] if idx < len(last_failures) else "无法连接导线"
-                errors.append({"command": "add_wire", "error": msg, "params": wire_params})
+                msg = last_failures[idx] if idx < len(
+                    last_failures) else "无法连接导线"
+                errors.append(
+                    {"command": "add_wire", "error": msg, "params": wire_params})
             pending_wires = []
 
     for cmd_data in commands:
@@ -657,16 +716,19 @@ def _execute_commands_with_alias(commands):
         params = dict(cmd_data.get('params', {}) or {})
 
         if cmd == 'add_element':
-            specified_alias = params.pop('alias', None) or params.pop('ref', None) or params.pop('name', None)
+            specified_alias = params.pop('alias', None) or params.pop(
+                'ref', None) or params.pop('name', None)
             alias = specified_alias
             try:
                 if specified_alias:
                     params['alias'] = specified_alias
                 result = execute_circuit_command(cmd, params)
                 executed_success += 1
-                results.append({"command": "add_element", "result": {"id": result.get("id")} if isinstance(result, dict) else "ok"})
+                results.append({"command": "add_element", "result": {
+                               "id": result.get("id")} if isinstance(result, dict) else "ok"})
             except Exception as e:
-                errors.append({"command": "add_element", "error": str(e), "params": params})
+                errors.append({"command": "add_element",
+                              "error": str(e), "params": params})
                 continue
             if isinstance(result, dict) and result.get('id'):
                 last_element_id = result['id']
@@ -685,7 +747,8 @@ def _execute_commands_with_alias(commands):
             if params['id'] == '$last' and last_element_id:
                 params['id'] = last_element_id
         if 'ids' in params and isinstance(params.get('ids'), list):
-            params['ids'] = [_resolve_element_ref(v, alias_map) for v in params.get('ids') if v is not None]
+            params['ids'] = [_resolve_element_ref(
+                v, alias_map) for v in params.get('ids') if v is not None]
 
         if cmd in ('clear_circuit', 'define_function', 'remove_element', 'remove_wire'):
             _flush_pending_wires()
@@ -708,6 +771,7 @@ def _execute_commands_with_alias(commands):
         errors.append({"command": "simulate", "error": str(e)})
 
     return {"executed_success": executed_success, "errors": errors, "results": results}
+
 
 def _build_compact_state(state):
     elements = state.get('elements', [])
@@ -744,6 +808,7 @@ def _build_compact_state(state):
         'wires': compact_wires
     }
 
+
 def _compute_state_diff(old_state, new_state):
     old_el = {e["id"]: e for e in (old_state or {}).get("elements", [])}
     new_el = {e["id"]: e for e in (new_state or {}).get("elements", [])}
@@ -751,20 +816,25 @@ def _compute_state_diff(old_state, new_state):
     added = []
     for eid, e in new_el.items():
         if eid not in old_el:
-            added.append({"id": e["id"], "type": e["type"], "alias": e.get("alias"), "pos": [e.get("x"), e.get("y")]})
+            added.append({"id": e["id"], "type": e["type"], "alias": e.get(
+                "alias"), "pos": [e.get("x"), e.get("y")]})
 
-    removed = [{"id": e["id"], "type": e["type"]} for eid, e in old_el.items() if eid not in new_el]
+    removed = [{"id": e["id"], "type": e["type"]}
+               for eid, e in old_el.items() if eid not in new_el]
 
     changed = []
     for eid, e in new_el.items():
         if eid in old_el:
             o = old_el[eid]
             if e.get("x") != o.get("x") or e.get("y") != o.get("y"):
-                changed.append({"id": eid, "change": "position", "from": [o.get("x"), o.get("y")], "to": [e.get("x"), e.get("y")]})
+                changed.append({"id": eid, "change": "position", "from": [
+                               o.get("x"), o.get("y")], "to": [e.get("x"), e.get("y")]})
             if e.get("state") != o.get("state"):
-                changed.append({"id": eid, "change": "state", "from": o.get("state"), "to": e.get("state")})
+                changed.append({"id": eid, "change": "state",
+                               "from": o.get("state"), "to": e.get("state")})
             if e.get("comment") != o.get("comment"):
-                changed.append({"id": eid, "change": "comment", "from": o.get("comment"), "to": e.get("comment")})
+                changed.append({"id": eid, "change": "comment", "from": o.get(
+                    "comment"), "to": e.get("comment")})
 
     old_wires = {}
     for w in (old_state or {}).get("wires", []):
@@ -778,8 +848,10 @@ def _compute_state_diff(old_state, new_state):
             key = (w["start"].get("elementId"), w["end"].get("elementId"))
             new_wires[key] = w.get("id")
 
-    wires_added = [{"id": wid, "from": conn[0], "to": conn[1]} for conn, wid in new_wires.items() if conn not in old_wires]
-    wires_removed = [{"id": wid, "from": conn[0], "to": conn[1]} for conn, wid in old_wires.items() if conn not in new_wires]
+    wires_added = [{"id": wid, "from": conn[0], "to": conn[1]}
+                   for conn, wid in new_wires.items() if conn not in old_wires]
+    wires_removed = [{"id": wid, "from": conn[0], "to": conn[1]}
+                     for conn, wid in old_wires.items() if conn not in new_wires]
 
     return {
         "elements_added": added,
@@ -790,6 +862,7 @@ def _compute_state_diff(old_state, new_state):
         "io_summary": _build_io_summary(new_state)
     }
 
+
 def _build_io_summary(state):
     elements = (state or {}).get("elements") or []
     inputs = []
@@ -798,31 +871,41 @@ def _build_io_summary(state):
     for e in elements:
         t = e.get("type")
         if t == "INPUT":
-            inputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
+            inputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get(
+                "name"), "state": bool(e.get("state", False))})
         elif t == "OUTPUT":
-            outputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get("name"), "state": bool(e.get("state", False))})
+            outputs.append({"id": e.get("id"), "alias": e.get("alias") or e.get(
+                "name"), "state": bool(e.get("state", False))})
         elif t == "FUNCTION":
-            functions.append({"id": e.get("id"), "alias": e.get("alias"), "name": e.get("name"), "state": bool(e.get("state", False))})
+            functions.append({"id": e.get("id"), "alias": e.get(
+                "alias"), "name": e.get("name"), "state": bool(e.get("state", False))})
     return {"inputs": inputs, "outputs": outputs, "functions": functions}
+
 
 def _strip_commands_from_reply(text):
     if not isinstance(text, str):
         return ""
-    text = re.sub(r'<commands>[\s\S]*?(</commands>|$)', '', text, flags=re.DOTALL)
-    text = re.sub(r'<(think|plan|build|observe|sum)>[\s\S]*?(</\1>|$)', '', text, flags=re.DOTALL)
+    text = re.sub(r'<commands>[\s\S]*?(</commands>|$)',
+                  '', text, flags=re.DOTALL)
+    text = re.sub(
+        r'<(think|plan|build|observe|sum)>[\s\S]*?(</\1>|$)', '', text, flags=re.DOTALL)
     text = text.replace(ROUND_MARKER, '').replace('---\n', '')
     return text.strip()
+
 
 def _normalize_memory_text(text):
     if not isinstance(text, str):
         return ""
     return text.strip()[:CHAT_MESSAGE_MAX_CHARS]
 
+
 def _get_chat_messages_with_memory(user_message):
     with chat_memory_lock:
         messages = list(chat_memory)
-    messages.append({"role": "user", "content": _normalize_memory_text(user_message)})
+    messages.append(
+        {"role": "user", "content": _normalize_memory_text(user_message)})
     return messages
+
 
 def _append_chat_memory(role, content):
     normalized = _normalize_memory_text(content)
@@ -834,6 +917,7 @@ def _append_chat_memory(role, content):
             overflow = len(chat_memory) - CHAT_MEMORY_MAX_MESSAGES
             del chat_memory[:overflow]
 
+
 def _get_ai_protocol():
     protocol = str(AI_CONFIG.get("protocol", "")).strip().lower()
     if protocol:
@@ -842,6 +926,7 @@ def _get_ai_protocol():
     if "/anthropic" in base_url:
         return "anthropic"
     return "openai"
+
 
 def _extract_chunk_parts(chunk_json, protocol):
     if not isinstance(chunk_json, dict):
@@ -901,6 +986,7 @@ def _extract_chunk_parts(chunk_json, protocol):
         return content, ""
     return "", ""
 
+
 def _extract_finish_reason(chunk_json, protocol):
     if not isinstance(chunk_json, dict):
         return ""
@@ -916,12 +1002,14 @@ def _extract_finish_reason(chunk_json, protocol):
         return str(choices[0].get("finish_reason") or "")
     return ""
 
+
 def _extract_tag_text(text, tag):
     if not isinstance(text, str):
         return ""
     pattern = rf'<{tag}>([\s\S]*?)</{tag}>'
     match = re.search(pattern, text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
+
 
 def _extract_verify_payload(text):
     payload = _extract_tag_text(text, "verify")
@@ -932,11 +1020,12 @@ def _extract_verify_payload(text):
     except:
         return None
 
+
 def _extract_verify_payload_from_text(text):
-    """Parse observe/verify content (the text inside <observe> tags) as JSON test cases."""
+    """将 observe/verify 内容（<observe>标签内的文本）解析为 JSON 测试用例。"""
     if not text or not text.strip():
         return None
-    # Try to find JSON in the text (it might have surrounding text)
+    # 尝试在文本中查找 JSON（可能包含周围文本）
     json_match = re.search(r'\{[\s\S]*\}', text)
     if json_match:
         try:
@@ -944,6 +1033,7 @@ def _extract_verify_payload_from_text(text):
         except:
             return None
     return None
+
 
 def _resolve_ref_to_id(value, state):
     if value is None:
@@ -967,12 +1057,14 @@ def _resolve_ref_to_id(value, state):
                 return el.get("id")
     return v
 
+
 def _run_verify_cases(verify_obj):
     if not isinstance(verify_obj, dict):
         return None
     cases = verify_obj.get("cases")
     if cases is None:
-        single = {"inputs": verify_obj.get("inputs") or [], "expect": verify_obj.get("expect") or []}
+        single = {"inputs": verify_obj.get(
+            "inputs") or [], "expect": verify_obj.get("expect") or []}
         cases = [single]
     if not isinstance(cases, list) or not cases:
         return None
@@ -1012,7 +1104,8 @@ def _run_verify_cases(verify_obj):
                     ok = (got is not None and bool(got) == want)
                     if not ok:
                         case_result["pass"] = False
-                    case_result["details"].append({"id": ref, "want": want, "got": got, "ok": ok})
+                    case_result["details"].append(
+                        {"id": ref, "want": want, "got": got, "ok": ok})
             except Exception as e:
                 case_result["pass"] = False
                 case_result["details"].append({"error": str(e)})
@@ -1027,30 +1120,113 @@ def _run_verify_cases(verify_obj):
 
     return report
 
+
 def _extract_commands_block(text):
     if not isinstance(text, str):
         return ""
-    matches = re.findall(r'<commands>([\s\S]*?)</commands>', text, re.IGNORECASE)
+    matches = re.findall(
+        r'<commands>([\s\S]*?)</commands>', text, re.IGNORECASE)
     if matches:
-        merged = "\n".join([m.strip() for m in matches if m and m.strip()]).strip()
+        merged = "\n".join([m.strip()
+                           for m in matches if m and m.strip()]).strip()
         return merged
     open_match = re.search(r'<commands>([\s\S]*)', text, re.IGNORECASE)
     if open_match:
         return open_match.group(1).strip()
     return ""
 
+
 def _is_done_response(text):
     done_text = _extract_tag_text(text, "done").lower()
     return done_text in {"true", "yes", "1", "done"}
+
 
 def _extract_answer_text(text):
     answer = _extract_tag_text(text, "answer")
     if answer:
         return answer
-    stripped = re.sub(r'<plan>[\s\S]*?</plan>', '', text, flags=re.IGNORECASE).strip()
-    stripped = re.sub(r'<done>[\s\S]*?</done>', '', stripped, flags=re.IGNORECASE).strip()
+    stripped = re.sub(r'<plan>[\s\S]*?</plan>', '',
+                      text, flags=re.IGNORECASE).strip()
+    stripped = re.sub(r'<done>[\s\S]*?</done>', '',
+                      stripped, flags=re.IGNORECASE).strip()
     stripped = _strip_commands_from_reply(stripped)
     return stripped
+
+
+def _merge_rules(new_rules_text, existing_rules_text):
+    """将新规则合并到现有 rules.md 内容中，按标题去重。
+
+    返回更新后的 rules.md 内容，若无新规则返回空字符串。
+    若合并失败（无变化）返回 None。
+    """
+    if not new_rules_text or not new_rules_text.strip():
+        return None
+
+    # 从新内容中提取规则标题（### Rule-*）
+    if not new_headers:
+        # 新文本中未找到有效规则
+        return None
+
+    # 清理新规则文本 - 移除 <rules> 包装结构
+    # 可能包含分类标题和规则条目
+    new_rules_clean = new_rules_text.strip()
+
+    if not existing_rules_text or not existing_rules_text.strip():
+        # 无现有规则 - 直接返回带标题的新规则
+        today = time.strftime('%Y-%m-%d')
+        new_count = len(new_headers)
+        return f"# Agent Rules (Self-Evolving Knowledge Base)\n\n_Last updated: {today}_\n_Total rules: {new_count}_\n\n{new_rules_clean}\n"
+
+    # 检查哪些标题已存在于现有文本中
+    existing_headers = set(re.findall(
+        r'^###\s+(Rule-[\w-]+)', existing_rules_text, re.MULTILINE))
+    truly_new_headers = new_headers - existing_headers
+
+    if not truly_new_headers:
+        # 所有新规则已存在于现有规则中
+        return None
+
+    # 查找需要追加的新规则（按标题提取完整块）
+    appended_blocks = []
+    for header in truly_new_headers:
+        # 在 new_rules_clean 中查找块（从标题到下一个标题或末尾）
+        pattern = rf'(^###\s+{re.escape(header)}.*?)(?=\n###\s+Rule-|\Z)'
+        match = re.search(pattern, new_rules_clean, re.DOTALL | re.MULTILINE)
+        if match:
+            block = match.group(1).strip()
+            appended_blocks.append(block)
+
+    if not appended_blocks:
+        return None
+
+    # 在页脚前追加新块（最后一行或"To add a new rule"部分之前）
+    footer_marker = "\n---\n*To add a new rule"
+    footer_idx = existing_rules_text.find(footer_marker)
+
+    new_content = "\n\n".join(appended_blocks)
+
+    if footer_idx >= 0:
+        merged = existing_rules_text[:footer_idx] + "\n\n" + \
+            new_content + "\n\n" + existing_rules_text[footer_idx:]
+    else:
+        merged = existing_rules_text.rstrip() + "\n\n" + new_content + "\n"
+
+    # 更新总计数
+    all_headers = existing_headers | truly_new_headers
+    today = time.strftime('%Y-%m-%d')
+    merged = re.sub(
+        r'_Last updated:.*',
+        f'_Last updated: {today}_',
+        merged
+    )
+    merged = re.sub(
+        r'_Total rules:\s*\d+',
+        f'_Total rules: {len(all_headers)}',
+        merged
+    )
+
+    return merged
+
 
 TOOL_SCHEMAS = {
     "add_element": {
@@ -1127,6 +1303,7 @@ TOOL_SCHEMAS = {
     }
 }
 
+
 def _format_feedback_text(feedback):
     if not feedback:
         return ""
@@ -1135,7 +1312,8 @@ def _format_feedback_text(feedback):
     if exe:
         errors = exe.get("errors") or []
         lines.append("--- 本轮操作反馈 ---")
-        lines.append(f"执行: {exe.get('success_count', 0)}/{exe.get('command_count', 0)} 条命令成功")
+        lines.append(
+            f"执行: {exe.get('success_count', 0)}/{exe.get('command_count', 0)} 条命令成功")
         if errors:
             lines.append(f"错误 ({len(errors)}):")
             for err in errors[:5]:
@@ -1155,7 +1333,8 @@ def _format_feedback_text(feedback):
             lines.append(f"新增元件 ({len(added)}):")
             for el in added:
                 alias = f" ({el.get('alias')})" if el.get("alias") else ""
-                lines.append(f"  + {el.get('type')} {el.get('id')}{alias} @ {el.get('pos')}")
+                lines.append(
+                    f"  + {el.get('type')} {el.get('id')}{alias} @ {el.get('pos')}")
         if removed:
             lines.append(f"移除元件 ({len(removed)}):")
             for el in removed:
@@ -1164,9 +1343,11 @@ def _format_feedback_text(feedback):
             for c in changed:
                 ct = c.get("change")
                 if ct == "position":
-                    lines.append(f"  ~ {c.get('id')} 位置: {c.get('from')} -> {c.get('to')}")
+                    lines.append(
+                        f"  ~ {c.get('id')} 位置: {c.get('from')} -> {c.get('to')}")
                 elif ct == "state":
-                    lines.append(f"  ~ {c.get('id')} 电平: {c.get('from')} -> {c.get('to')}")
+                    lines.append(
+                        f"  ~ {c.get('id')} 电平: {c.get('from')} -> {c.get('to')}")
                 elif ct == "comment":
                     lines.append(f"  ~ {c.get('id')} 注释已更新")
         if wires_added:
@@ -1208,18 +1389,21 @@ def _format_feedback_text(feedback):
         lines.append("--- 测试验证结果 ---")
         for v in (verify.get("cases") or []):
             icon = "✅" if v.get("pass") else "❌"
-            lines.append(f"{icon} 测试 {v.get('index')}: {'通过' if v.get('pass') else '失败'}")
+            lines.append(
+                f"{icon} 测试 {v.get('index')}: {'通过' if v.get('pass') else '失败'}")
             for d in v.get("details") or []:
                 if "error" in d:
                     lines.append(f"  ⚠️ {d['error']}")
                 else:
                     status = "✅" if d.get("ok") else "❌"
-                    lines.append(f"  {status} {d['id']}: 期望={d.get('want')}, 实际={d.get('got')}")
+                    lines.append(
+                        f"  {status} {d['id']}: 期望={d.get('want')}, 实际={d.get('got')}")
 
     return "\n".join(lines)
 
+
 def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=None,
-                                     plan_content="", summary_content=""):
+                                    plan_content="", summary_content="", rules_content=""):
     base = """你是一个电路模拟器自治执行助手。你以 5 阶段循环工作：Think→Plan→Build→Observe→Sum。
 每轮都必须依次输出这 5 个阶段的内容，系统会分别处理每个阶段。
 
@@ -1228,7 +1412,8 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
 """
 
     for tool_name, schema in TOOL_SCHEMAS.items():
-        params_str = ", ".join(f"{k}({v})" for k, v in schema["params"].items())
+        params_str = ", ".join(
+            f"{k}({v})" for k, v in schema["params"].items())
         base += f"{schema['text']}\n"
         base += f"  JSON: {schema['json_example']}\n"
         base += f"  说明: {schema['description']}\n\n"
@@ -1274,7 +1459,45 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
     if summary_content:
         base += "\n\n--- 历史摘要 (summary.md) ---\n" + summary_content
 
+    # 注入规则文件（如果存在）
+    if rules_content:
+        base += "\n\n--- 累计经验规则 (rules.md) ---\n" + rules_content
+
     base += """
+
+## 自学进化系统 (rules.md)
+
+在 Agent 工作过程中，如果发现以下类型的知识，请在输出中包含一个可选的 `<rules>` 块：
+
+**适合放入 rules.md 的知识：**
+- 重复出现的 Bug 模式和根治方法
+- 有明确理由的架构决策
+- 项目特有的重要约定
+- 多次遇到的陷阱和解决方案
+- 调试常见失败模式的经验
+- 框架/库的 API 特性和注意事项
+
+**不适合放入 rules.md 的内容：**
+- 当前任务的临时状态
+- 特定电路的布局坐标
+- 一次性的具体问题
+- 个人偏好
+
+**格式要求：**
+```
+<rules>
+## [类别]
+
+### Rule-新编号: 简短标题
+- **Context**: 什么场景下适用
+- **What**: 关键洞察/规则
+- **Why**: 为什么重要
+- **Example**: 具体例子（可选）
+</rules>
+```
+
+输出 `<rules>` 块是完全可选的。系统会自动提取并持久化到 rules.md，供未来所有会话使用。
+仅在知识足够通用、精简、有用时输出。宁缺毋滥。
 
 你必须严格按以下 5 阶段结构输出。每轮都必须包含所有 5 个阶段：
 
@@ -1326,6 +1549,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
 当你确认电路逻辑正确（通过 state 验证）且所有 TODO 完成时，done 设为 true。"""
     return base
 
+
 def _call_llm_once(system_prompt, request_messages):
     protocol = _get_ai_protocol()
     base_url = str(AI_CONFIG['base_url']).rstrip('/')
@@ -1369,7 +1593,8 @@ def _call_llm_once(system_prompt, request_messages):
     payload = response.json()
     if protocol == "anthropic":
         content = payload.get("content") or []
-        text = ''.join([c.get("text", "") for c in content if isinstance(c, dict)])
+        text = ''.join([c.get("text", "")
+                       for c in content if isinstance(c, dict)])
         finish_reason = str(payload.get("stop_reason") or "")
         return text, finish_reason
     choices = payload.get("choices") or []
@@ -1378,6 +1603,7 @@ def _call_llm_once(system_prompt, request_messages):
     message = choices[0].get("message") or {}
     finish_reason = str(choices[0].get("finish_reason") or "")
     return str(message.get("content") or ""), finish_reason
+
 
 def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
     protocol = _get_ai_protocol()
@@ -1448,10 +1674,12 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
         if text_part:
             yield text_part, finish_reason
 
+
 def _quick_classify(user_message):
     """Quickly determine if user wants circuit work or just casual chat."""
     compact_state = circuit_manager.get_state()
-    compact_json = json.dumps(_build_compact_state(compact_state), ensure_ascii=False, separators=(',', ':'))
+    compact_json = json.dumps(_build_compact_state(
+        compact_state), ensure_ascii=False, separators=(',', ':'))
     sys_prompt = (
         "你是一个电路设计助手。根据用户的输入和当前电路状态，判断用户是:\n"
         "1. 需要构建/修改/验证电路 → 模式 circuit\n"
@@ -1469,10 +1697,12 @@ def _quick_classify(user_message):
         logger.warning("分类请求超时，默认走 circuit 模式: %s", e)
         return "circuit"
     except requests.HTTPError as e:
-        logger.warning("分类请求 API 错误 (HTTP %s)，默认走 circuit 模式", e.response.status_code if e.response else "?")
+        logger.warning("分类请求 API 错误 (HTTP %s)，默认走 circuit 模式",
+                       e.response.status_code if e.response else "?")
         return "circuit"
     except Exception as e:
-        logger.warning("分类请求发生未知异常 (%s: %s)，默认走 circuit 模式", type(e).__name__, e)
+        logger.warning("分类请求发生未知异常 (%s: %s)，默认走 circuit 模式",
+                       type(e).__name__, e)
         return "circuit"
 
     if not text or not text.strip():
@@ -1485,7 +1715,8 @@ def _quick_classify(user_message):
         json_end = text.rindex('}') + 1
         parsed = json.loads(text[json_start:json_end])
     except (ValueError, json.JSONDecodeError) as e:
-        logger.warning("分类响应 JSON 解析失败 (%s)，原始响应: %.100s", e, text.replace('\n', ' '))
+        logger.warning("分类响应 JSON 解析失败 (%s)，原始响应: %.100s",
+                       e, text.replace('\n', ' '))
         safe = user_message.strip().lower()
         circuit_keywords = ["add", "wire", "del", "move", "clear", "toggle", "set", "sim", "sample",
                             "define_func", "comment", "and", "or", "not", "input", "output",
@@ -1493,7 +1724,7 @@ def _quick_classify(user_message):
                             "电路", "门", "仿真", "测试", "乘法", "加法", "函数"]
         has_circuit_intent = any(kw in safe for kw in circuit_keywords)
         has_chat_intent = any(kw in safe for kw in ["你好", "嗨", "早上好", "晚上好", "谢谢", "再见",
-                                                      "你是谁", "能做什么", "hello", "hi"])
+                                                    "你是谁", "能做什么", "hello", "hi"])
         if has_circuit_intent:
             return "circuit"
         if has_chat_intent or len(safe) < 10:
@@ -1506,6 +1737,7 @@ def _quick_classify(user_message):
         return "circuit"
     return mode
 
+
 def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
@@ -1516,7 +1748,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
     if mode == "chat":
         compact_state = circuit_manager.get_state()
-        compact_json = json.dumps(_build_compact_state(compact_state), ensure_ascii=False, separators=(',', ':'))
+        compact_json = json.dumps(_build_compact_state(
+            compact_state), ensure_ascii=False, separators=(',', ':'))
         sys_prompt = (
             "你是一个电路设计助手。用中文友好、简洁地回答用户。"
             "不需要输出任何指令或特殊格式。"
@@ -1556,7 +1789,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
         cycle_rounds = 0
         last_execution_error = ""
         same_error_rounds = 0
-        no_progress_stop_rounds = int(AI_CONFIG.get("agent_no_progress_stop_rounds", 30))
+        no_progress_stop_rounds = int(AI_CONFIG.get(
+            "agent_no_progress_stop_rounds", 30))
         if no_progress_stop_rounds < 3:
             no_progress_stop_rounds = 3
         yield STREAM_THINKING_MARKER
@@ -1564,9 +1798,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
         previous_feedback = None
 
-        # 加载持久化文件（plan.md、summary.md），实现跨会话连续性
+        # 加载持久化文件（plan.md、summary.md、rules.md），实现跨会话连续性
         plan_content = _load_md_file(PLAN_FILE)
         summary_content = _load_md_file(SUMMARY_FILE)
+        rules_content = _load_md_file(RULES_FILE)
         # 用于收集每轮的 plan/summary 内容
         plan_text_accumulator = ""
         sum_text_accumulator = ""
@@ -1574,20 +1809,23 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
         for round_idx in range(1, max_rounds + 1):
             current_state = circuit_manager.get_state()
             compact_state = _build_compact_state(current_state)
-            compact_state_json = json.dumps(compact_state, ensure_ascii=False, separators=(',', ':'))
+            compact_state_json = json.dumps(
+                compact_state, ensure_ascii=False, separators=(',', ':'))
             functions_data = circuit_manager._load_functions()
-            available_functions = [f.get('name') for f in functions_data] if functions_data else []
+            available_functions = [
+                f.get('name') for f in functions_data] if functions_data else []
             functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
             system_prompt = _build_autonomous_system_prompt(
                 compact_state_json, functions_str,
                 feedback=previous_feedback,
                 plan_content=plan_content,
-                summary_content=summary_content
+                summary_content=summary_content,
+                rules_content=rules_content
             )
             # 记录本轮 LLM 请求
             _log_conversation("llm_request",
-                f"[Round {round_idx}] System prompt ({len(system_prompt)} chars)\nUser messages: {len(request_messages)} msgs",
-                round_num=round_idx)
+                              f"[Round {round_idx}] System prompt ({len(system_prompt)} chars)\nUser messages: {len(request_messages)} msgs",
+                              round_num=round_idx)
 
             full_content = ""
             last_cmd_last_id = None
@@ -1597,7 +1835,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             command_results = []
             execution_error = ""
             commands_truncated = False
-            MAX_CMDS_PER_ROUND = int(AI_CONFIG.get("agent_max_cmds_per_round", 200))
+            MAX_CMDS_PER_ROUND = int(AI_CONFIG.get(
+                "agent_max_cmds_per_round", 200))
             if MAX_CMDS_PER_ROUND < 10:
                 MAX_CMDS_PER_ROUND = 10
 
@@ -1614,13 +1853,14 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 cmd_data = {"command": cmd, "params": params}
                 summary = _execute_commands_with_alias([cmd_data]) or {}
                 executed_command_count += 1
-                executed_success_count += int(summary.get("executed_success") or 0)
+                executed_success_count += int(
+                    summary.get("executed_success") or 0)
                 command_errors.extend(list(summary.get("errors") or []))
                 command_results.extend(list(summary.get("results") or []))
                 if cmd not in ("simulate",):
                     _log_conversation("command",
-                        f"{cmd} {json.dumps(params, ensure_ascii=False)} -> ok={summary.get('executed_success', 0)}",
-                        round_num=round_idx)
+                                      f"{cmd} {json.dumps(params, ensure_ascii=False)} -> ok={summary.get('executed_success', 0)}",
+                                      round_num=round_idx)
                 if cmd == "add_element":
                     for r in (summary.get("results") or []):
                         if isinstance(r, dict) and r.get("command") == "add_element":
@@ -1632,33 +1872,73 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     yield STREAM_STATE_CHANGED_MARKER
 
             def _execute_commands_text(commands_text):
-                """Execute all commands from a text block (post-hoc)."""
+                """通过单次批量调用执行文本块中的所有命令（事后回退方案）。"""
+                cmds = []
                 for line in commands_text.splitlines():
                     line = line.strip()
                     if not line or line.startswith("```"):
                         continue
                     parsed = _parse_commands_payload(line)
-                    for cmd_data in parsed:
-                        for marker in _execute_one_command(cmd_data):
-                            yield marker
+                    cmds.extend(parsed)
+                if cmds:
+                    for marker in _execute_batch_and_yield(cmds):
+                        yield marker
 
             # ═══ Stream LLM response ═══
             yield f"{ROUND_MARKER}{round_idx}\n"
             yield "---\n"
 
-            # Streaming command executor: execute build commands in real-time
+            # 流式命令执行器：实时执行 build 命令
             in_build = False
             build_outside_buf = ""
             build_commands_buf = ""
+            build_cmd_buffer = []  # 已收集待批量执行的命令
+
+            def _execute_batch_and_yield(commands):
+                """在一次 _execute_commands_with_alias 调用中执行所有命令（共享 alias_map，单次保存）。"""
+                nonlocal last_cmd_last_id, executed_command_count, executed_success_count, command_errors, command_results, commands_truncated
+                if not commands:
+                    return
+                if executed_command_count >= MAX_CMDS_PER_ROUND:
+                    commands_truncated = True
+                    return
+                # 限制为 MAX_CMDS_PER_ROUND
+                batch = commands[:MAX_CMDS_PER_ROUND - executed_command_count]
+                if len(batch) < len(commands):
+                    commands_truncated = True
+                summary = _execute_commands_with_alias(batch) or {}
+                executed_cmds = len(batch)
+                executed_command_count += executed_cmds
+                executed_success_count += int(
+                    summary.get("executed_success") or 0)
+                command_errors.extend(list(summary.get("errors") or []))
+                command_results.extend(list(summary.get("results") or []))
+                # 从结果中更新 last_cmd_last_id
+                for r in summary.get("results") or []:
+                    if isinstance(r, dict) and r.get("command") == "add_element":
+                        res = r.get("result")
+                        if isinstance(res, dict) and res.get("id"):
+                            last_cmd_last_id = res.get("id")
+                # 生成 STATE_CHANGED 标记（触发前端画布更新）
+                if executed_cmds > 0 and summary.get("executed_success", 0) > 0:
+                    yield STREAM_STATE_CHANGED_MARKER
+                # 记录每条命令
+                for r in summary.get("results") or []:
+                    cmd_name = r.get("command", "?")
+                    _log_conversation(
+                        "command", f"{cmd_name} -> ok", round_num=round_idx)
+                for e in summary.get("errors") or []:
+                    _log_conversation(
+                        "command", f"{e.get('command', '?')}: {e.get('error', '?')} -> fail", round_num=round_idx)
 
             def _feed_stream_commands(text):
-                """Execute build/commands as they stream (for real-time canvas updates)."""
-                nonlocal in_build, build_outside_buf, build_commands_buf
+                """流式执行器：收集命令，在段落关闭时批量执行。"""
+                nonlocal in_build, build_outside_buf, build_commands_buf, build_cmd_buffer
                 remaining = text or ""
                 while remaining:
                     if not in_build:
                         build_outside_buf += remaining
-                        # Check for <build> or <commands>
+                        # 检查开始标签
                         bpos = build_outside_buf.lower().find("<build>")
                         cpos = build_outside_buf.lower().find("<commands>")
                         positions = [p for p in (bpos, cpos) if p != -1]
@@ -1667,58 +1947,55 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                                 build_outside_buf = build_outside_buf[-200:]
                             return
                         pos = min(positions)
-                        # Determine which tag was found first
-                        if pos == bpos:
-                            tag_len = 7   # len("<build>")
-                        else:
-                            tag_len = 10  # len("<commands>")
+                        tag_len = 7 if pos == bpos else 10  # <build>=7个字符，<commands>=10个字符
                         build_outside_buf = build_outside_buf[pos + tag_len:]
                         in_build = True
                         remaining = build_outside_buf
                         build_outside_buf = ""
                         continue
 
-                    # Inside build section, process line by line
+                    # 在 build 段内：收集行，暂不执行
                     build_commands_buf += remaining
                     remaining = ""
 
-                    # Check for closing tag
+                    # 检查结束标签
                     bclose = build_commands_buf.lower().find("</build>")
                     cclose = build_commands_buf.lower().find("</commands>")
                     cpositions = [p for p in (bclose, cclose) if p != -1]
 
                     if cpositions:
                         close_pos = min(cpositions)
-                        close_len = 8 if close_pos == bclose else 11  # </build>=8, </commands>=11
-                        # Found closing tag - execute remaining commands
+                        close_len = 8 if close_pos == bclose else 11  # </build>=8个字符，</commands>=11个字符
                         segment = build_commands_buf[:close_pos]
                         remainder = build_commands_buf[close_pos + close_len:]
                         build_commands_buf = ""
                         in_build = False
+                        # 解析段落中的所有行
                         for line in segment.splitlines():
                             line = line.strip()
                             if not line or line.startswith("```"):
                                 continue
                             parsed = _parse_commands_payload(line)
-                            for cmd_data in parsed:
-                                for marker in _execute_one_command(cmd_data):
-                                    yield marker
+                            build_cmd_buffer.extend(parsed)
+                        # 一次性批量执行所有已收集的命令
+                        if build_cmd_buffer:
+                            for marker in _execute_batch_and_yield(build_cmd_buffer):
+                                yield marker
+                            build_cmd_buffer = []
                         remaining = remainder
                         continue
 
-                    # No closing tag - execute complete lines, keep incomplete line
+                    # 尚无结束标签：解析完整行并添加到缓冲区
                     if "\n" not in build_commands_buf:
                         return
                     lines = build_commands_buf.split("\n")
-                    build_commands_buf = lines[-1]  # keep last incomplete line
+                    build_commands_buf = lines[-1]  # keep incomplete line
                     for raw_line in lines[:-1]:
                         line = raw_line.strip()
                         if not line or line.startswith("```"):
                             continue
                         parsed = _parse_commands_payload(line)
-                        for cmd_data in parsed:
-                            for marker in _execute_one_command(cmd_data):
-                                yield marker
+                        build_cmd_buffer.extend(parsed)
                     return
 
             try:
@@ -1728,7 +2005,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     if chunk:
                         full_content += chunk
                         yield chunk
-                        # Execute commands in real-time during streaming
+                        # 在流式输出期间实时执行命令
                         for marker in _feed_stream_commands(chunk):
                             if marker is not None:
                                 yield marker
@@ -1737,43 +2014,59 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 logger.error("[Round %d] Stream error: %s", round_idx, e)
                 yield f"[第{round_idx}轮调用异常] {execution_error}\n"
 
+            # 执行未关闭的 build 段中剩余的命令（流在构建中结束）
+            if build_cmd_buffer:
+                logger.info("[Round %d] Executing %d remaining build commands (unclosed section)", round_idx, len(
+                    build_cmd_buffer))
+                for marker in _execute_batch_and_yield(build_cmd_buffer):
+                    if marker is not None:
+                        yield marker
+                build_cmd_buffer = []
+
             if finish_reason in {"length", "max_tokens"}:
                 request_messages.append({
                     "role": "user",
                     "content": "系统：你的上轮输出因达到 token 上限而被截断。请在回复中保持精简，优先输出命令。"
                 })
 
-            request_messages.append({"role": "assistant", "content": full_content})
+            request_messages.append(
+                {"role": "assistant", "content": full_content})
             _log_conversation("llm_response",
-                f"[Round {round_idx}] Response ({len(full_content)} chars)\n{full_content[:500]}",
-                round_num=round_idx)
+                              f"[Round {round_idx}] Response ({len(full_content)} chars)\n{full_content[:500]}",
+                              round_num=round_idx)
 
-            # ═══ Post-hoc extraction of ALL sections from the full response ═══
-            # Extract new 5-mode sections (with old format fallbacks)
-            build_text = _extract_tag_text(full_content, "build") or _extract_tag_text(full_content, "commands")
-            observe_text = _extract_tag_text(full_content, "observe") or _extract_tag_text(full_content, "verify")
+            # ═══ 从完整响应中事后提取所有段落 ═══
+            # 提取新 5 阶段段落（兼容旧格式）
+            build_text = _extract_tag_text(
+                full_content, "build") or _extract_tag_text(full_content, "commands")
+            observe_text = _extract_tag_text(
+                full_content, "observe") or _extract_tag_text(full_content, "verify")
             raw_plan_text = _extract_tag_text(full_content, "plan")
             raw_sum_text = _extract_tag_text(full_content, "sum")
             answer_text = _extract_tag_text(full_content, "answer")
             done_flag = _is_done_response(full_content)
 
-            # Execute build commands (post-hoc fallback if streaming didn't execute them)
+            # 执行 build 命令（流式未执行时的事后回退）
             streaming_executed = executed_command_count
             if build_text.strip():
                 if streaming_executed == 0:
-                    logger.info("[Round %d] Executing %d build lines (post-hoc fallback)", round_idx, len(build_text.splitlines()))
+                    logger.info("[Round %d] Executing %d build lines (post-hoc fallback)",
+                                round_idx, len(build_text.splitlines()))
                     for marker in _execute_commands_text(build_text):
                         if marker is not None:
                             yield marker
                 else:
-                    logger.info("[Round %d] %d commands already executed during streaming, skipping post-hoc", round_idx, streaming_executed)
+                    logger.info(
+                        "[Round %d] %d commands already executed during streaming, skipping post-hoc", round_idx, streaming_executed)
                 aggregated_commands.append(build_text)
             elif streaming_executed > 0:
-                logger.info("[Round %d] %d commands executed during streaming (no post-hoc needed)", round_idx, streaming_executed)
+                logger.info(
+                    "[Round %d] %d commands executed during streaming (no post-hoc needed)", round_idx, streaming_executed)
             else:
-                logger.info("[Round %d] No build/commands content found", round_idx)
+                logger.info(
+                    "[Round %d] No build/commands content found", round_idx)
 
-            # Save plan.md and summary.md
+            # 保存 plan.md 和 summary.md
             if raw_plan_text.strip():
                 _atomic_write_md(PLAN_FILE, raw_plan_text.strip())
                 plan_content = raw_plan_text.strip()
@@ -1783,17 +2076,33 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 summary_content = raw_sum_text.strip()
                 logger.info("已更新 summary.md")
 
-            # Fallback for answer
+            # 自学进化：提取 <rules> 块并合并到 rules.md
+            raw_rules_text = _extract_tag_text(full_content, "rules")
+            if raw_rules_text and raw_rules_text.strip():
+                logger.info(
+                    "[Round %d] 发现 <rules> 块，尝试合并到 rules.md", round_idx)
+                existing_rules = _load_md_file(RULES_FILE)
+                merged = _merge_rules(raw_rules_text, existing_rules)
+                if merged is not None:
+                    _atomic_write_md(RULES_FILE, merged)
+                    rules_content = merged
+                    logger.info("已更新 rules.md (自学进化)")
+                else:
+                    logger.info("rules.md 无变化（规则已存在或格式无效）")
+
+            # answer 回退
             if not answer_text:
                 answer_text = "已完成本轮处理。"
             final_answer_text = answer_text
 
-            # Prepare verify/observe object
-            verify_obj = _extract_verify_payload_from_text(observe_text) if observe_text else None
+            # 准备 verify/observe 对象
+            verify_obj = _extract_verify_payload_from_text(
+                observe_text) if observe_text else None
 
             after_state = circuit_manager.get_state()
             compact_after_state = _build_compact_state(after_state)
-            state_fingerprint = json.dumps(compact_after_state, ensure_ascii=False, separators=(',', ':'))
+            state_fingerprint = json.dumps(
+                compact_after_state, ensure_ascii=False, separators=(',', ':'))
             io_summary = _build_io_summary(after_state)
             if last_state_fingerprint is not None and state_fingerprint == last_state_fingerprint:
                 no_progress_rounds += 1
@@ -1853,30 +2162,38 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     m = err.get("error")
                     if c and m:
                         lines.append(f"- {c}: {m}")
-                msg = "系统检查：本轮部分命令执行失败，请修复后继续。\n" + ("\n".join(lines) if lines else "")
+                msg = "系统检查：本轮部分命令执行失败，请修复后继续。\n" + \
+                    ("\n".join(lines) if lines else "")
                 request_messages.append({"role": "user", "content": msg})
 
-            sample_payloads = [r.get("result") for r in command_results if isinstance(r, dict) and r.get("command") == "sample_outputs"]
+            sample_payloads = [r.get("result") for r in command_results if isinstance(
+                r, dict) and r.get("command") == "sample_outputs"]
             if sample_payloads:
                 latest = sample_payloads[-1]
-                request_messages.append({"role": "user", "content": f"系统采样结果：{json.dumps(latest, ensure_ascii=False, separators=(',', ':'))}"})
+                request_messages.append(
+                    {"role": "user", "content": f"系统采样结果：{json.dumps(latest, ensure_ascii=False, separators=(',', ':'))}"})
             else:
-                request_messages.append({"role": "user", "content": f"系统IO摘要：{json.dumps(io_summary, ensure_ascii=False, separators=(',', ':'))}"})
+                request_messages.append(
+                    {"role": "user", "content": f"系统IO摘要：{json.dumps(io_summary, ensure_ascii=False, separators=(',', ':'))}"})
 
             verify_report = None
             if verify_obj is not None:
                 verify_report = _run_verify_cases(verify_obj)
                 if verify_report is None:
-                    request_messages.append({"role": "user", "content": "系统验证失败：observe 内容无法解析或为空。请输出合法 JSON 并重试。"})
+                    request_messages.append(
+                        {"role": "user", "content": "系统验证失败：observe 内容无法解析或为空。请输出合法 JSON 并重试。"})
                     done_flag = False
                 else:
-                    report_text = json.dumps(verify_report, ensure_ascii=False, separators=(',', ':'))
-                    request_messages.append({"role": "user", "content": f"系统验证报告：{report_text}"})
+                    report_text = json.dumps(
+                        verify_report, ensure_ascii=False, separators=(',', ':'))
+                    request_messages.append(
+                        {"role": "user", "content": f"系统验证报告：{report_text}"})
                     if verify_report.get("failed", 0) > 0:
                         done_flag = False
 
-            # Build feedback for next round
-            state_diff = _compute_state_diff(current_state, after_state) if round_idx > 1 else None
+            # 构建下一轮反馈
+            state_diff = _compute_state_diff(
+                current_state, after_state) if round_idx > 1 else None
             previous_feedback = {
                 "execution": {
                     "command_count": executed_command_count,
@@ -1888,7 +2205,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             }
 
             if done_flag:
-                _log_conversation("system", f"[Round {round_idx}] Agent done: {final_answer_text[:200]}", round_num=round_idx)
+                _log_conversation(
+                    "system", f"[Round {round_idx}] Agent done: {final_answer_text[:200]}", round_num=round_idx)
                 break
 
             if cycle_rounds >= 20:
@@ -1896,7 +2214,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     "检测到电路状态在少数几个状态之间循环变化（可能反复 TOGGLE 或反复增删无效）。"
                     "为避免无效调用，我已停止自治循环。你可以指定更明确的目标或允许我先重置关键输入再测试。"
                 )
-                _log_conversation("system", f"Loop terminated: cycle detected after {round_idx} rounds", round_num=round_idx)
+                _log_conversation(
+                    "system", f"Loop terminated: cycle detected after {round_idx} rounds", round_num=round_idx)
                 break
 
             if no_progress_rounds >= no_progress_stop_rounds:
@@ -1904,7 +2223,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     f"已连续 {no_progress_rounds} 轮状态无变化（疑似停滞）。"
                     "为避免无效调用，我已停止自治循环。你可以补充更具体的目标、允许我 CLEAR 重建、或指出需要保留的部分。"
                 )
-                _log_conversation("system", f"Loop terminated: no progress after {round_idx} rounds", round_num=round_idx)
+                _log_conversation(
+                    "system", f"Loop terminated: no progress after {round_idx} rounds", round_num=round_idx)
                 break
 
             if no_progress_rounds >= 2:
@@ -1930,12 +2250,14 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
             MAX_CONTEXT_LEN = 30
             if len(request_messages) > MAX_CONTEXT_LEN:
-                request_messages = [request_messages[0]] + request_messages[-(MAX_CONTEXT_LEN - 1):]
+                request_messages = [request_messages[0]] + \
+                    request_messages[-(MAX_CONTEXT_LEN - 1):]
 
         yield STREAM_ANSWER_MARKER
         final_output = final_answer_text.strip() if final_answer_text else "已完成处理。"
         if aggregated_commands:
-            merged_commands = "\n".join([c for c in aggregated_commands if c.strip()]).strip()
+            merged_commands = "\n".join(
+                [c for c in aggregated_commands if c.strip()]).strip()
             final_output += f"\n<commands>\n{merged_commands}\n</commands>"
         else:
             final_output += "\n<commands>\n[]\n</commands>"
@@ -1947,9 +2269,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
         if finish_reason in {"length", "max_tokens"}:
             yield "\n[系统] 输出达到 max_tokens 上限，思考或回复可能被截断。可在 AI_CONFIG 中调大 max_tokens。"
-                
+
     except Exception as e:
         yield f"调用 AI 失败: {str(e)}"
+
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -1961,22 +2284,24 @@ def chat():
         message = data.get('message', '')
         max_rounds = data.get('max_rounds', None)
         thinking_mode = data.get('thinking_mode', False)
-        logger.info("/api/chat 接收到的 max_rounds=%s, thinking_mode=%s", max_rounds, thinking_mode)
+        logger.info("/api/chat 接收到的 max_rounds=%s, thinking_mode=%s",
+                    max_rounds, thinking_mode)
         _log_conversation("user", message)
-        
+
         full_response = [""]
-        
+
         def generate():
             for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode):
                 full_response[0] += chunk
                 yield chunk
-            # After streaming, log the assistant's full response
+            # 流式输出后，记录助手的完整回复
             _log_conversation("assistant", full_response[0])
-                
+
         return Response(generate(), mimetype='text/plain')
     except Exception as e:
         _log_conversation("system", f"Chat error: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 def fallback_chat(message, error_msg):
     """
@@ -1985,16 +2310,17 @@ def fallback_chat(message, error_msg):
     message = message.lower()
     commands_executed = []
     reply = ""
-    
+
     # 如果 API Key 没填，提示用户，但仍然尝试处理简单指令
     is_config_error = "YOUR_API_KEY_HERE" in error_msg
-    
+
     if "清空" in message or "clear" in message:
         execute_circuit_command('clear_circuit', {})
         reply = "好的，我已经清空了所有电路。"
         commands_executed.append({'command': 'clear_circuit'})
     elif "与门" in message:
-        res = execute_circuit_command('add_element', {'type': 'AND', 'x': 100, 'y': 100})
+        res = execute_circuit_command(
+            'add_element', {'type': 'AND', 'x': 100, 'y': 100})
         reply = f"已为您添加了一个与门。"
         commands_executed.append({'command': 'add_element', 'type': 'AND'})
     else:
@@ -2009,6 +2335,7 @@ def fallback_chat(message, error_msg):
         'commands_executed': commands_executed,
         'config_needed': is_config_error
     })
+
 
 @app.route('/api/save-function', methods=['POST', 'OPTIONS'])
 def save_function():
@@ -2025,16 +2352,17 @@ def save_function():
                     functions_data = json.load(f)
             except json.JSONDecodeError:
                 functions_data = {'functions': []}
-        
+
         # 添加新函数
         functions_data['functions'].append(new_function)
-        
+
         _atomic_write_json(FUNCTIONS_DATA_FILE, functions_data)
         logger.info("函数已保存到: %s", FUNCTIONS_DATA_FILE)
         return jsonify({'status': 'success', 'message': 'Function saved successfully'})
     except Exception as e:
         logger.error("保存函数失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/save-functions', methods=['POST', 'OPTIONS'])
 def save_functions():
@@ -2049,6 +2377,7 @@ def save_functions():
     except Exception as e:
         logger.error("保存函数列表失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/api/load-functions', methods=['GET', 'OPTIONS'])
 def load_functions():
@@ -2070,6 +2399,7 @@ def load_functions():
     except Exception as e:
         logger.error("加载函数数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 if __name__ == '__main__':
     logger.info("电路设计应用启动中...")

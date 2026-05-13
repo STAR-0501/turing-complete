@@ -9,14 +9,42 @@ import os
 import random
 import string
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
+
 def generate_id():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=9))
 
+
 logger = logging.getLogger(__name__)
+
+# 全局锁用于线程安全的文件 I/O（防止 Windows 文件冲突）
+_data_io_lock = threading.Lock()
+
+
+def _locked_write_json(path, data):
+    """Thread-safe wrapper around _atomic_write_json."""
+    with _data_io_lock:
+        _atomic_write_json(path, data)
+
+
+def _locked_read_json(path):
+    """Thread-safe JSON file read."""
+    with _data_io_lock:
+        if os.path.exists(path):
+            for attempt in range(3):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except (json.JSONDecodeError, PermissionError, OSError):
+                    if attempt == 2:
+                        logger.warning("Failed to read %s after retries", path)
+                    time.sleep(0.01)
+        return {"elements": [], "wires": []}
+
 
 def _atomic_write_json(path, data):
     for stale in glob.glob(f"{path}.tmp.*"):
@@ -42,6 +70,7 @@ def _atomic_write_json(path, data):
             pass
         raise
 
+
 @dataclass
 class SimulationContext:
     elements: List[Dict[str, Any]]
@@ -49,13 +78,15 @@ class SimulationContext:
     function_cache: Dict[str, Any]
     depth: int = 0
 
+
 class CircuitManager:
     """Manages circuit persistence and boolean simulation."""
 
     def __init__(self, data_file, functions_file=None):
         self.data_file = data_file
         self.functions_file = functions_file
-        logger.debug("CircuitManager 初始化: data_file=%s, functions_file=%s", data_file, functions_file)
+        logger.debug(
+            "CircuitManager 初始化: data_file=%s, functions_file=%s", data_file, functions_file)
 
     def _load_functions(self):
         if self.functions_file and os.path.exists(self.functions_file):
@@ -68,7 +99,8 @@ class CircuitManager:
                         return json.load(f).get("functions", [])
                 except json.JSONDecodeError:
                     if attempt == 2:
-                        logger.warning("Failed to decode functions file: %s", self.functions_file)
+                        logger.warning(
+                            "Failed to decode functions file: %s", self.functions_file)
                     time.sleep(0.01)
                 except (FileNotFoundError, PermissionError, OSError):
                     return []
@@ -77,27 +109,17 @@ class CircuitManager:
 
     def _save_functions(self, functions):
         if self.functions_file:
-            _atomic_write_json(self.functions_file, {"functions": functions})
+            _locked_write_json(self.functions_file, {"functions": functions})
 
     def _load_data(self):
-        if os.path.exists(self.data_file):
-            for attempt in range(3):
-                try:
-                    with open(self.data_file, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-                except json.JSONDecodeError:
-                    if attempt == 2:
-                        logger.warning("Failed to decode circuit data file: %s", self.data_file)
-                    time.sleep(0.01)
-                except (FileNotFoundError, PermissionError):
-                    break
-        return {"elements": [], "wires": []}
+        return _locked_read_json(self.data_file)
 
     def _save_data(self, data):
-        _atomic_write_json(self.data_file, data)
+        _locked_write_json(self.data_file, data)
 
     def _build_endpoint(self, element, port_id, is_input):
-        ports = element.get("inputs", []) if is_input else element.get("outputs", [])
+        ports = element.get(
+            "inputs", []) if is_input else element.get("outputs", [])
         port = next((p for p in ports if p.get("id") == port_id), None)
         if not port:
             return None
@@ -114,8 +136,10 @@ class CircuitManager:
             return None
         start = wire.get("start", {})
         end = wire.get("end", {})
-        start_el = next((e for e in elements if e.get("id") == start.get("elementId")), None)
-        end_el = next((e for e in elements if e.get("id") == end.get("elementId")), None)
+        start_el = next((e for e in elements if e.get("id")
+                        == start.get("elementId")), None)
+        end_el = next((e for e in elements if e.get(
+            "id") == end.get("elementId")), None)
         if not start_el or not end_el:
             if not start_el:
                 logger.debug("连线标准化: 找不到起始元件 %s", start.get("elementId"))
@@ -125,13 +149,17 @@ class CircuitManager:
 
         start_is_input = start.get("isInput")
         if start_is_input is None:
-            start_is_input = any(p.get("id") == start.get("portId") for p in start_el.get("inputs", []))
+            start_is_input = any(p.get("id") == start.get("portId")
+                                 for p in start_el.get("inputs", []))
         end_is_input = end.get("isInput")
         if end_is_input is None:
-            end_is_input = any(p.get("id") == end.get("portId") for p in end_el.get("inputs", []))
+            end_is_input = any(p.get("id") == end.get("portId")
+                               for p in end_el.get("inputs", []))
 
-        normalized_start = self._build_endpoint(start_el, start.get("portId"), start_is_input)
-        normalized_end = self._build_endpoint(end_el, end.get("portId"), end_is_input)
+        normalized_start = self._build_endpoint(
+            start_el, start.get("portId"), start_is_input)
+        normalized_end = self._build_endpoint(
+            end_el, end.get("portId"), end_is_input)
         if not normalized_start or not normalized_end:
             return None
 
@@ -149,8 +177,10 @@ class CircuitManager:
             return None
         from_data = wire.get("from", {})
         to_data = wire.get("to", {})
-        from_el = next((e for e in elements if e.get("id") == from_data.get("elementId")), None)
-        to_el = next((e for e in elements if e.get("id") == to_data.get("elementId")), None)
+        from_el = next((e for e in elements if e.get(
+            "id") == from_data.get("elementId")), None)
+        to_el = next((e for e in elements if e.get("id")
+                     == to_data.get("elementId")), None)
         if not from_el or not to_el:
             if not from_el:
                 logger.debug("旧格式连线: 找不到起始元件 %s", from_data.get("elementId"))
@@ -200,8 +230,10 @@ class CircuitManager:
                 "width": 80, "height": 60,
                 "realWidth": 80, "realHeight": 60,
                 "inputs": [
-                    {"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15},
-                    {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}
+                    {"id": generate_id(), "x": -5, "y": 15,
+                     "realX": -5, "realY": 15},
+                    {"id": generate_id(), "x": -5, "y": 45,
+                     "realX": -5, "realY": 45}
                 ],
                 "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
             }
@@ -210,8 +242,10 @@ class CircuitManager:
                 "width": 80, "height": 60,
                 "realWidth": 80, "realHeight": 60,
                 "inputs": [
-                    {"id": generate_id(), "x": -5, "y": 15, "realX": -5, "realY": 15},
-                    {"id": generate_id(), "x": -5, "y": 45, "realX": -5, "realY": 45}
+                    {"id": generate_id(), "x": -5, "y": 15,
+                     "realX": -5, "realY": 15},
+                    {"id": generate_id(), "x": -5, "y": 45,
+                     "realX": -5, "realY": 45}
                 ],
                 "outputs": [{"id": generate_id(), "x": 85, "y": 30, "realX": 85, "realY": 30}]
             }
@@ -238,7 +272,8 @@ class CircuitManager:
             }
 
         functions = self._load_functions()
-        func = next((f for f in functions if f.get("name") == element_type), None)
+        func = next((f for f in functions if f.get(
+            "name") == element_type), None)
         if not func:
             raise ValueError(f"Unknown element type: {element_type}")
 
@@ -247,11 +282,13 @@ class CircuitManager:
         height = max(60, max(input_count, output_count) * 25 + 20)
 
         inputs = [
-            {"id": generate_id(), "x": -5, "y": 20 + i * 25, "realX": -5, "realY": 20 + i * 25}
+            {"id": generate_id(), "x": -5, "y": 20 + i * 25,
+             "realX": -5, "realY": 20 + i * 25}
             for i in range(input_count)
         ]
         outputs = [
-            {"id": generate_id(), "x": 105, "y": 20 + i * 25, "realX": 105, "realY": 20 + i * 25}
+            {"id": generate_id(), "x": 105, "y": 20 + i * 25,
+             "realX": 105, "realY": 20 + i * 25}
             for i in range(output_count)
         ]
         return {
@@ -274,7 +311,7 @@ class CircuitManager:
     def add_element(self, element_type, x, y, alias=None):
         data = self._load_data()
 
-        # Overlap auto-correction: if new element overlaps an existing one, shift y down by 80
+        # 重叠自动修正：如果新元件与现有元件重叠，将 y 向下偏移 80
         def _find_non_overlapping_y(desired_x, desired_y):
             candidate_y = desired_y
             max_attempts = 50
@@ -292,7 +329,8 @@ class CircuitManager:
 
         corrected_y = _find_non_overlapping_y(x, y)
         if corrected_y != y:
-            logger.debug("元件 %s 坐标修正: (%d,%d) -> (%d,%d)", element_type, x, y, x, corrected_y)
+            logger.debug("元件 %s 坐标修正: (%d,%d) -> (%d,%d)",
+                         element_type, x, y, x, corrected_y)
 
         element = {
             "id": generate_id(),
@@ -327,10 +365,11 @@ class CircuitManager:
 
     def add_wire(self, from_id, from_port_idx, to_id, to_port_idx):
         data = self._normalize_data(self._load_data())
-        
-        from_el = next((e for e in data["elements"] if e["id"] == from_id), None)
+
+        from_el = next(
+            (e for e in data["elements"] if e["id"] == from_id), None)
         to_el = next((e for e in data["elements"] if e["id"] == to_id), None)
-        
+
         if not from_el or not to_el:
             raise ValueError("Invalid element IDs")
 
@@ -340,7 +379,7 @@ class CircuitManager:
             raise ValueError("Invalid source output port index")
         if to_port_idx < 0 or to_port_idx >= len(to_inputs):
             raise ValueError("Invalid target input port index")
-            
+
         from_port = from_outputs[from_port_idx]
         to_port = to_inputs[to_port_idx]
         wire = {
@@ -360,7 +399,7 @@ class CircuitManager:
                 "isInput": True
             }
         }
-        
+
         data["wires"].append(wire)
         self._save_data(data)
         return wire
@@ -379,16 +418,17 @@ class CircuitManager:
         data = self._load_data()
         elements = data.get("elements", [])
         wires = data.get("wires", [])
-        
+
         input_ids = [e["id"] for e in elements if e.get("type") == "INPUT"]
         output_ids = [e["id"] for e in elements if e.get("type") == "OUTPUT"]
-        
+
         if not input_ids or not output_ids:
-            raise ValueError("A function must have at least one INPUT and one OUTPUT.")
-            
+            raise ValueError(
+                "A function must have at least one INPUT and one OUTPUT.")
+
         functions = self._load_functions()
         functions = [f for f in functions if f.get("name") != name]
-        
+
         func_data = {
             "id": generate_id(),
             "name": name,
@@ -397,7 +437,7 @@ class CircuitManager:
             "inputElementIds": input_ids,
             "outputElementIds": output_ids
         }
-        
+
         functions.append(func_data)
         self._save_functions(functions)
         return func_data
@@ -462,14 +502,16 @@ class CircuitManager:
 
         if output_ids:
             id_set = set(output_ids)
-            missing = [oid for oid in output_ids if oid not in {o.get("id") for o in outputs}]
+            missing = [oid for oid in output_ids if oid not in {
+                o.get("id") for o in outputs}]
             if missing:
                 raise ValueError(f"Unknown OUTPUT id(s): {', '.join(missing)}")
             outputs = [o for o in outputs if o.get("id") in id_set]
 
         return {
             "outputs": [
-                {"id": o.get("id"), "alias": o.get("alias") or o.get("name"), "state": bool(o.get("state", False))}
+                {"id": o.get("id"), "alias": o.get("alias") or o.get(
+                    "name"), "state": bool(o.get("state", False))}
                 for o in outputs
             ]
         }
@@ -496,12 +538,14 @@ class CircuitManager:
             end = w.get("end", {})
             if end.get("elementId") == target_element_id and end.get("portId") == target_port_id:
                 src_id = start.get("elementId")
-                src_el = next((e for e in elements if e.get("id") == src_id), None)
+                src_el = next(
+                    (e for e in elements if e.get("id") == src_id), None)
                 if src_el:
                     return _get_output_value(src_el, start.get("portId"))
             if start.get("elementId") == target_element_id and start.get("portId") == target_port_id:
                 src_id = end.get("elementId")
-                src_el = next((e for e in elements if e.get("id") == src_id), None)
+                src_el = next(
+                    (e for e in elements if e.get("id") == src_id), None)
                 if src_el:
                     return _get_output_value(src_el, end.get("portId"))
         return None
@@ -520,7 +564,8 @@ class CircuitManager:
         for p in el.get("inputs", []):
             if not self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
                 return False
-            v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+            v = self._get_input_source_state(
+                ctx.elements, ctx.wires, el.get("id"), p.get("id"))
             if v is not True:
                 return False
         return True
@@ -530,7 +575,8 @@ class CircuitManager:
         for p in el.get("inputs", []):
             if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
                 has_input = True
-                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                v = self._get_input_source_state(
+                    ctx.elements, ctx.wires, el.get("id"), p.get("id"))
                 if v is True:
                     return True
         return False
@@ -541,7 +587,8 @@ class CircuitManager:
         for p in el.get("inputs", []):
             if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
                 has_input = True
-                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                v = self._get_input_source_state(
+                    ctx.elements, ctx.wires, el.get("id"), p.get("id"))
                 if v is True:
                     input_true = True
                     break
@@ -550,13 +597,15 @@ class CircuitManager:
     def _calc_output_state(self, el, ctx: SimulationContext) -> bool:
         for p in el.get("inputs", []):
             if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
-                v = self._get_input_source_state(ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                v = self._get_input_source_state(
+                    ctx.elements, ctx.wires, el.get("id"), p.get("id"))
                 if v is True:
                     return True
         return False
 
     def _simulate_elements_until_stable(self, elements, wires, function_cache, max_iters=50, depth=0):
-        ctx = SimulationContext(elements=elements, wires=wires, function_cache=function_cache, depth=depth)
+        ctx = SimulationContext(
+            elements=elements, wires=wires, function_cache=function_cache, depth=depth)
         calculators: Dict[str, Callable[[Dict[str, Any], SimulationContext], bool]] = {
             "AND": self._calc_and_state,
             "OR": self._calc_or_state,
@@ -577,7 +626,8 @@ class CircuitManager:
                     old_output_states = list(el.get("outputStates") or [])
                     output_states = self._calculate_function_element(el, ctx)
                     el["outputStates"] = output_states
-                    new_state = bool(output_states[0]) if output_states else False
+                    new_state = bool(
+                        output_states[0]) if output_states else False
                     if output_states != old_output_states:
                         changed = True
                 else:
@@ -596,29 +646,38 @@ class CircuitManager:
 
     def _calculate_function_element(self, function_element, parent_ctx: SimulationContext):
         if function_element.get("name"):
-            logger.debug("计算函数元件 %s (深度 %d)", function_element.get("name"), parent_ctx.depth)
+            logger.debug("计算函数元件 %s (深度 %d)", function_element.get(
+                "name"), parent_ctx.depth)
         if parent_ctx.depth >= 10:
-            logger.warning("函数深度达到上限 (10)，返回空输出: %s", function_element.get("id"))
+            logger.warning("函数深度达到上限 (10)，返回空输出: %s",
+                           function_element.get("id"))
             return []
         function_data = function_element.get("functionData") or {}
-        func_elements = json.loads(json.dumps(function_data.get("elements") or []))
+        func_elements = json.loads(json.dumps(
+            function_data.get("elements") or []))
         func_wires = json.loads(json.dumps(function_data.get("wires") or []))
         input_element_ids = function_data.get("inputElementIds") or []
         output_element_ids = function_data.get("outputElementIds") or []
 
         for i, input_port in enumerate(function_element.get("inputs", []) or []):
-            input_state = self._get_input_source_state(parent_ctx.elements, parent_ctx.wires, function_element.get("id"), input_port.get("id"))
+            input_state = self._get_input_source_state(
+                parent_ctx.elements, parent_ctx.wires, function_element.get("id"), input_port.get("id"))
             if i < len(input_element_ids):
-                internal_input = next((e for e in func_elements if e.get("id") == input_element_ids[i]), None)
+                internal_input = next(
+                    (e for e in func_elements if e.get("id") == input_element_ids[i]), None)
                 if internal_input is not None:
-                    internal_input["state"] = bool(input_state) if input_state is not None else False
+                    internal_input["state"] = bool(
+                        input_state) if input_state is not None else False
 
-        self._simulate_elements_until_stable(func_elements, func_wires, parent_ctx.function_cache, depth=parent_ctx.depth + 1)
+        self._simulate_elements_until_stable(
+            func_elements, func_wires, parent_ctx.function_cache, depth=parent_ctx.depth + 1)
 
         output_states = []
         for out_id in output_element_ids:
-            out_el = next((e for e in func_elements if e.get("id") == out_id), None)
-            output_states.append(bool(out_el.get("state", False)) if out_el else False)
+            out_el = next(
+                (e for e in func_elements if e.get("id") == out_id), None)
+            output_states.append(
+                bool(out_el.get("state", False)) if out_el else False)
         return output_states
 
     def simulate(self):

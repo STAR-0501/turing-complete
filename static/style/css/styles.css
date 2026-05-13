@@ -1,520 +1,528 @@
 /* 全局样式重置 */
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 /* 主容器样式 */
 body {
-    font-family: 'Arial', sans-serif;
-    background-color: #0a0a0a;
-    color: #00ffff;
-    overflow: hidden;
-    height: 100vh;
+  font-family: 'Arial', sans-serif;
+  background-color: #0a0a0a;
+  color: #00ffff;
+  overflow: hidden;
+  height: 100vh;
 }
 
 #app {
-    width: 100vw;
-    height: 100vh;
-    position: relative;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
 }
 
 /* 画布样式 */
 #canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    cursor: crosshair;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
 }
 
 /* 工具栏样式 */
 .toolbar {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 8px;
-    padding: 10px;
-    backdrop-filter: blur(10px);
-    z-index: 1000;
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: center;
-    overflow-x: auto;
-    white-space: nowrap;
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .toolbar button {
-    background-color: rgba(0, 255, 255, 0.2);
-    border: 1px solid rgba(0, 255, 255, 0.5);
-    color: #00ffff;
-    padding: 8px 12px;
-    margin: 5px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-width: 60px;
-    text-align: center;
+  background-color: rgba(0, 255, 255, 0.2);
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  color: #00ffff;
+  padding: 8px 12px;
+  margin: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  text-align: center;
 }
 
 .toolbar button span:first-child {
-    font-size: 14px;
-    margin-bottom: 4px;
+  font-size: 14px;
+  margin-bottom: 4px;
 }
 
 .toolbar button span:last-child {
-    font-size: 12px;
-    opacity: 0.8;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .toolbar button:hover {
-    background-color: rgba(0, 255, 255, 0.4);
+  background-color: rgba(0, 255, 255, 0.4);
 }
 
 .toolbar button.active {
-    background-color: rgba(0, 255, 255, 0.6);
+  background-color: rgba(0, 255, 255, 0.6);
 }
 
 /* 元件样式 */
 .element {
-    position: absolute;
-    cursor: move;
-    background-color: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.5);
-    border-radius: 4px;
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(5px);
+  position: absolute;
+  cursor: move;
+  background-color: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  border-radius: 4px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(5px);
 }
 
 .input-block {
-    width: 60px;
-    height: 60px;
+  width: 60px;
+  height: 60px;
 }
 
 .output-block {
-    width: 60px;
-    height: 60px;
+  width: 60px;
+  height: 60px;
 }
 
 .gate {
-    width: 80px;
-    height: 60px;
+  width: 80px;
+  height: 60px;
 }
 
 /* 端口样式 */
 .port {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background-color: #00ffff;
-    border-radius: 50%;
-    cursor: pointer;
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background-color: #00ffff;
+  border-radius: 50%;
+  cursor: pointer;
 }
 
 .port:hover {
-    box-shadow: 0 0 10px #00ffff;
+  box-shadow: 0 0 10px #00ffff;
 }
 
 .port.selected {
-    box-shadow: 0 0 15px #00ffff, 0 0 20px #00ffff;
+  box-shadow:
+    0 0 15px #00ffff,
+    0 0 20px #00ffff;
 }
 
 /* 导线样式 */
 .wire {
-    stroke: #00ffff;
-    stroke-width: 2;
-    fill: none;
+  stroke: #00ffff;
+  stroke-width: 2;
+  fill: none;
 }
 
 .wire.selected {
-    stroke: #ff00ff;
-    stroke-width: 3;
+  stroke: #ff00ff;
+  stroke-width: 3;
 }
 
 /* 网格样式 - 无限延伸 */
 .grid {
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background-image: linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
-                      linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
-    background-size: 20px 20px;
-    background-position: 0 0;
-    pointer-events: none;
-    transform: translate(0, 0);
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0;
+  pointer-events: none;
+  transform: translate(0, 0);
 }
 
 /* 状态栏样式 */
 .status-bar {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    background-color: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 4px;
-    padding: 5px 10px;
-    backdrop-filter: blur(10px);
-    font-size: 12px;
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 5px 10px;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
 }
 
 /* 聊天窗口样式 */
 .chat-container {
-    position: absolute;
-    right: 20px;
-    bottom: 60px;
-    width: 350px;
-    height: 500px;
-    background-color: rgba(10, 10, 10, 0.9);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 2000;
-    transition: height 0.3s ease;
-    backdrop-filter: blur(15px);
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  position: absolute;
+  right: 20px;
+  bottom: 60px;
+  width: 350px;
+  height: 500px;
+  background-color: rgba(10, 10, 10, 0.9);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 2000;
+  transition: height 0.3s ease;
+  backdrop-filter: blur(15px);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
 .chat-container.collapsed {
-    height: 45px;
+  height: 45px;
 }
 
 .chat-header {
-    padding: 10px 15px;
-    background-color: rgba(0, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(0, 255, 255, 0.2);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: grab;
-    user-select: none; /* 防止拖拽时选中文字 */
+  padding: 10px 15px;
+  background-color: rgba(0, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: grab;
+  user-select: none; /* 防止拖拽时选中文字 */
 }
 
 .chat-header:active {
-    cursor: grabbing;
+  cursor: grabbing;
 }
 
 .chat-header h3 {
-    font-size: 14px;
-    color: #00ffff;
-    margin: 0;
+  font-size: 14px;
+  color: #00ffff;
+  margin: 0;
 }
 
 .chat-header button {
-    background: none;
-    border: none;
-    color: #00ffff;
-    cursor: pointer;
-    font-size: 18px;
+  background: none;
+  border: none;
+  color: #00ffff;
+  cursor: pointer;
+  font-size: 18px;
 }
 
 .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .message {
-    max-width: 85%;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    line-height: 1.4;
-    word-wrap: break-word;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  word-wrap: break-word;
 }
 
 .message.ai {
-    align-self: flex-start;
-    background-color: rgba(0, 255, 255, 0.1);
-    color: #e0ffff;
-    border: 1px solid rgba(0, 255, 255, 0.2);
+  align-self: flex-start;
+  background-color: rgba(0, 255, 255, 0.1);
+  color: #e0ffff;
+  border: 1px solid rgba(0, 255, 255, 0.2);
 }
 
 .message.user {
-    align-self: flex-end;
-    background-color: rgba(0, 255, 255, 0.3);
-    color: #ffffff;
-    border: 1px solid rgba(0, 255, 255, 0.4);
+  align-self: flex-end;
+  background-color: rgba(0, 255, 255, 0.3);
+  color: #ffffff;
+  border: 1px solid rgba(0, 255, 255, 0.4);
 }
 
 .chat-input-area {
-    padding: 10px;
-    border-top: 1px solid rgba(0, 255, 255, 0.2);
-    display: flex;
-    gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(0, 255, 255, 0.2);
+  display: flex;
+  gap: 8px;
 }
 
 .chat-input-area input {
-    flex: 1;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 4px;
-    padding: 8px;
-    color: #ffffff;
-    outline: none;
+  flex: 1;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 8px;
+  color: #ffffff;
+  outline: none;
 }
 
 .chat-input-area input:focus {
-    border-color: #00ffff;
+  border-color: #00ffff;
 }
 
 .chat-input-area button {
-    background-color: rgba(0, 255, 255, 0.2);
-    border: 1px solid rgba(0, 255, 255, 0.4);
-    color: #00ffff;
-    padding: 0 15px;
-    border-radius: 4px;
-    cursor: pointer;
+  background-color: rgba(0, 255, 255, 0.2);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  color: #00ffff;
+  padding: 0 15px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 .chat-input-area button:hover {
-    background-color: rgba(0, 255, 255, 0.3);
+  background-color: rgba(0, 255, 255, 0.3);
 }
 
 .thinking-toggle {
-    font-size: 16px;
-    padding: 0 8px !important;
-    opacity: 0.5;
-    transition: opacity 0.2s, background-color 0.2s, box-shadow 0.2s;
+  font-size: 16px;
+  padding: 0 8px !important;
+  opacity: 0.5;
+  transition:
+    opacity 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .thinking-toggle.active {
-    opacity: 1;
-    background-color: rgba(255, 200, 0, 0.25) !important;
-    border-color: rgba(255, 200, 0, 0.6) !important;
-    box-shadow: 0 0 8px rgba(255, 200, 0, 0.3);
+  opacity: 1;
+  background-color: rgba(255, 200, 0, 0.25) !important;
+  border-color: rgba(255, 200, 0, 0.6) !important;
+  box-shadow: 0 0 8px rgba(255, 200, 0, 0.3);
 }
 
 .thinking-toggle:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 /* 隐藏聊天内容 */
 .collapsed .chat-messages,
 .collapsed .chat-input-area {
-    display: none;
+  display: none;
 }
 
 /* 函数面板样式 */
 .function-panel {
-    position: absolute;
-    right: 20px;
-    top: 80px;
-    width: 220px;
-    max-height: 400px;
-    background-color: rgba(10, 10, 10, 0.9);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 1500;
-    backdrop-filter: blur(15px);
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    pointer-events: none; /* 让鼠标事件穿透面板传递到画布 */
+  position: absolute;
+  right: 20px;
+  top: 80px;
+  width: 220px;
+  max-height: 400px;
+  background-color: rgba(10, 10, 10, 0.9);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1500;
+  backdrop-filter: blur(15px);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  pointer-events: none; /* 让鼠标事件穿透面板传递到画布 */
 }
 
 .function-panel-header {
-    padding: 10px 15px;
-    background-color: rgba(0, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+  padding: 10px 15px;
+  background-color: rgba(0, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
 }
 
 .function-panel-header h3 {
-    font-size: 14px;
-    color: #00ffff;
-    margin: 0;
+  font-size: 14px;
+  color: #00ffff;
+  margin: 0;
 }
 
 .function-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    pointer-events: auto; /* 恢复内部元素的点击事件 */
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto; /* 恢复内部元素的点击事件 */
 }
 
 .function-item {
-    padding: 10px 12px;
-    background-color: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    color: #00ffff;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    pointer-events: auto; /* 恢复点击事件 */
+  padding: 10px 12px;
+  background-color: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #00ffff;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto; /* 恢复点击事件 */
 }
 
 .function-item:hover {
-    background-color: rgba(0, 255, 255, 0.25);
-    border-color: rgba(0, 255, 255, 0.5);
+  background-color: rgba(0, 255, 255, 0.25);
+  border-color: rgba(0, 255, 255, 0.5);
 }
 
 .function-item:active {
-    transform: scale(0.98);
+  transform: scale(0.98);
 }
 
 /* 模态框样式 */
 .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 3000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
 }
 
 .modal.show {
-    display: flex;
+  display: flex;
 }
 
 .modal-content {
-    background-color: rgba(10, 10, 10, 0.95);
-    border: 1px solid rgba(0, 255, 255, 0.4);
-    border-radius: 12px;
-    padding: 25px 30px;
-    min-width: 320px;
-    backdrop-filter: blur(15px);
-    box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+  background-color: rgba(10, 10, 10, 0.95);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  border-radius: 12px;
+  padding: 25px 30px;
+  min-width: 320px;
+  backdrop-filter: blur(15px);
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
 }
 
 .modal-content h3 {
-    color: #00ffff;
-    margin: 0 0 20px 0;
-    font-size: 18px;
-    text-align: center;
+  color: #00ffff;
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  text-align: center;
 }
 
 .modal-content input {
-    width: 100%;
-    padding: 10px 15px;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 6px;
-    color: #ffffff;
-    font-size: 14px;
-    outline: none;
-    margin-bottom: 20px;
+  width: 100%;
+  padding: 10px 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+  margin-bottom: 20px;
 }
 
 .modal-content input:focus {
-    border-color: #00ffff;
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
 .modal-content textarea {
-    width: 100%;
-    padding: 10px 15px;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 6px;
-    color: #ffffff;
-    font-size: 14px;
-    outline: none;
-    margin-bottom: 20px;
-    resize: vertical;
-    font-family: Arial, sans-serif;
+  width: 100%;
+  padding: 10px 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+  margin-bottom: 20px;
+  resize: vertical;
+  font-family: Arial, sans-serif;
 }
 
 .modal-content textarea:focus {
-    border-color: #00ffff;
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
 .modal-buttons {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
 }
 
 .modal-buttons button {
-    padding: 8px 20px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
 }
 
 .btn-cancel {
-    background-color: rgba(255, 0, 0, 0.2);
-    border: 1px solid rgba(255, 0, 0, 0.4) !important;
-    color: #ff6666;
+  background-color: rgba(255, 0, 0, 0.2);
+  border: 1px solid rgba(255, 0, 0, 0.4) !important;
+  color: #ff6666;
 }
 
 .btn-cancel:hover {
-    background-color: rgba(255, 0, 0, 0.35);
+  background-color: rgba(255, 0, 0, 0.35);
 }
 
 .btn-confirm {
-    background-color: rgba(0, 255, 255, 0.2);
-    border: 1px solid rgba(0, 255, 255, 0.4) !important;
-    color: #00ffff;
+  background-color: rgba(0, 255, 255, 0.2);
+  border: 1px solid rgba(0, 255, 255, 0.4) !important;
+  color: #00ffff;
 }
 
 .btn-confirm:hover {
-    background-color: rgba(0, 255, 255, 0.35);
+  background-color: rgba(0, 255, 255, 0.35);
 }
 
 /* AI 加载遮罩 */
 .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 10000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
 }
 
 .loading-spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid rgba(0, 255, 255, 0.3);
-    border-top-color: #00ffff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(0, 255, 255, 0.3);
+  border-top-color: #00ffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
-    margin-top: 20px;
-    color: #00ffff;
-    font-size: 18px;
-    font-weight: bold;
+  margin-top: 20px;
+  color: #00ffff;
+  font-size: 18px;
+  font-weight: bold;
 }
