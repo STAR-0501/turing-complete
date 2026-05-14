@@ -39,7 +39,7 @@ WIRE g1 0 g2 1
 
 | 工具名 | 文本格式 | JSON 示例 | 说明 |
 |--------|----------|-----------|------|
-| add_element | `ADD <type> <x> <y> [alias]` | `{"tool":"add_element","params":{"type":"AND","x":240,"y":60,"alias":"g1"}}` | 添加元件。type: AND/OR/NOT/INPUT/OUTPUT/FUNCTION |
+| add_element | `ADD <type> <x> <y> [alias]` | `{"tool":"add_element","params":{"type":"AND","x":240,"y":60,"alias":"g1"}}` | 添加元件。type: AND/OR/NOT/INPUT/OUTPUT/MODULE |
 | add_wire | `WIRE <from> <idx> <to> <idx>` | `{"tool":"add_wire","params":{"from_ref":"g1","from_port_idx":0,"to_ref":"g2","to_port_idx":1}}` | 连接端口（索引从 0 开始） |
 | move_element | `MOVE <id> <x> <y>` | `{"tool":"move_element","params":{"id":"abc123","x":300,"y":100}}` | 移动元件位置 |
 | remove_element | `DEL <id>` | `{"tool":"remove_element","params":{"id":"abc123"}}` | 删除元件及关联导线 |
@@ -49,7 +49,7 @@ WIRE g1 0 g2 1
 | set_input | `SET <id> <0\|1>` | `{"tool":"set_input","params":{"id":"A","value":1}}` | 设置 INPUT 为指定电平 |
 | simulate | `SIM` | `{"tool":"simulate","params":{}}` | 显式触发仿真 |
 | sample_outputs | `SAMPLE [id ...]` | `{"tool":"sample_outputs","params":{"ids":["SUM","CARRY"]}}` | 采样 OUTPUT 状态 |
-| define_function | `DEFINE_FUNC <name>` | `{"tool":"define_function","params":{"name":"HalfAdder"}}` | 将当前电路封装为函数 |
+| define_module | `DEFINE_MODULE <name>` | `{"tool":"define_module","params":{"name":"HalfAdder"}}` | 将当前电路封装为模块 |
 | set_element_comment | `COMMENT <id> <text>` | `{"tool":"set_element_comment","params":{"id":"and1","comment":"A与B相与"}}` | 设置元件注释 |
 
 ### 2.3 别名系统
@@ -171,15 +171,15 @@ WIRE A 0 g1 1
 
 ---
 
-## 6. 函数系统
+## 6. 模块系统
 
 1. 搭建包含 INPUT 和 OUTPUT 的子电路
-2. `DEFINE_FUNC <name>` 封装为函数
+2. `DEFINE_MODULE <name>` 封装为模块
 3. 系统自动验证或手动 `SET+SAMPLE` 验证
 4. `CLEAR` 清空画布
-5. `ADD <name>` 复用函数
+5. `ADD <name>` 复用模块
 
-函数支持多层嵌套（递归深度上限 10 层）。
+模块支持多层嵌套（递归深度上限 10 层）。
 
 ---
 

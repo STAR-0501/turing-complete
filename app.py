@@ -52,8 +52,8 @@ chat_memory_lock = threading.Lock()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 存储电路数据的文件
 CIRCUIT_DATA_FILE = os.path.join(BASE_DIR, 'circuit_data.json')
-# 存储函数数据的文件
-FUNCTIONS_DATA_FILE = os.path.join(BASE_DIR, 'functions_data.json')
+# 存储模块数据的文件
+MODULES_DATA_FILE = os.path.join(BASE_DIR, 'modules_data.json')
 # AI 模式持久化文件
 PLAN_FILE = os.path.join(BASE_DIR, 'plan.md')
 SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
@@ -62,7 +62,7 @@ RULES_FILE = os.path.join(BASE_DIR, 'rules.md')
 LOG_DIR = os.path.join(BASE_DIR, 'log')
 
 # 初始化电路管理器
-circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, FUNCTIONS_DATA_FILE)
+circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, MODULES_DATA_FILE)
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
 
@@ -77,17 +77,17 @@ def init_circuit_file():
         except Exception as e:
             logger.error("创建电路数据文件失败: %s", e)
 
-# 初始化：如果文件不存在，创建一个空的函数数据文件
+# 初始化：如果文件不存在，创建一个空的模块数据文件
 
 
 def init_functions_file():
-    if not os.path.exists(FUNCTIONS_DATA_FILE):
+    if not os.path.exists(MODULES_DATA_FILE):
         try:
-            with open(FUNCTIONS_DATA_FILE, 'w', encoding='utf-8') as f:
+            with open(MODULES_DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
-            logger.info("已创建空的函数数据文件: %s", FUNCTIONS_DATA_FILE)
+            logger.info("已创建空的模块数据文件: %s", MODULES_DATA_FILE)
         except Exception as e:
-            logger.error("创建函数数据文件失败: %s", e)
+            logger.error("创建模块数据文件失败: %s", e)
 
 # 初始化 AI 计划文件
 
@@ -317,7 +317,7 @@ def ai_generate_comments():
                 "type": el.get("type"),
                 "alias": el.get("alias"),
                 "state": el.get("state"),
-                "functionName": el.get("name") if el.get("type") == "FUNCTION" else None
+                "moduleName": el.get("name") if el.get("type") == "FUNCTION" else None
             }
             elements_info.append(el_info)
 
@@ -449,7 +449,7 @@ def ai_generate_circuit():
 
 def execute_circuit_command(cmd, params):
     """
-    执行命令并返回结果的辅助函数
+    执行命令并返回结果的辅助模块
     """
     if cmd == 'add_element':
         return circuit_manager.add_element(params['type'], params['x'], params['y'], params.get('alias'))
@@ -461,8 +461,8 @@ def execute_circuit_command(cmd, params):
         return circuit_manager.remove_wire(params['id'])
     elif cmd == 'clear_circuit':
         return circuit_manager.clear_circuit()
-    elif cmd == 'define_function':
-        return circuit_manager.define_function(params['name'])
+    elif cmd == 'define_module':
+        return circuit_manager.define_module(params['name'])
     elif cmd == 'toggle_input':
         return circuit_manager.toggle_input(params['id'])
     elif cmd == 'set_input':
@@ -533,7 +533,7 @@ def _parse_commands_payload(commands_str):
             if cmd == 'ADD':
                 if len(parts) >= 4:
                     element_type = _clean_token(parts[1]).upper()
-                    # 此处移除严格类型检查，以允许自定义函数名
+                    # 此处移除严格类型检查，以允许自定义模块名
                     # 或者检查是否在允许的基础类型中，或交由 CircuitManager 处理
                     params = {
                         'type': element_type if element_type in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT'} else _clean_token(parts[1]),
@@ -567,7 +567,7 @@ def _parse_commands_payload(commands_str):
                 commands.append({'command': 'clear_circuit', 'params': {}})
             elif cmd == 'DEFINE_FUNC':
                 if len(parts) >= 2:
-                    commands.append({'command': 'define_function', 'params': {
+                    commands.append({'command': 'define_module', 'params': {
                                     'name': _clean_token(parts[1])}})
             elif cmd == 'TOGGLE':
                 if len(parts) >= 2:
@@ -750,7 +750,7 @@ def _execute_commands_with_alias(commands):
             params['ids'] = [_resolve_element_ref(
                 v, alias_map) for v in params.get('ids') if v is not None]
 
-        if cmd in ('clear_circuit', 'define_function', 'remove_element', 'remove_wire'):
+        if cmd in ('clear_circuit', 'define_module', 'remove_element', 'remove_wire'):
             _flush_pending_wires()
 
         try:
@@ -1289,11 +1289,11 @@ TOOL_SCHEMAS = {
         "text": "SAMPLE [id ...]",
         "json_example": '{"tool": "sample_outputs", "params": {"ids": ["SUM", "CARRY"]}}'
     },
-    "define_function": {
-        "description": "将当前电路封装为自定义函数",
+    "define_module": {
+        "description": "将当前电路封装为自定义模块",
         "params": {"name": "string"},
         "text": "DEFINE_FUNC <name>",
-        "json_example": '{"tool": "define_function", "params": {"name": "HalfAdder"}}'
+        "json_example": '{"tool": "define_module", "params": {"name": "HalfAdder"}}'
     },
     "set_element_comment": {
         "description": "设置元件注释",
@@ -1380,7 +1380,7 @@ def _format_feedback_text(feedback):
             io_parts.append("输出: " + ", ".join(out_strs))
         if functions:
             fn_strs = [f.get('name') or f.get('id') for f in functions]
-            io_parts.append("函数: " + ", ".join(fn_strs))
+            io_parts.append("模块: " + ", ".join(fn_strs))
         if io_parts:
             lines.append("当前 IO: " + " | ".join(io_parts))
 
@@ -1402,7 +1402,7 @@ def _format_feedback_text(feedback):
     return "\n".join(lines)
 
 
-def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=None,
+def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=None,
                                     plan_content="", summary_content="", rules_content=""):
     base = """你是一个电路模拟器自治执行助手。你以 5 阶段循环工作：Think→Plan→Build→Observe→Sum。
 每轮都必须依次输出这 5 个阶段的内容，系统会分别处理每个阶段。
@@ -1426,7 +1426,7 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
 
 规则:
 - 基础门只允许 AND、OR、NOT、INPUT、OUTPUT。严禁直接使用 XOR 等。
-- 必须使用函数思维：复杂逻辑先搭建 -> DEFINE_FUNC -> SET+SAMPLE 验证 -> 通过后 CLEAR -> ADD <函数名> 复用。DEFINE_FUNC 后未经验证就 CLEAR 视为错误。
+- 必须使用模块思维：复杂逻辑先搭建 -> DEFINE_FUNC -> SET+SAMPLE 验证 -> 通过后 CLEAR -> ADD <模块名> 复用。DEFINE_FUNC 后未经验证就 CLEAR 视为错误。
 - 每轮最多输出 30 条命令。如果目标需要超过 30 条命令，分多轮完成，每轮完成后先验证再继续。
 - 坐标规则：不要手动为每个元件算精确坐标，使用"基准坐标 + 相对偏移"策略。
   - 输入：x 固定 80，y 从 60 开始递增 80（60, 140, 220, 300...）
@@ -1441,11 +1441,11 @@ def _build_autonomous_system_prompt(compact_state_json, functions_str, feedback=
 - 目标驱动验证：每完成一个关键子目标就用 SET+SAMPLE 或 <observe> 跑用例确认；验证失败则解释差异并继续整改。
 - done 的标准：只有当你已经用 state（必要时用 TOGGLE 做测试）验证目标达成，且不需要再执行任何命令时，才输出 done=true。
 - 如果用户目标需要改动画布，但你在本轮没有输出任何可执行命令，则 done 必须为 false，并给出下一步命令或说明阻碍点。
-- 查看电路状态时注意：自定义函数元件在 IO 摘要中显示为 functions 列表，在完整电路状态中显示为 type="FUNCTION" 且 name 字段为函数名（如 "FullAdder"）。不要因为 IO 摘要中没有列出它们就以为添加失败。
-- 如果你添加了自定义函数元件（如 FullAdder），它们会在下一轮的状态中正常出现。只需检查完整电路状态中的 elements 列表即可确认。
+- 查看电路状态时注意：自定义模块元件在 IO 摘要中显示为 functions 列表，在完整电路状态中显示为 type="FUNCTION" 且 name 字段为模块名（如 "FullAdder"）。不要因为 IO 摘要中没有列出它们就以为添加失败。
+- 如果你添加了自定义模块元件（如 FullAdder），它们会在下一轮的状态中正常出现。只需检查完整电路状态中的 elements 列表即可确认。
 
-当前函数信息:
-""" + functions_str + """
+当前模块信息:
+""" + modules_str + """
 
 """
     if feedback:
@@ -1721,7 +1721,7 @@ def _quick_classify(user_message):
         circuit_keywords = ["add", "wire", "del", "move", "clear", "toggle", "set", "sim", "sample",
                             "define_func", "comment", "and", "or", "not", "input", "output",
                             "搭", "放", "做", "加", "连接", "删除", "移动", "清空", "验证",
-                            "电路", "门", "仿真", "测试", "乘法", "加法", "函数"]
+                            "电路", "门", "仿真", "测试", "乘法", "加法", "模块"]
         has_circuit_intent = any(kw in safe for kw in circuit_keywords)
         has_chat_intent = any(kw in safe for kw in ["你好", "嗨", "早上好", "晚上好", "谢谢", "再见",
                                                     "你是谁", "能做什么", "hello", "hi"])
@@ -1811,12 +1811,12 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             compact_state = _build_compact_state(current_state)
             compact_state_json = json.dumps(
                 compact_state, ensure_ascii=False, separators=(',', ':'))
-            functions_data = circuit_manager._load_functions()
-            available_functions = [
-                f.get('name') for f in functions_data] if functions_data else []
-            functions_str = f"可用自定义函数: {', '.join(available_functions)}" if available_functions else "当前无自定义函数"
+            modules_data = circuit_manager._load_modules()
+            available_modules = [
+                f.get('name') for f in modules_data] if modules_data else []
+            modules_str = f"可用自定义模块: {', '.join(available_modules)}" if available_modules else "当前无自定义模块"
             system_prompt = _build_autonomous_system_prompt(
-                compact_state_json, functions_str,
+                compact_state_json, modules_str,
                 feedback=previous_feedback,
                 plan_content=plan_content,
                 summary_content=summary_content,
@@ -2119,7 +2119,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
             element_count = len(compact_after_state.get('elements', []))
             wire_count = len(compact_after_state.get('wires', []))
-            function_count = len(circuit_manager._load_functions())
+            function_count = len(circuit_manager._load_modules())
             if command_errors:
                 yield f"[第{round_idx}轮检查] elements={element_count}, wires={wire_count}, functions={function_count}, commands={executed_command_count}, ok={executed_success_count}, fail={len(command_errors)}\n"
             else:
@@ -2337,74 +2337,74 @@ def fallback_chat(message, error_msg):
     })
 
 
-@app.route('/api/save-function', methods=['POST', 'OPTIONS'])
-def save_function():
+@app.route('/api/save-module', methods=['POST', 'OPTIONS'])
+def save_module():
     # 处理OPTIONS预检请求
     if request.method == 'OPTIONS':
         return '', 200
     try:
-        new_function = request.json
-        # 读取现有的函数
-        functions_data = {'functions': []}
-        if os.path.exists(FUNCTIONS_DATA_FILE):
+        new_module = request.json
+        # 读取现有的模块
+        modules_data = {'modules': []}
+        if os.path.exists(MODULES_DATA_FILE):
             try:
-                with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
-                    functions_data = json.load(f)
+                with open(MODULES_DATA_FILE, 'r', encoding='utf-8') as f:
+                    modules_data = json.load(f)
             except json.JSONDecodeError:
-                functions_data = {'functions': []}
+                modules_data = {'modules': []}
 
-        # 添加新函数
-        functions_data['functions'].append(new_function)
+        # 保存新模块
+        modules_data['modules'].append(new_module)
 
-        _atomic_write_json(FUNCTIONS_DATA_FILE, functions_data)
-        logger.info("函数已保存到: %s", FUNCTIONS_DATA_FILE)
-        return jsonify({'status': 'success', 'message': 'Function saved successfully'})
+        _atomic_write_json(MODULES_DATA_FILE, modules_data)
+        logger.info("模块已保存到: %s", MODULES_DATA_FILE)
+        return jsonify({'status': 'success', 'message': 'Module saved successfully'})
     except Exception as e:
-        logger.error("保存函数失败: %s", e)
+        logger.error("保存模块失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route('/api/save-functions', methods=['POST', 'OPTIONS'])
-def save_functions():
+@app.route('/api/save-modules', methods=['POST', 'OPTIONS'])
+def save_modules():
     # 处理OPTIONS预检请求
     if request.method == 'OPTIONS':
         return '', 200
     try:
         data = request.json
-        _atomic_write_json(FUNCTIONS_DATA_FILE, data)
-        logger.info("函数列表已保存到: %s", FUNCTIONS_DATA_FILE)
-        return jsonify({'status': 'success', 'message': 'Functions saved successfully'})
+        _atomic_write_json(MODULES_DATA_FILE, data)
+        logger.info("模块列表已保存到: %s", MODULES_DATA_FILE)
+        return jsonify({'status': 'success', 'message': 'Modules saved successfully'})
     except Exception as e:
-        logger.error("保存函数列表失败: %s", e)
+        logger.error("保存模块列表失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route('/api/load-functions', methods=['GET', 'OPTIONS'])
-def load_functions():
+@app.route('/api/load-modules', methods=['GET', 'OPTIONS'])
+def load_modules():
     # 处理OPTIONS预检请求
     if request.method == 'OPTIONS':
         return '', 200
     try:
-        if os.path.exists(FUNCTIONS_DATA_FILE):
+        if os.path.exists(MODULES_DATA_FILE):
             try:
-                with open(FUNCTIONS_DATA_FILE, 'r', encoding='utf-8') as f:
+                with open(MODULES_DATA_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
             except json.JSONDecodeError:
-                logger.warning("函数数据文件损坏，使用空结构: %s", FUNCTIONS_DATA_FILE)
-                data = {'functions': []}
-            logger.info("函数数据已加载，包含 %d 个函数", len(data.get('functions', [])))
+                logger.warning("模块数据文件损坏，使用空结构: %s", MODULES_DATA_FILE)
+                data = {'modules': []}
+            logger.info("模块数据已加载，包含 %d 个模块", len(data.get('modules', [])))
             return jsonify(data)
         else:
-            return jsonify({'functions': []})
+            return jsonify({'modules': []})
     except Exception as e:
-        logger.error("加载函数数据失败: %s", e)
+        logger.error("加载模块数据失败: %s", e)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 if __name__ == '__main__':
     logger.info("电路设计应用启动中...")
     logger.info("电路数据文件路径: %s", CIRCUIT_DATA_FILE)
-    logger.info("函数数据文件路径: %s", FUNCTIONS_DATA_FILE)
+    logger.info("模块数据文件路径: %s", MODULES_DATA_FILE)
     logger.info("打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']

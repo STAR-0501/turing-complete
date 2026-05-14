@@ -77,46 +77,46 @@ function hasInputConnection(wires, targetElementId, targetPortId) {
 }
 
 /**
- * 计算函数元件的内部电路（支持递归嵌套函数）
- * @param {object} functionElement - 函数元件
+ * 计算模块元件的内部电路（支持递归嵌套模块）
+ * @param {object} moduleElement - 模块元件
  * @param {Array} elements - 主电路元件数组
  * @param {Array} wires - 主电路导线数组
- * @param {Map} functionCache - 函数计算缓存，避免重复计算
- * @returns {Array} 函数元件各输出端口的状态数组
+ * @param {Map} functionCache - 模块计算缓存，避免重复计算
+ * @returns {Array} 模块元件各输出端口的状态数组
  */
-function calculateFunctionElement(functionElement, elements, wires, functionCache = new Map(), depth = 0) {
-  if (!functionElement.functionData) {
+function calculateModuleElement(moduleElement, elements, wires, functionCache = new Map(), depth = 0) {
+  if (!moduleElement.moduleData) {
     return [];
   }
   if (depth >= 10) {
     return [];
   }
 
-  // 深拷贝函数内部的元件和导线
-  const funcElements = JSON.parse(JSON.stringify(functionElement.functionData.elements));
-  const funcWires = JSON.parse(JSON.stringify(functionElement.functionData.wires));
-  const inputElementIds = functionElement.functionData.inputElementIds;
-  const outputElementIds = functionElement.functionData.outputElementIds || [];
+  // 深拷贝模块内部的元件和导线
+  const subElements = JSON.parse(JSON.stringify(moduleElement.moduleData.elements));
+  const subWires = JSON.parse(JSON.stringify(moduleElement.moduleData.wires));
+  const inputElementIds = moduleElement.moduleData.inputElementIds;
+  const outputElementIds = moduleElement.moduleData.outputElementIds || [];
 
-  // 将函数元件的输入端口值赋给内部的 INPUT 元件
-  for (let i = 0; i < functionElement.inputs.length; i++) {
-    const inputPort = functionElement.inputs[i];
-    const inputState = getInputSourceState(elements, wires, functionElement.id, inputPort.id);
+  // 将模块元件的输入端口值赋给内部的 INPUT 元件
+  for (let i = 0; i < moduleElement.inputs.length; i++) {
+    const inputPort = moduleElement.inputs[i];
+    const inputState = getInputSourceState(elements, wires, moduleElement.id, inputPort.id);
 
     if (i < inputElementIds.length) {
-      const inputElement = funcElements.find((el) => el.id === inputElementIds[i]);
+      const inputElement = subElements.find((el) => el.id === inputElementIds[i]);
       if (inputElement) {
         inputElement.state = inputState !== null ? inputState : false;
       }
     }
   }
 
-  // 计算函数内部电路（支持递归嵌套函数）
+  // 计算模块内部电路（支持递归嵌套模块）
   let changed = true;
   while (changed) {
     changed = false;
 
-    for (const element of funcElements) {
+    for (const element of subElements) {
       if (element.type === 'INPUT') {
         continue;
       }
@@ -127,8 +127,8 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
         let allTrue = true;
         let allConnected = true;
         for (const input of element.inputs) {
-          if (hasInputConnection(funcWires, element.id, input.id)) {
-            const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+          if (hasInputConnection(subWires, element.id, input.id)) {
+            const inputState = getInputSourceState(subElements, subWires, element.id, input.id);
             if (inputState !== true) {
               allTrue = false;
               break;
@@ -143,9 +143,9 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
         let anyTrue = false;
         let hasInput = false;
         for (const input of element.inputs) {
-          if (hasInputConnection(funcWires, element.id, input.id)) {
+          if (hasInputConnection(subWires, element.id, input.id)) {
             hasInput = true;
-            const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+            const inputState = getInputSourceState(subElements, subWires, element.id, input.id);
             if (inputState === true) {
               anyTrue = true;
               break;
@@ -157,9 +157,9 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
         let inputTrue = false;
         let hasInput = false;
         for (const input of element.inputs) {
-          if (hasInputConnection(funcWires, element.id, input.id)) {
+          if (hasInputConnection(subWires, element.id, input.id)) {
             hasInput = true;
-            const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+            const inputState = getInputSourceState(subElements, subWires, element.id, input.id);
             if (inputState === true) {
               inputTrue = true;
               break;
@@ -170,8 +170,8 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
       } else if (element.type === 'OUTPUT') {
         let inputTrue = false;
         for (const input of element.inputs) {
-          if (hasInputConnection(funcWires, element.id, input.id)) {
-            const inputState = getInputSourceState(funcElements, funcWires, element.id, input.id);
+          if (hasInputConnection(subWires, element.id, input.id)) {
+            const inputState = getInputSourceState(subElements, subWires, element.id, input.id);
             if (inputState === true) {
               inputTrue = true;
               break;
@@ -180,9 +180,9 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
         }
         newState = inputTrue;
       } else if (element.type === 'FUNCTION') {
-        // 递归计算嵌套的函数元件
+        // 递归计算嵌套的模块元件
         const oldOutputStates = element.outputStates || [];
-        const nestedOutputStates = calculateFunctionElement(element, funcElements, funcWires, functionCache, depth + 1);
+        const nestedOutputStates = calculateModuleElement(element, subElements, subWires, functionCache, depth + 1);
         newState = nestedOutputStates.length > 0 ? nestedOutputStates[0] : false;
         element.outputStates = nestedOutputStates;
         if (
@@ -202,7 +202,7 @@ function calculateFunctionElement(functionElement, elements, wires, functionCach
 
   // 获取所有输出元件的状态
   const outputStates = outputElementIds.map((outputId) => {
-    const outputElement = funcElements.find((el) => el.id === outputId);
+    const outputElement = subElements.find((el) => el.id === outputId);
     return outputElement ? outputElement.state : false;
   });
 
@@ -294,9 +294,9 @@ export function calculateCircuit(elements, wires) {
         }
         newState = inputTrue;
       } else if (element.type === 'FUNCTION') {
-        // 函数元件：计算内部电路
+        // 模块元件：计算内部电路
         const oldOutputStates = element.outputStates || [];
-        const outputStates = calculateFunctionElement(element, elements, wires);
+        const outputStates = calculateModuleElement(element, elements, wires);
         newState = outputStates.length > 0 ? outputStates[0] : false;
         element.outputStates = outputStates;
         if (oldOutputStates.length !== outputStates.length || oldOutputStates.some((v, i) => v !== outputStates[i])) {
@@ -323,7 +323,7 @@ export function calculateCircuit(elements, wires) {
       // 如果起点是输出端口，使用源元件的状态
       if (!wire.start.isInput) {
         if (startElement.type === 'FUNCTION') {
-          // 函数元件需要根据输出端口索引获取状态
+          // 模块元件需要根据输出端口索引获取状态
           const outputStates = startElement.outputStates || [];
           wireState =
             wire.start.portIndex !== undefined && wire.start.portIndex < outputStates.length

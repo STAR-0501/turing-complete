@@ -65,10 +65,10 @@ let groupDragOffsets = []; // 每个元件的拖动偏移量
 
 let lastSaveTime = 0; // 上次保存到服务器的时间戳
 
-// 函数保存相关
-let savedFunctions = []; // 保存的函数列表
-let isPlacingFunction = false; // 是否正在放置函数元件
-let currentFunctionToPlace = null; // 当前要放置的函数
+// 模块保存相关
+let savedModules = []; // 保存的模块列表
+let isPlacingFunction = false; // 是否正在放置模块元件
+let currentFunctionToPlace = null; // 当前要放置的模块
 let isNameModalOpen = false; // 命名弹窗是否打开
 let shouldCreateNewElement = true; // 是否应该创建新元件（用于防止点击工具栏时创建多个元件）
 
@@ -125,11 +125,11 @@ async function init() {
       now - lastSaveTime > 3000
     ) {
       await loadFromServer();
-      await loadFunctionsFromServer(); // 动态加载函数列表，以响应 AI 的封装操作
+      await loadModulesFromServer(); // 动态加载模块列表，以响应 AI 的封装操作
     }
   }, 2000);
 
-  // 辅助函数：设置工具状态
+  // 辅助模块：设置工具状态
   function setTool(toolName, buttonId, statusText) {
     // 取消当前正在放置的元件
     if (isPlacingElement) {
@@ -144,7 +144,7 @@ async function init() {
     document.getElementById(buttonId).classList.add('active');
   }
 
-  // 辅助函数：添加元件
+  // 辅助模块：添加元件
   function addElementButtonHandler(type) {
     return function (e) {
       console.log('addElementButtonHandler 被调用，type=', type, 'isPlacingElement=', isPlacingElement);
@@ -210,8 +210,8 @@ async function init() {
   document.getElementById('btn-ai-comment').addEventListener('click', aiAutoComment);
   document.getElementById('btn-ai-layout').addEventListener('click', aiAutoLayout);
 
-  // 初始化函数相关功能
-  initFunctionPanel();
+  // 初始化模块相关功能
+  initModulePanel();
 
   // 初始化注释功能
   initCommentModal();
@@ -247,7 +247,7 @@ async function init() {
       return;
     }
 
-    // Ctrl+S 保存选中为函数
+    // Ctrl+S 保存选中为模块
     if (e.ctrlKey && e.key.toLowerCase() === 's') {
       e.preventDefault();
       if (selectedElements.length > 0) {
@@ -314,12 +314,12 @@ async function init() {
         document.getElementById('status-bar').textContent = '已取消放置';
       }
 
-      // 取消函数放置状态
+      // 取消模块放置状态
       if (isPlacingFunction) {
         isPlacingFunction = false;
         currentFunctionToPlace = null;
-        restoreFunctionPanelEvents();
-        document.getElementById('status-bar').textContent = '已取消放置函数';
+        restoreModulePanelEvents();
+        document.getElementById('status-bar').textContent = '已取消放置模块';
       }
 
       return;
@@ -544,10 +544,10 @@ function createElementForMiddleClickCopy(sourceElement, x, y) {
   if (sourceElement.type === 'FUNCTION') {
     newElement = createElement('FUNCTION', x, y, {
       name: sourceElement.name,
-      functionElements: JSON.parse(JSON.stringify(sourceElement.functionData.elements)),
-      functionWires: JSON.parse(JSON.stringify(sourceElement.functionData.wires)),
-      inputElements: JSON.parse(JSON.stringify(sourceElement.functionData.inputElementIds)),
-      outputElements: JSON.parse(JSON.stringify(sourceElement.functionData.outputElementIds)),
+      functionElements: JSON.parse(JSON.stringify(sourceElement.moduleData.elements)),
+      functionWires: JSON.parse(JSON.stringify(sourceElement.moduleData.wires)),
+      inputElements: JSON.parse(JSON.stringify(sourceElement.moduleData.inputElementIds)),
+      outputElements: JSON.parse(JSON.stringify(sourceElement.moduleData.outputElementIds)),
     });
 
     if (newElement) {
@@ -621,13 +621,13 @@ function duplicateElement(sourceElement) {
   // 创建临时元素，位置在鼠标附近
   let newElement;
   if (sourceElement.type === 'FUNCTION') {
-    // 函数元件需要特殊处理
+    // 模块元件需要特殊处理
     newElement = createElement('FUNCTION', worldX, worldY, {
       name: sourceElement.name,
-      functionElements: JSON.parse(JSON.stringify(sourceElement.functionData.elements)),
-      functionWires: JSON.parse(JSON.stringify(sourceElement.functionData.wires)),
-      inputElements: JSON.parse(JSON.stringify(sourceElement.functionData.inputElementIds)),
-      outputElements: JSON.parse(JSON.stringify(sourceElement.functionData.outputElementIds)),
+      functionElements: JSON.parse(JSON.stringify(sourceElement.moduleData.elements)),
+      functionWires: JSON.parse(JSON.stringify(sourceElement.moduleData.wires)),
+      inputElements: JSON.parse(JSON.stringify(sourceElement.moduleData.inputElementIds)),
+      outputElements: JSON.parse(JSON.stringify(sourceElement.moduleData.outputElementIds)),
     });
 
     if (newElement) {
@@ -1051,7 +1051,7 @@ function handleMouseDown(e) {
   // 重置 shouldCreateNewElement
   shouldCreateNewElement = true;
 
-  // 如果正在放置函数元件
+  // 如果正在放置模块元件
   if (isPlacingFunction && currentFunctionToPlace && e.button === 0) {
     // 检查点击是否在 canvas 上（不在工具栏等其他UI元素上）
     const target = e.target || e.srcElement;
@@ -1061,9 +1061,9 @@ function handleMouseDown(e) {
       saveState();
       isPlacingFunction = false;
       currentFunctionToPlace = null;
-      // 恢复函数面板的点击事件
-      restoreFunctionPanelEvents();
-      document.getElementById('status-bar').textContent = '函数元件已放置';
+      // 恢复模块面板的点击事件
+      restoreModulePanelEvents();
+      document.getElementById('status-bar').textContent = '模块元件已放置';
       elements = calculateCircuit(elements, wires);
       render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
     } else {
@@ -1332,7 +1332,7 @@ function handleMouseMove(e) {
   const worldX = (mouseX - canvas.width / 2) / zoom + camera.x;
   const worldY = (mouseY - canvas.height / 2) / zoom + camera.y;
 
-  // 如果正在放置函数元件
+  // 如果正在放置模块元件
   if (isPlacingFunction && currentFunctionToPlace) {
     moveElementWithAutoSeparation(
       currentFunctionToPlace,
@@ -1341,7 +1341,7 @@ function handleMouseMove(e) {
     );
     // 先渲染背景
     render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
-    // 绘制临时函数元件
+    // 绘制临时模块元件
     drawTemporaryElement(ctx, currentFunctionToPlace);
     return;
   }
@@ -1542,7 +1542,7 @@ function handleMouseMove(e) {
  * @param {object} element - 要绘制的临时元素
  */
 function drawTemporaryElement(ctx, element) {
-  // 绘制临时元件，使用与render函数相同的相机变换
+  // 绘制临时元件，使用与render模块相同的相机变换
   ctx.save();
   ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
   ctx.scale(zoom, zoom);
@@ -1633,13 +1633,13 @@ function drawTemporaryElement(ctx, element) {
       ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'FUNCTION':
-      // 绘制函数块边框
+      // 绘制模块块边框
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 2 / zoom;
       ctx.setLineDash([5 / zoom, 5 / zoom]);
       ctx.strokeRect(element.x, element.y, element.width, element.height);
       ctx.setLineDash([]);
-      // 绘制函数名称
+      // 绘制模块名称
       ctx.fillStyle = '#00ffff';
       ctx.font = 12 / zoom + 'px Arial';
       ctx.textAlign = 'center';
@@ -1755,9 +1755,9 @@ function copySelected() {
       outputs: el.outputs.map((output) => ({ ...output })),
     };
 
-    // 如果是函数元件，需要深拷贝 functionData
-    if (el.type === 'FUNCTION' && el.functionData) {
-      newEl.functionData = JSON.parse(JSON.stringify(el.functionData));
+    // 如果是模块元件，需要深拷贝 moduleData
+    if (el.type === 'FUNCTION' && el.moduleData) {
+      newEl.moduleData = JSON.parse(JSON.stringify(el.moduleData));
     }
 
     return newEl;
@@ -1836,14 +1836,14 @@ function executePaste() {
   // 创建新元件
   for (const template of clipboardElements) {
     let newElement;
-    if (template.type === 'FUNCTION' && template.functionData) {
-      // 函数元件需要特殊处理，传递 functionData
+    if (template.type === 'FUNCTION' && template.moduleData) {
+      // 模块元件需要特殊处理，传递 moduleData
       newElement = createElement('FUNCTION', 0, 0, {
         name: template.name,
-        functionElements: template.functionData.elements,
-        functionWires: template.functionData.wires,
-        inputElements: template.functionData.inputElementIds,
-        outputElements: template.functionData.outputElementIds,
+        functionElements: template.moduleData.elements,
+        functionWires: template.moduleData.wires,
+        inputElements: template.moduleData.inputElementIds,
+        outputElements: template.moduleData.outputElementIds,
       });
     } else {
       newElement = createElement(template.type, 0, 0);
@@ -1977,15 +1977,15 @@ function cancelPaste() {
 }
 
 /**
- * 恢复函数面板的点击事件
+ * 恢复模块面板的点击事件
  */
-function restoreFunctionPanelEvents() {
-  const functionPanel = document.getElementById('function-panel');
-  const functionList = document.getElementById('function-list');
-  const functionItems = document.querySelectorAll('.function-item');
-  functionPanel.style.pointerEvents = 'none';
-  functionList.style.pointerEvents = 'auto';
-  functionItems.forEach((item) => (item.style.pointerEvents = 'auto'));
+function restoreModulePanelEvents() {
+  const modulePanel = document.getElementById('module-panel');
+  const moduleList = document.getElementById('module-list');
+  const moduleItems = document.querySelectorAll('.module-item');
+  modulePanel.style.pointerEvents = 'none';
+  moduleList.style.pointerEvents = 'auto';
+  moduleItems.forEach((item) => (item.style.pointerEvents = 'auto'));
 }
 
 /**
@@ -2098,7 +2098,7 @@ function handleMouseUp(e) {
       // 检查点击的是否是工具栏按钮，如果是则不放置
       const target = e.target || e.srcElement;
       if (target && target.closest && target.closest('.toolbar')) {
-        // 点击的是工具栏按钮，不执行放置，让工具栏按钮的处理函数来处理
+        // 点击的是工具栏按钮，不执行放置，让工具栏按钮的处理模块来处理
       } else {
         moveElementWithAutoSeparation(currentElementToPlace, currentElementToPlace.x, currentElementToPlace.y);
         elements.push(currentElementToPlace);
@@ -2647,18 +2647,18 @@ function handleWheel(e) {
 }
 
 /**
- * 初始化函数面板
+ * 初始化模块面板
  */
-async function initFunctionPanel() {
-  // 从服务器加载保存的函数
-  await loadFunctionsFromServer();
+async function initModulePanel() {
+  // 从服务器加载保存的模块
+  await loadModulesFromServer();
 
   // 绑定命名弹窗事件
-  document.getElementById('confirm-save-function').addEventListener('click', async () => {
+  document.getElementById('confirm-save-module').addEventListener('click', async () => {
     const nameInput = document.getElementById('function-name-input');
     const name = nameInput.value.trim();
     if (!name) {
-      alert('请输入函数名称');
+      alert('请输入模块名称');
       nameInput.focus();
       return;
     }
@@ -2677,7 +2677,7 @@ async function initFunctionPanel() {
     }
   });
 
-  document.getElementById('cancel-save-function').addEventListener('click', () => {
+  document.getElementById('cancel-save-module').addEventListener('click', () => {
     document.getElementById('name-modal').classList.remove('show');
     document.getElementById('function-name-input').value = '';
     isNameModalOpen = false;
@@ -2686,7 +2686,7 @@ async function initFunctionPanel() {
   document.getElementById('function-name-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      document.getElementById('confirm-save-function').click();
+      document.getElementById('confirm-save-module').click();
     }
   });
 }
@@ -2759,20 +2759,20 @@ function showCommentModal(element) {
 }
 
 /**
- * 保存选中的元件为函数
+ * 保存选中的元件为模块
  * @returns {boolean} 是否保存成功
  */
 async function saveSelectedAsFunction(name) {
   // 检查名字是否为空
   if (!name || name.trim() === '') {
-    document.getElementById('status-bar').textContent = '函数名称不能为空';
+    document.getElementById('status-bar').textContent = '模块名称不能为空';
     return false;
   }
 
   // 检查名字是否已存在
-  const nameExists = savedFunctions.some((func) => func.name === name);
+  const nameExists = savedModules.some((func) => func.name === name);
   if (nameExists) {
-    document.getElementById('status-bar').textContent = `函数 "${name}" 已存在，请使用其他名称`;
+    document.getElementById('status-bar').textContent = `模块 "${name}" 已存在，请使用其他名称`;
     return false;
   }
 
@@ -2800,8 +2800,8 @@ async function saveSelectedAsFunction(name) {
     return false;
   }
 
-  // 创建函数数据
-  const functionData = {
+  // 创建模块数据
+  const moduleData = {
     id: generateId(),
     name: name,
     elements: JSON.parse(JSON.stringify(selectedElements)),
@@ -2811,30 +2811,30 @@ async function saveSelectedAsFunction(name) {
   };
 
   // 保存到本地数组
-  savedFunctions.push(functionData);
+  savedModules.push(moduleData);
 
   // 保存到服务器
-  await saveFunctionToServer(functionData);
+  await saveModuleToServer(moduleData);
 
-  // 更新函数面板
-  updateFunctionPanel();
+  // 更新模块面板
+  updateModulePanel();
 
-  document.getElementById('status-bar').textContent = `函数 "${name}" 已保存`;
+  document.getElementById('status-bar').textContent = `模块 "${name}" 已保存`;
   return true;
 }
 
 /**
- * 更新函数面板显示
+ * 更新模块面板显示
  */
-function updateFunctionPanel() {
-  const listContainer = document.getElementById('function-list');
+function updateModulePanel() {
+  const listContainer = document.getElementById('module-list');
   listContainer.innerHTML = '';
 
-  savedFunctions.forEach((func, index) => {
+  savedModules.forEach((func, index) => {
     const item = document.createElement('div');
-    item.className = 'function-item';
+    item.className = 'module-item';
 
-    // 左侧名称区域（点击放置函数）
+    // 左侧名称区域（点击放置模块）
     const nameSpan = document.createElement('span');
     nameSpan.textContent = func.name;
     nameSpan.style.cssText = 'flex: 1; cursor: pointer;';
@@ -2862,54 +2862,54 @@ function updateFunctionPanel() {
 }
 
 /**
- * 删除函数
+ * 删除模块
  */
 async function deleteFunction(index) {
-  if (index >= 0 && index < savedFunctions.length) {
-    const funcName = savedFunctions[index].name;
-    savedFunctions.splice(index, 1);
-    await saveFunctionsToServer();
-    updateFunctionPanel();
-    document.getElementById('status-bar').textContent = `函数 "${funcName}" 已删除`;
+  if (index >= 0 && index < savedModules.length) {
+    const modName = savedModules[index].name;
+    savedModules.splice(index, 1);
+    await saveModulesToServer();
+    updateModulePanel();
+    document.getElementById('status-bar').textContent = `模块 "${modName}" 已删除`;
   }
 }
 
 /**
- * 保存所有函数到服务器
+ * 保存所有模块到服务器
  */
-async function saveFunctionsToServer() {
+async function saveModulesToServer() {
   try {
-    const response = await fetch('http://localhost:5000/api/save-functions', {
+    const response = await fetch('http://localhost:5000/api/save-modules', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ functions: savedFunctions }),
+      body: JSON.stringify({ functions: savedModules }),
     });
     const result = await response.json();
-    console.log('函数列表保存到服务器:', result);
+    console.log('模块列表保存到服务器:', result);
   } catch (error) {
-    console.error('保存函数列表到服务器失败:', error);
+    console.error('保存模块列表到服务器失败:', error);
   }
 }
 
 /**
- * 开始放置函数元件
+ * 开始放置模块元件
  */
-function startPlaceFunction(funcData) {
-  console.log('startPlaceFunction called with:', funcData.name);
+function startPlaceFunction(modData) {
+  console.log('startPlaceFunction called with:', modData.name);
 
   // 获取画布中心位置（作为默认放置位置）
   const canvasCenterX = canvas.width / 2;
   const canvasCenterY = canvas.height / 2;
 
-  // 创建函数元件
+  // 创建模块元件
   const funcElement = createElement('FUNCTION', canvasCenterX, canvasCenterY, {
-    name: funcData.name,
-    functionElements: JSON.parse(JSON.stringify(funcData.elements)),
-    functionWires: JSON.parse(JSON.stringify(funcData.wires)),
-    inputElements: JSON.parse(JSON.stringify(funcData.inputElementIds)),
-    outputElements: JSON.parse(JSON.stringify(funcData.outputElementIds)),
+    name: modData.name,
+    functionElements: JSON.parse(JSON.stringify(modData.elements)),
+    functionWires: JSON.parse(JSON.stringify(modData.wires)),
+    inputElements: JSON.parse(JSON.stringify(modData.inputElementIds)),
+    outputElements: JSON.parse(JSON.stringify(modData.outputElementIds)),
   });
   console.log('funcElement created:', funcElement);
 
@@ -2918,54 +2918,54 @@ function startPlaceFunction(funcData) {
     isPlacingFunction = true;
     console.log('isPlacingFunction set to true');
 
-    // 禁用函数面板的点击事件，让点击可以传到 canvas
-    const functionPanel = document.getElementById('function-panel');
-    const functionList = document.getElementById('function-list');
-    const functionItems = document.querySelectorAll('.function-item');
-    functionPanel.style.pointerEvents = 'none';
-    functionList.style.pointerEvents = 'none';
-    functionItems.forEach((item) => (item.style.pointerEvents = 'none'));
+    // 禁用模块面板的点击事件，让点击可以传到 canvas
+    const modulePanel = document.getElementById('module-panel');
+    const moduleList = document.getElementById('module-list');
+    const moduleItems = document.querySelectorAll('.module-item');
+    modulePanel.style.pointerEvents = 'none';
+    moduleList.style.pointerEvents = 'none';
+    moduleItems.forEach((item) => (item.style.pointerEvents = 'none'));
 
-    document.getElementById('status-bar').textContent = `请点击放置函数 "${funcData.name}"（ESC取消）`;
+    document.getElementById('status-bar').textContent = `请点击放置模块 "${modData.name}"（ESC取消）`;
   }
 }
 
 /**
- * 保存函数到服务器
+ * 保存模块到服务器
  */
-async function saveFunctionToServer(funcData) {
+async function saveModuleToServer(modData) {
   try {
-    const response = await fetch('http://localhost:5000/api/save-function', {
+    const response = await fetch('http://localhost:5000/api/save-module', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(funcData),
+      body: JSON.stringify(modData),
     });
     const result = await response.json();
-    console.log('函数保存到服务器:', result);
+    console.log('模块保存到服务器:', result);
   } catch (error) {
-    console.error('保存函数到服务器失败:', error);
+    console.error('保存模块到服务器失败:', error);
   }
 }
 
 /**
- * 从服务器加载函数
+ * 从服务器加载模块
  */
-async function loadFunctionsFromServer() {
+async function loadModulesFromServer() {
   try {
-    const response = await fetch('http://localhost:5000/api/load-functions');
+    const response = await fetch('http://localhost:5000/api/load-modules');
     const result = await response.json();
-    if (result.functions) {
-      // 仅在函数列表发生变化时更新，防止界面闪烁
-      if (JSON.stringify(savedFunctions) !== JSON.stringify(result.functions)) {
-        savedFunctions = result.functions;
-        updateFunctionPanel();
-        console.log('从服务器加载并更新函数:', savedFunctions);
+    if (result.modules) {
+      // 仅在模块列表发生变化时更新，防止界面闪烁
+      if (JSON.stringify(savedModules) !== JSON.stringify(result.modules)) {
+        savedModules = result.modules;
+        updateModulePanel();
+        console.log('从服务器加载并更新模块:', savedModules);
       }
     }
   } catch (error) {
-    console.error('从服务器加载函数失败:', error);
+    console.error('从服务器加载模块失败:', error);
   }
 }
 

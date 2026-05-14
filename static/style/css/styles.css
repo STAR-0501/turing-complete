@@ -319,8 +319,8 @@ body {
   display: none;
 }
 
-/* 函数面板样式 */
-.function-panel {
+/* 模块面板样式 */
+.module-panel {
   position: absolute;
   right: 20px;
   top: 80px;
@@ -338,19 +338,19 @@ body {
   pointer-events: none; /* 让鼠标事件穿透面板传递到画布 */
 }
 
-.function-panel-header {
+.module-panel-header {
   padding: 10px 15px;
   background-color: rgba(0, 255, 255, 0.1);
   border-bottom: 1px solid rgba(0, 255, 255, 0.2);
 }
 
-.function-panel-header h3 {
+.module-panel-header h3 {
   font-size: 14px;
   color: #00ffff;
   margin: 0;
 }
 
-.function-list {
+.module-list {
   flex: 1;
   overflow-y: auto;
   padding: 10px;
@@ -360,7 +360,7 @@ body {
   pointer-events: auto; /* 恢复内部元素的点击事件 */
 }
 
-.function-item {
+.module-item {
   padding: 10px 12px;
   background-color: rgba(0, 255, 255, 0.1);
   border: 1px solid rgba(0, 255, 255, 0.3);
@@ -375,12 +375,12 @@ body {
   pointer-events: auto; /* 恢复点击事件 */
 }
 
-.function-item:hover {
+.module-item:hover {
   background-color: rgba(0, 255, 255, 0.25);
   border-color: rgba(0, 255, 255, 0.5);
 }
 
-.function-item:active {
+.module-item:active {
   transform: scale(0.98);
 }
 

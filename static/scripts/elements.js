@@ -126,15 +126,15 @@ export function createOutputBlock(x, y) {
 }
 
 /**
- * 创建函数元件
+ * 创建模块元件
  * @param {number} x - x坐标
  * @param {number} y - y坐标
- * @param {string} name - 函数名称
- * @param {Array} functionElements - 函数内部的元件
- * @param {Array} functionWires - 函数内部的导线
- * @param {Array} inputElements - 函数的输入元件ID列表
- * @param {Array} outputElements - 函数的输出元件ID列表
- * @returns {object} 函数元件对象
+ * @param {string} name - 模块名称
+ * @param {Array} functionElements - 模块内部的元件
+ * @param {Array} functionWires - 模块内部的导线
+ * @param {Array} inputElements - 模块的输入元件ID列表
+ * @param {Array} outputElements - 模块的输出元件ID列表
+ * @returns {object} 模块元件对象
  */
 export function createFunctionElement(x, y, name, functionElements, functionWires, inputElements, outputElements) {
   const inputCount = inputElements.length;
@@ -177,7 +177,7 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
     outputs: outputs,
     state: false,
     comment: '',
-    functionData: {
+    moduleData: {
       elements: functionElements,
       wires: functionWires,
       inputElementIds: inputElements,
@@ -191,7 +191,7 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
  * @param {string} type - 元件类型
  * @param {number} x - x坐标
  * @param {number} y - y坐标
- * @param {object} options - 额外选项（用于函数元件）
+ * @param {object} options - 额外选项（用于模块元件）
  * @returns {object} 元件对象
  */
 export function createElement(type, x, y, options = {}) {

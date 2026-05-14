@@ -4,7 +4,7 @@
  */
 
 /**
- * 渲染函数
+ * 渲染模块
  * @param {CanvasRenderingContext2D} ctx - 画布上下文
  * @param {Array} elements - 元件数组
  * @param {Array} wires - 导线数组
@@ -206,11 +206,11 @@ export function render(
         ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'FUNCTION':
-        // 绘制函数块边框
+        // 绘制模块块边框
         ctx.strokeStyle = elementColor;
         ctx.lineWidth = 2;
         ctx.strokeRect(element.x, element.y, element.width, element.height);
-        // 绘制函数名称
+        // 绘制模块名称
         ctx.fillStyle = elementColor;
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
@@ -234,7 +234,7 @@ export function render(
       const portX = element.x + output.x;
       const portY = element.y + output.y;
 
-      // 函数元件：根据 outputStates 显示各输出端口状态
+      // 模块元件：根据 outputStates 显示各输出端口状态
       let portState = false;
       if (element.type === 'FUNCTION' && element.outputStates) {
         const outputIndex = element.outputs.indexOf(output);

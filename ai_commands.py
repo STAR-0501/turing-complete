@@ -88,28 +88,28 @@ class CircuitManager:
         logger.debug(
             "CircuitManager 初始化: data_file=%s, functions_file=%s", data_file, functions_file)
 
-    def _load_functions(self):
+    def _load_modules(self):
         if self.functions_file and os.path.exists(self.functions_file):
             for attempt in range(3):
                 try:
                     if os.path.getsize(self.functions_file) == 0:
-                        self._save_functions([])
+                        self._save_modules([])
                         return []
                     with open(self.functions_file, 'r', encoding='utf-8') as f:
-                        return json.load(f).get("functions", [])
+                        return json.load(f).get("modules", [])
                 except json.JSONDecodeError:
                     if attempt == 2:
                         logger.warning(
-                            "Failed to decode functions file: %s", self.functions_file)
+                            "Failed to decode modules file: %s", self.functions_file)
                     time.sleep(0.01)
                 except (FileNotFoundError, PermissionError, OSError):
                     return []
             return []
         return []
 
-    def _save_functions(self, functions):
+    def _save_modules(self, modules):
         if self.functions_file:
-            _locked_write_json(self.functions_file, {"functions": functions})
+            _locked_write_json(self.functions_file, {"modules": modules})
 
     def _load_data(self):
         return _locked_read_json(self.data_file)
@@ -271,14 +271,14 @@ class CircuitManager:
                 "outputs": []
             }
 
-        functions = self._load_functions()
-        func = next((f for f in functions if f.get(
+        modules = self._load_modules()
+        mod = next((f for f in modules if f.get(
             "name") == element_type), None)
-        if not func:
+        if not mod:
             raise ValueError(f"Unknown element type: {element_type}")
 
-        input_count = len(func.get("inputElementIds", []))
-        output_count = len(func.get("outputElementIds", []))
+        input_count = len(mod.get("inputElementIds", []))
+        output_count = len(mod.get("outputElementIds", []))
         height = max(60, max(input_count, output_count) * 25 + 20)
 
         inputs = [
@@ -300,11 +300,11 @@ class CircuitManager:
             "realHeight": height,
             "inputs": inputs,
             "outputs": outputs,
-            "functionData": {
-                "elements": func.get("elements", []),
-                "wires": func.get("wires", []),
-                "inputElementIds": func.get("inputElementIds", []),
-                "outputElementIds": func.get("outputElementIds", [])
+            "moduleData": {
+                "elements": mod.get("elements", []),
+                "wires": mod.get("wires", []),
+                "inputElementIds": mod.get("inputElementIds", []),
+                "outputElementIds": mod.get("outputElementIds", [])
             }
         }
 
@@ -414,7 +414,7 @@ class CircuitManager:
         self._save_data({"elements": [], "wires": []})
         return True
 
-    def define_function(self, name):
+    def define_module(self, name):
         data = self._load_data()
         elements = data.get("elements", [])
         wires = data.get("wires", [])
@@ -426,10 +426,10 @@ class CircuitManager:
             raise ValueError(
                 "A function must have at least one INPUT and one OUTPUT.")
 
-        functions = self._load_functions()
-        functions = [f for f in functions if f.get("name") != name]
+        modules = self._load_modules()
+        modules = [f for f in modules if f.get("name") != name]
 
-        func_data = {
+        mod_data = {
             "id": generate_id(),
             "name": name,
             "elements": elements,
@@ -438,9 +438,9 @@ class CircuitManager:
             "outputElementIds": output_ids
         }
 
-        functions.append(func_data)
-        self._save_functions(functions)
-        return func_data
+        modules.append(mod_data)
+        self._save_modules(modules)
+        return mod_data
 
     def move_element(self, element_id, x, y):
         data = self._load_data()
@@ -624,7 +624,7 @@ class CircuitManager:
 
                 if el_type == "FUNCTION":
                     old_output_states = list(el.get("outputStates") or [])
-                    output_states = self._calculate_function_element(el, ctx)
+                    output_states = self._calculate_module_element(el, ctx)
                     el["outputStates"] = output_states
                     new_state = bool(
                         output_states[0]) if output_states else False
@@ -644,24 +644,24 @@ class CircuitManager:
             if not changed:
                 break
 
-    def _calculate_function_element(self, function_element, parent_ctx: SimulationContext):
-        if function_element.get("name"):
-            logger.debug("计算函数元件 %s (深度 %d)", function_element.get(
+    def _calculate_module_element(self, module_element, parent_ctx: SimulationContext):
+        if module_element.get("name"):
+            logger.debug("计算模块元件 %s (深度 %d)", module_element.get(
                 "name"), parent_ctx.depth)
         if parent_ctx.depth >= 10:
-            logger.warning("函数深度达到上限 (10)，返回空输出: %s",
-                           function_element.get("id"))
+            logger.warning("模块深度达到上限 (10)，返回空输出: %s",
+                           module_element.get("id"))
             return []
-        function_data = function_element.get("functionData") or {}
+        module_data = module_element.get("moduleData") or {}
         func_elements = json.loads(json.dumps(
-            function_data.get("elements") or []))
-        func_wires = json.loads(json.dumps(function_data.get("wires") or []))
-        input_element_ids = function_data.get("inputElementIds") or []
-        output_element_ids = function_data.get("outputElementIds") or []
+            module_data.get("elements") or []))
+        func_wires = json.loads(json.dumps(module_data.get("wires") or []))
+        input_element_ids = module_data.get("inputElementIds") or []
+        output_element_ids = module_data.get("outputElementIds") or []
 
-        for i, input_port in enumerate(function_element.get("inputs", []) or []):
+        for i, input_port in enumerate(module_element.get("inputs", []) or []):
             input_state = self._get_input_source_state(
-                parent_ctx.elements, parent_ctx.wires, function_element.get("id"), input_port.get("id"))
+                parent_ctx.elements, parent_ctx.wires, module_element.get("id"), input_port.get("id"))
             if i < len(input_element_ids):
                 internal_input = next(
                     (e for e in func_elements if e.get("id") == input_element_ids[i]), None)

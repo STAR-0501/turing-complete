@@ -1,4 +1,4 @@
-# Turing Complete — Knowledge Base
+﻿# Turing Complete — Knowledge Base
 
 **Stack:** Python Flask 3.1 + Vanilla JS (Canvas-based SPA)  
 **Purpose:** Digital logic circuit simulator (manual + AI-powered building)  
@@ -23,8 +23,8 @@
 │   └── style/css/
 │       └── styles.css      # (456L)
 ├── circuit_data.json       # Persisted circuit state
-├── functions_data.json     # Persisted custom function blocks
-├── rules.md                # Self-evolving knowledge base (agent-extracted rules)
+├── modules_data.json     # Persisted custom function blocks
+├── skills.md               # Self-evolving skills base (agent-extracted skills)
 ├── plan.md                 # AI plan persistence (5-mode: Think→Plan→Build→Observe→Sum)
 ├── summary.md              # AI session summary persistence
 ├── requirements.txt        # flask, requests
@@ -49,7 +49,7 @@
 | Add/change function blocks | `ai_commands.py` + frontend `elements.js` | Both sides need updates |
 | Change AI 5-mode loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Think→Plan→Build→Observe→Sum |
 | AI plan/summary persistence | `app.py`: `PLAN_FILE` / `SUMMARY_FILE` | Atomic markdown writes to plan.md/summary.md |
-| AI self-evolution / rules system | `app.py`: `RULES_FILE` / `_merge_rules()` / `rules.md` | Agent optionally outputs `<rules>` block → extracted, deduped, persisted to rules.md → loaded in next session |
+| AI self-evolution / skills system | `app.py`: `SKILLS_FILE` / `_merge_skills()` / `skills.md` | Agent optionally outputs `<skills>` block → extracted, deduped, persisted to skills.md → loaded in next session |
 | Streaming command execution | `app.py`: `_feed_stream_commands` | Real-time build execution during LLM streaming |
 | Conversation logging | `app.py`: `_log_conversation` | JSONL logs in `log/` (gitignored) |
 | Frontend round markers | `chat.js`: `ROUND_MARKER` | `__TC_ROUND__` markers create per-round message divs |
