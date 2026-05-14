@@ -1,6 +1,6 @@
 # 逻辑电路模拟系统 (Turing Complete)
 
-一个基于浏览器的数字逻辑电路模拟器，支持 **手动搭建** 与 **AI 自动搭建**，具备函数封装、嵌套函数、自动仿真等能力。
+一个基于浏览器的数字逻辑电路模拟器，支持 **手动搭建** 与 **AI 自动搭建**，具备模块封装、嵌套模块、自动仿真等能力。
 
 ---
 
@@ -45,7 +45,7 @@ turing-complete/
 ├── app.py                  # Flask 后端：路由、AI 自治循环、会话管理
 ├── ai_commands.py           # 电路数据管理 + 布尔仿真引擎
 ├── circuit_data.json        # 电路持久化文件 (.gitignore)
-├── functions_data.json      # 自定义函数持久化文件 (.gitignore)
+├── modules_data.json      # 自定义模块持久化文件 (.gitignore)
 ├── static/
 │   ├── scripts/
 │   │   ├── app.js           # 前端主逻辑：拖拽、连线、工具切换、快捷键
@@ -53,7 +53,7 @@ turing-complete/
 │   │   ├── chat.js          # AI 聊天窗口（流式 SSE + 指令执行）
 │   │   ├── elements.js      # 元件模板定义
 │   │   ├── renderer.js      # Canvas 渲染器
-│   │   └── utils.js         # 工具函数
+│   │   └── utils.js         # 工具模块
 │   └── style/css/styles.css # 全局样式（赛博朋克风格）
 └── templates/index.html     # 单页应用入口
 ```
@@ -66,7 +66,7 @@ turing-complete/
 | `SimulationContext` | 仿真上下文（elements、wires、depth） |
 | `_simulate_elements_until_stable` | 迭代仿真直到所有信号稳定 |
 | `_calc_and/or/not/output_state` | 各类型元件的状态计算（策略模式） |
-| `_calculate_function_element` | 递归计算嵌套函数（深度上限 10） |
+| `_calculate_module_element` | 递归计算嵌套模块（深度上限 10） |
 
 ### 后端 API 路由 (`app.py`)
 
@@ -79,9 +79,9 @@ turing-complete/
 | `/api/ai/generate-layout` | AI 自动整理电路布局 |
 | `/api/ai/generate-circuit` | 根据自然语言需求生成完整电路 |
 | `/api/chat` | **AI 自治执行入口**（流式 SSE） |
-| `/api/save-function` | 保存单个自定义函数 |
-| `/api/save-functions` | 批量保存函数列表 |
-| `/api/load-functions` | 加载函数列表 |
+| `/api/save-module` | 保存单个自定义模块 |
+| `/api/save-modules` | 批量保存模块列表 |
+| `/api/load-modules` | 加载模块列表 |
 
 ---
 
@@ -104,7 +104,7 @@ turing-complete/
 
 | 指令 | 格式 | 说明 |
 |------|------|------|
-| ADD | `ADD <type> <x> <y> [alias]` | 添加元件（AND/OR/NOT/INPUT/OUTPUT/自定义函数） |
+| ADD | `ADD <type> <x> <y> [alias]` | 添加元件（AND/OR/NOT/INPUT/OUTPUT/自定义模块） |
 | WIRE | `WIRE <from> <from_port> <to> <to_port>` | 连接导线（端口从 0 开始） |
 | MOVE | `MOVE <id_or_alias> <x> <y>` | 移动元件 |
 | DEL | `DEL <id_or_alias>` | 删除元件 |
@@ -114,13 +114,13 @@ turing-complete/
 | SET | `SET <id_or_alias> <0\|1>` | 设置 INPUT 为指定电平 |
 | SIM | `SIM` | 显式触发仿真 |
 | SAMPLE | `SAMPLE [id_or_alias ...]` | 采样 OUTPUT 状态 |
-| DEFINE_FUNC | `DEFINE_FUNC <name>` | 将当前电路封装为函数 |
+| DEFINE_MODULE | `DEFINE_MODULE <name>` | 将当前电路封装为模块 |
 | COMMENT | `COMMENT <id_or_alias> <text>` | 设置元件注释 |
 
 ### 系统提示词包含的规则
 
 - **命令上限**：每轮 ≤ 30 条，超出自动截断并提示下轮继续
-- **函数思维**：复杂逻辑先搭建 → DEFINE_FUNC → SET+SAMPLE 验证 → CLEAR → 复用
+- **模块思维**：复杂逻辑先搭建 → DEFINE_MODULE → SET+SAMPLE 验证 → CLEAR → 复用
 - **坐标规则**：输入 x=80、门 x=240、输出 x=560，y 间距 80，后端有重叠自动修正
 - **plan ≤ 80 字**：只写做什么 + 坐标策略，不写原理推导
 - **验证驱动**：每完成子目标用 SET+SAMPLE 或 `<verify>` 做测试
@@ -148,7 +148,7 @@ turing-complete/
 | Ctrl+C | 复制选中元件 |
 | Ctrl+V | 粘贴元件 |
 | Ctrl+A | 全选 |
-| Ctrl+S | 保存为函数 |
+| Ctrl+S | 保存为模块 |
 | Ctrl+D | 删除选中元件 |
 | Esc | 取消操作 |
 
@@ -160,12 +160,12 @@ turing-complete/
 
 ---
 
-## 六、函数系统
+## 六、模块系统
 
 1. 搭建包含 INPUT 和 OUTPUT 的完整子电路
-2. 框选所有元件，按 `Ctrl+S` 或使用命令 `DEFINE_FUNC <name>`
-3. 右侧面板出现函数名称，点击即可放置
-4. 支持多层嵌套：函数内部可调用其他函数
+2. 框选所有元件，按 `Ctrl+S` 或使用命令 `DEFINE_MODULE <name>`
+3. 右侧面板出现模块名称，点击即可放置
+4. 支持多层嵌套：模块内部可调用其他模块
 
 ---
 
@@ -195,4 +195,4 @@ turing-complete/
 | 端口占用 | `app.py` 最后一行改 `port=5001` |
 | AI 不工作 | 检查 `AI_CONFIG["api_key"]` 和网络连接 |
 | 电路不计算 | 检查输入端是否都已连线 |
-| 文件损坏 | 删除 `circuit_data.json` 和 `functions_data.json` 重启 |
+| 文件损坏 | 删除 `circuit_data.json` 和 `modules_data.json` 重启 |
