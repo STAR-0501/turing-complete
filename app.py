@@ -11,6 +11,7 @@ import tempfile
 import time
 import threading
 import copy
+import uuid
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -171,14 +172,19 @@ def _init_log_dir():
 
 
 def _log_conversation(entry_type, content, session_id=None, round_num=None):
-    """将 JSONL 日志条目追加到每日日志文件中。
+    """将 JSONL 日志条目追加到按对话命名的日志文件中。
 
     entry_type: 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary' 之一
+    session_id: 对话唯一标识。不传时按日期分文件（向后兼容）。
     """
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
-        today = time.strftime('%Y%m%d')
-        log_file = os.path.join(LOG_DIR, f'conversation_{today}.jsonl')
+        if session_id:
+            today = time.strftime('%Y%m%d')
+            log_file = os.path.join(LOG_DIR, f'conversation_{today}_{session_id}.jsonl')
+        else:
+            today = time.strftime('%Y%m%d')
+            log_file = os.path.join(LOG_DIR, f'conversation_{today}.jsonl')
         entry = {
             "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
             "type": entry_type,
@@ -1738,7 +1744,7 @@ def _quick_classify(user_message):
     return mode
 
 
-def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False):
+def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False, session_id=None):
     if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
         yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
         return
@@ -1825,7 +1831,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
             # 记录本轮 LLM 请求
             _log_conversation("llm_request",
                               f"[Round {round_idx}] System prompt ({len(system_prompt)} chars)\nUser messages: {len(request_messages)} msgs",
-                              round_num=round_idx)
+                              session_id=session_id, round_num=round_idx)
 
             full_content = ""
             last_cmd_last_id = None
@@ -1860,7 +1866,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 if cmd not in ("simulate",):
                     _log_conversation("command",
                                       f"{cmd} {json.dumps(params, ensure_ascii=False)} -> ok={summary.get('executed_success', 0)}",
-                                      round_num=round_idx)
+                                      session_id=session_id, round_num=round_idx)
                 if cmd == "add_element":
                     for r in (summary.get("results") or []):
                         if isinstance(r, dict) and r.get("command") == "add_element":
@@ -1926,10 +1932,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 for r in summary.get("results") or []:
                     cmd_name = r.get("command", "?")
                     _log_conversation(
-                        "command", f"{cmd_name} -> ok", round_num=round_idx)
+                        "command", f"{cmd_name} -> ok", session_id=session_id, round_num=round_idx)
                 for e in summary.get("errors") or []:
                     _log_conversation(
-                        "command", f"{e.get('command', '?')}: {e.get('error', '?')} -> fail", round_num=round_idx)
+                        "command", f"{e.get('command', '?')}: {e.get('error', '?')} -> fail", session_id=session_id, round_num=round_idx)
 
             def _feed_stream_commands(text):
                 """流式执行器：收集命令，在段落关闭时批量执行。"""
@@ -2033,7 +2039,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 {"role": "assistant", "content": full_content})
             _log_conversation("llm_response",
                               f"[Round {round_idx}] Response ({len(full_content)} chars)\n{full_content[:500]}",
-                              round_num=round_idx)
+                              session_id=session_id, round_num=round_idx)
 
             # ═══ 从完整响应中事后提取所有段落 ═══
             # 提取新 5 阶段段落（兼容旧格式）
@@ -2206,7 +2212,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
             if done_flag:
                 _log_conversation(
-                    "system", f"[Round {round_idx}] Agent done: {final_answer_text[:200]}", round_num=round_idx)
+                    "system", f"[Round {round_idx}] Agent done: {final_answer_text[:200]}", session_id=session_id, round_num=round_idx)
                 break
 
             if cycle_rounds >= 20:
@@ -2215,16 +2221,12 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                     "为避免无效调用，我已停止自治循环。你可以指定更明确的目标或允许我先重置关键输入再测试。"
                 )
                 _log_conversation(
-                    "system", f"Loop terminated: cycle detected after {round_idx} rounds", round_num=round_idx)
+                    "system", f"Loop terminated: cycle detected after {round_idx} rounds", session_id=session_id, round_num=round_idx)
                 break
 
             if no_progress_rounds >= no_progress_stop_rounds:
-                final_answer_text = (
-                    f"已连续 {no_progress_rounds} 轮状态无变化（疑似停滞）。"
-                    "为避免无效调用，我已停止自治循环。你可以补充更具体的目标、允许我 CLEAR 重建、或指出需要保留的部分。"
-                )
                 _log_conversation(
-                    "system", f"Loop terminated: no progress after {round_idx} rounds", round_num=round_idx)
+                    "system", f"Loop terminated: no progress after {round_idx} rounds", session_id=session_id, round_num=round_idx)
                 break
 
             if no_progress_rounds >= 2:
@@ -2279,6 +2281,7 @@ def chat():
     """
     聊天接口：流式输出
     """
+    session_id = uuid.uuid4().hex[:12]
     try:
         data = request.json
         message = data.get('message', '')
@@ -2286,20 +2289,20 @@ def chat():
         thinking_mode = data.get('thinking_mode', False)
         logger.info("/api/chat 接收到的 max_rounds=%s, thinking_mode=%s",
                     max_rounds, thinking_mode)
-        _log_conversation("user", message)
+        _log_conversation("user", message, session_id=session_id)
 
         full_response = [""]
 
         def generate():
-            for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode):
+            for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode, session_id=session_id):
                 full_response[0] += chunk
                 yield chunk
             # 流式输出后，记录助手的完整回复
-            _log_conversation("assistant", full_response[0])
+            _log_conversation("assistant", full_response[0], session_id=session_id)
 
         return Response(generate(), mimetype='text/plain')
     except Exception as e:
-        _log_conversation("system", f"Chat error: {str(e)}")
+        _log_conversation("system", f"Chat error: {str(e)}", session_id=session_id)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
