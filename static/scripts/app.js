@@ -1295,18 +1295,24 @@ function handleMouseDown(e) {
   // 点击空白处
   console.log('点击空白处: currentTool=', currentTool, 'button=', e.button);
   if (currentTool === 'select' && e.button === 0) {
-    // 左键 - 框选
-    // 开始框选
-    isSelecting = true;
-    isPanning = false; // 确保不会同时触发
-    selectionStart = { x: worldX, y: worldY };
-    selectionEnd = { x: worldX, y: worldY };
-    // 清除之前的单选状态
-    selectedElement = null;
-    selectedWire = null;
-    selectedElements = [];
-    document.getElementById('status-bar').textContent = '框选模式：拖动鼠标选择多个元件';
-    console.log('开始框选, isSelecting=', isSelecting);
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+左键 - 框选
+      isSelecting = true;
+      isPanning = false;
+      selectionStart = { x: worldX, y: worldY };
+      selectionEnd = { x: worldX, y: worldY };
+      // 清除之前的单选状态
+      selectedElement = null;
+      selectedWire = null;
+      selectedElements = [];
+      document.getElementById('status-bar').textContent = '框选模式：拖动鼠标选择多个元件';
+    } else {
+      // 左键 - 拖动视角
+      isPanning = true;
+      isSelecting = false;
+      panOffset = { x: mouseX, y: mouseY };
+      document.getElementById('status-bar').textContent = '正在拖动屏幕...';
+    }
   } else {
     // 重置所有状态
     selectedElement = null;
@@ -2028,8 +2034,28 @@ function handleMouseUp(e) {
     return;
   }
 
-  // 处理左键释放 - 处理框选结束、单选拖动结束、集体拖动结束
+  // 处理左键释放 - 处理视角拖动结束、框选结束、单选拖动结束、集体拖动结束
   if (e.button === 0) {
+    // 处理左键拖动视角结束
+    if (isPanning) {
+      isPanning = false;
+      document.getElementById('status-bar').textContent = '就绪';
+      render(
+        ctx,
+        elements,
+        wires,
+        selectedElement,
+        selectedWire,
+        null,
+        selectedElements,
+        [],
+        null,
+        false,
+        zoom,
+        camera,
+      );
+    }
+
     // 处理框选结束
     if (isSelecting) {
       isSelecting = false;

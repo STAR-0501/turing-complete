@@ -57,7 +57,7 @@ MODULES_DATA_FILE = os.path.join(BASE_DIR, 'modules_data.json')
 # AI 模式持久化文件
 PLAN_FILE = os.path.join(BASE_DIR, 'plan.md')
 SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
-RULES_FILE = os.path.join(BASE_DIR, 'rules.md')
+SKILLS_FILE = os.path.join(BASE_DIR, 'skills.md')
 # 日志文件夹
 LOG_DIR = os.path.join(BASE_DIR, 'log')
 
@@ -80,11 +80,11 @@ def init_circuit_file():
 # 初始化：如果文件不存在，创建一个空的模块数据文件
 
 
-def init_functions_file():
+def init_modules_file():
     if not os.path.exists(MODULES_DATA_FILE):
         try:
             with open(MODULES_DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump({'functions': []}, f, indent=2, ensure_ascii=False)
+                json.dump({'modules': []}, f, indent=2, ensure_ascii=False)
             logger.info("已创建空的模块数据文件: %s", MODULES_DATA_FILE)
         except Exception as e:
             logger.error("创建模块数据文件失败: %s", e)
@@ -114,15 +114,15 @@ def init_summary_file():
             logger.error("创建摘要文件失败: %s", e)
 
 
-def init_rules_file():
-    if not os.path.exists(RULES_FILE):
+def init_skills_file():
+    if not os.path.exists(SKILLS_FILE):
         try:
-            with open(RULES_FILE, 'w', encoding='utf-8') as f:
+            with open(SKILLS_FILE, 'w', encoding='utf-8') as f:
                 f.write(
-                    "# Agent Rules (Self-Evolving Knowledge Base)\n\n_Last updated: 2026-05-14_\n_Total rules: 0_\n\n")
-            logger.info("已创建自学规则文件: %s", RULES_FILE)
+                    "# Agent Skills (Self-Evolving Knowledge Base)\n\n_Last updated: 2026-05-14_\n_Total skills: 0_\n\n")
+            logger.info("已创建自学技能文件: %s", SKILLS_FILE)
         except Exception as e:
-            logger.error("创建规则文件失败: %s", e)
+            logger.error("创建技能文件失败: %s", e)
 
 
 def _atomic_write_md(path, content):
@@ -196,10 +196,10 @@ def _log_conversation(entry_type, content, session_id=None, round_num=None):
 
 # 启动时初始化
 init_circuit_file()
-init_functions_file()
+init_modules_file()
 init_plan_file()
 init_summary_file()
-init_rules_file()
+init_skills_file()
 
 
 def _atomic_write_json(path, data):
@@ -1153,45 +1153,45 @@ def _extract_answer_text(text):
     return stripped
 
 
-def _merge_rules(new_rules_text, existing_rules_text):
-    """将新规则合并到现有 rules.md 内容中，按标题去重。
+def _merge_skills(new_skills_text, existing_skills_text):
+    """将新技能合并到现有 skills.md 内容中，按标题去重。
 
-    返回更新后的 rules.md 内容，若无新规则返回空字符串。
+    返回更新后的 skills.md 内容，若无新技能返回空字符串。
     若合并失败（无变化）返回 None。
     """
-    if not new_rules_text or not new_rules_text.strip():
+    if not new_skills_text or not new_skills_text.strip():
         return None
 
-    # 从新内容中提取规则标题（### Rule-*）
+    # 从新内容中提取技能标题（### Skill-*）
     if not new_headers:
-        # 新文本中未找到有效规则
+        # 新文本中未找到有效技能
         return None
 
-    # 清理新规则文本 - 移除 <rules> 包装结构
-    # 可能包含分类标题和规则条目
-    new_rules_clean = new_rules_text.strip()
+    # 清理新技能文本 - 移除 <skills> 包装结构
+    # 可能包含分类标题和技能条目
+    new_skills_clean = new_skills_text.strip()
 
-    if not existing_rules_text or not existing_rules_text.strip():
-        # 无现有规则 - 直接返回带标题的新规则
+    if not existing_skills_text or not existing_skills_text.strip():
+        # 无现有技能 - 直接返回带标题的新技能
         today = time.strftime('%Y-%m-%d')
         new_count = len(new_headers)
-        return f"# Agent Rules (Self-Evolving Knowledge Base)\n\n_Last updated: {today}_\n_Total rules: {new_count}_\n\n{new_rules_clean}\n"
+        return f"# Agent Skills (Self-Evolving Knowledge Base)\n\n_Last updated: {today}_\n_Total skills: {new_count}_\n\n{new_skills_clean}\n"
 
     # 检查哪些标题已存在于现有文本中
     existing_headers = set(re.findall(
-        r'^###\s+(Rule-[\w-]+)', existing_rules_text, re.MULTILINE))
+        r'^###\s+(Skill-[\w-]+)', existing_skills_text, re.MULTILINE))
     truly_new_headers = new_headers - existing_headers
 
     if not truly_new_headers:
-        # 所有新规则已存在于现有规则中
+        # 所有新技能已存在于现有技能中
         return None
 
-    # 查找需要追加的新规则（按标题提取完整块）
+    # 查找需要追加的新技能（按标题提取完整块）
     appended_blocks = []
     for header in truly_new_headers:
-        # 在 new_rules_clean 中查找块（从标题到下一个标题或末尾）
-        pattern = rf'(^###\s+{re.escape(header)}.*?)(?=\n###\s+Rule-|\Z)'
-        match = re.search(pattern, new_rules_clean, re.DOTALL | re.MULTILINE)
+        # 在 new_skills_clean 中查找块（从标题到下一个标题或末尾）
+        pattern = rf'(^###\s+{re.escape(header)}.*?)(?=\n###\s+Skill-|\Z)'
+        match = re.search(pattern, new_skills_clean, re.DOTALL | re.MULTILINE)
         if match:
             block = match.group(1).strip()
             appended_blocks.append(block)
@@ -1199,17 +1199,17 @@ def _merge_rules(new_rules_text, existing_rules_text):
     if not appended_blocks:
         return None
 
-    # 在页脚前追加新块（最后一行或"To add a new rule"部分之前）
-    footer_marker = "\n---\n*To add a new rule"
-    footer_idx = existing_rules_text.find(footer_marker)
+    # 在页脚前追加新块（最后一行或"To add a new skill"部分之前）
+    footer_marker = "\n---\n*To add a new skill"
+    footer_idx = existing_skills_text.find(footer_marker)
 
     new_content = "\n\n".join(appended_blocks)
 
     if footer_idx >= 0:
-        merged = existing_rules_text[:footer_idx] + "\n\n" + \
-            new_content + "\n\n" + existing_rules_text[footer_idx:]
+        merged = existing_skills_text[:footer_idx] + "\n\n" + \
+            new_content + "\n\n" + existing_skills_text[footer_idx:]
     else:
-        merged = existing_rules_text.rstrip() + "\n\n" + new_content + "\n"
+        merged = existing_skills_text.rstrip() + "\n\n" + new_content + "\n"
 
     # 更新总计数
     all_headers = existing_headers | truly_new_headers
@@ -1220,8 +1220,8 @@ def _merge_rules(new_rules_text, existing_rules_text):
         merged
     )
     merged = re.sub(
-        r'_Total rules:\s*\d+',
-        f'_Total rules: {len(all_headers)}',
+        r'_Total skills:\s*\d+',
+        f'_Total skills: {len(all_headers)}',
         merged
     )
 
@@ -1403,7 +1403,7 @@ def _format_feedback_text(feedback):
 
 
 def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=None,
-                                    plan_content="", summary_content="", rules_content=""):
+                                    plan_content="", summary_content="", skills_content=""):
     base = """你是一个电路模拟器自治执行助手。你以 5 阶段循环工作：Think→Plan→Build→Observe→Sum。
 每轮都必须依次输出这 5 个阶段的内容，系统会分别处理每个阶段。
 
@@ -1459,17 +1459,17 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
     if summary_content:
         base += "\n\n--- 历史摘要 (summary.md) ---\n" + summary_content
 
-    # 注入规则文件（如果存在）
-    if rules_content:
-        base += "\n\n--- 累计经验规则 (rules.md) ---\n" + rules_content
+    # 注入技能文件（如果存在）
+    if skills_content:
+        base += "\n\n--- 累计经验技能 (skills.md) ---\n" + skills_content
 
     base += """
 
-## 自学进化系统 (rules.md)
+## 自学进化系统 (skills.md)
 
-在 Agent 工作过程中，如果发现以下类型的知识，请在输出中包含一个可选的 `<rules>` 块：
+在 Agent 工作过程中，如果发现以下类型的知识，请在输出中包含一个可选的 `<skills>` 块：
 
-**适合放入 rules.md 的知识：**
+**适合放入 skills.md 的知识：**
 - 重复出现的 Bug 模式和根治方法
 - 有明确理由的架构决策
 - 项目特有的重要约定
@@ -1477,7 +1477,7 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
 - 调试常见失败模式的经验
 - 框架/库的 API 特性和注意事项
 
-**不适合放入 rules.md 的内容：**
+**不适合放入 skills.md 的内容：**
 - 当前任务的临时状态
 - 特定电路的布局坐标
 - 一次性的具体问题
@@ -1485,18 +1485,18 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
 
 **格式要求：**
 ```
-<rules>
+<skills>
 ## [类别]
 
-### Rule-新编号: 简短标题
+### Skill-新编号: 简短标题
 - **Context**: 什么场景下适用
-- **What**: 关键洞察/规则
+- **What**: 关键洞察/技能
 - **Why**: 为什么重要
 - **Example**: 具体例子（可选）
-</rules>
+</skills>
 ```
 
-输出 `<rules>` 块是完全可选的。系统会自动提取并持久化到 rules.md，供未来所有会话使用。
+输出 `<skills>` 块是完全可选的。系统会自动提取并持久化到 skills.md，供未来所有会话使用。
 仅在知识足够通用、精简、有用时输出。宁缺毋滥。
 
 你必须严格按以下 5 阶段结构输出。每轮都必须包含所有 5 个阶段：
@@ -1798,10 +1798,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
 
         previous_feedback = None
 
-        # 加载持久化文件（plan.md、summary.md、rules.md），实现跨会话连续性
+        # 加载持久化文件（plan.md、summary.md、skills.md），实现跨会话连续性
         plan_content = _load_md_file(PLAN_FILE)
         summary_content = _load_md_file(SUMMARY_FILE)
-        rules_content = _load_md_file(RULES_FILE)
+        skills_content = _load_md_file(SKILLS_FILE)
         # 用于收集每轮的 plan/summary 内容
         plan_text_accumulator = ""
         sum_text_accumulator = ""
@@ -1820,7 +1820,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 feedback=previous_feedback,
                 plan_content=plan_content,
                 summary_content=summary_content,
-                rules_content=rules_content
+                skills_content=skills_content
             )
             # 记录本轮 LLM 请求
             _log_conversation("llm_request",
@@ -2076,19 +2076,19 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False)
                 summary_content = raw_sum_text.strip()
                 logger.info("已更新 summary.md")
 
-            # 自学进化：提取 <rules> 块并合并到 rules.md
-            raw_rules_text = _extract_tag_text(full_content, "rules")
-            if raw_rules_text and raw_rules_text.strip():
+            # 自学进化：提取 <skills> 块并合并到 skills.md
+            raw_skills_text = _extract_tag_text(full_content, "skills")
+            if raw_skills_text and raw_skills_text.strip():
                 logger.info(
-                    "[Round %d] 发现 <rules> 块，尝试合并到 rules.md", round_idx)
-                existing_rules = _load_md_file(RULES_FILE)
-                merged = _merge_rules(raw_rules_text, existing_rules)
+                    "[Round %d] 发现 <skills> 块，尝试合并到 skills.md", round_idx)
+                existing_skills = _load_md_file(SKILLS_FILE)
+                merged = _merge_skills(raw_skills_text, existing_skills)
                 if merged is not None:
-                    _atomic_write_md(RULES_FILE, merged)
-                    rules_content = merged
-                    logger.info("已更新 rules.md (自学进化)")
+                    _atomic_write_md(SKILLS_FILE, merged)
+                    skills_content = merged
+                    logger.info("已更新 skills.md (自学进化)")
                 else:
-                    logger.info("rules.md 无变化（规则已存在或格式无效）")
+                    logger.info("skills.md 无变化（技能已存在或格式无效）")
 
             # answer 回退
             if not answer_text:
