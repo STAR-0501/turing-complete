@@ -25,22 +25,32 @@
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
             <button id="btn-ai-comment"><span>AI注释</span><span>C</span></button>
             <button id="btn-ai-layout"><span>AI整理</span><span>L</span></button>
+            <button id="btn-wire-anim" class="active"><span>✨动画</span></button>
         </div>
         <div class="status-bar" id="status-bar">就绪</div>
 
-        <!-- AI 聊天窗口 -->
-        <div id="chat-container" class="chat-container">
-            <div class="chat-header">
-                <h3>AI 助手</h3>
-                <button id="toggle-chat">_</button>
+        <!-- Agent 侧边栏切换按钮 -->
+        <div id="agent-toggle" class="agent-toggle" title="打开 Agent">Agent</div>
+
+        <!-- Agent 侧边栏 -->
+        <div id="agent-sidebar" class="agent-sidebar">
+            <div class="agent-sidebar-resize-handle" id="agent-resize-handle"></div>
+            <div class="agent-header">
+                <div class="agent-header-left">
+                    <div class="agent-header-icon">◆</div>
+                    <h3>Agent</h3>
+                </div>
+                <div class="agent-header-actions">
+                    <button id="agent-minimize" class="agent-header-btn" title="最小化">—</button>
+                </div>
             </div>
-            <div id="chat-messages" class="chat-messages">
-                <div class="message ai">你好！我是电路助手。你可以让我帮你构建电路，例如：“帮我放一个与门”或“连接这两个元件”。</div>
+            <div id="agent-messages" class="agent-messages">
+                <div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>
             </div>
-            <div class="chat-input-area">
-                <input type="text" id="chat-input" placeholder="输入指令..." autocomplete="off">
-                <button id="thinking-toggle" class="thinking-toggle" title="开启思考模式">思考</button>
-                <button id="send-chat">发送</button>
+            <div class="agent-input-area">
+                <input type="text" id="agent-input" placeholder="输入指令..." autocomplete="off">
+                <button id="agent-think" class="agent-think-btn" title="开启思考模式">思考</button>
+                <button id="agent-send" class="agent-send-btn">发送</button>
             </div>
         </div>
 

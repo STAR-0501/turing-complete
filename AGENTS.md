@@ -89,7 +89,9 @@
 
 ```bash
 pip install -r requirements.txt   # install deps
-python app.py                      # dev server (http://localhost:5000)
+# NOTE: `python app.py` does NOT stop on its own once started.
+#       Do NOT start the server yourself or force-kill it mid-session.
+# python app.py                   # dev server (http://localhost:5000)
 # No test/build/CI commands exist
 ```
 

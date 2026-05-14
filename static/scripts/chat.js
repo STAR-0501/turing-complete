@@ -1,91 +1,87 @@
 /**
- * 聊天模块
- * 处理与 AI 的对话和指令同步
+ * Agent 侧边栏模块
+ * 处理与 AI 的对话和指令同步 — 右侧滑入侧边栏
  */
 import { loadFromServer } from './app.js';
 
-const chatContainer = document.getElementById('chat-container');
-const chatMessages = document.getElementById('chat-messages');
-const chatInput = document.getElementById('chat-input');
-const sendBtn = document.getElementById('send-chat');
-const toggleBtn = document.getElementById('toggle-chat');
-const chatHeader = document.querySelector('.chat-header');
-const thinkingToggle = document.getElementById('thinking-toggle');
+const agentSidebar = document.getElementById('agent-sidebar');
+const agentToggle = document.getElementById('agent-toggle');
+const agentMessages = document.getElementById('agent-messages');
+const agentInput = document.getElementById('agent-input');
+const agentSend = document.getElementById('agent-send');
+const agentThink = document.getElementById('agent-think');
+const agentMinimize = document.getElementById('agent-minimize');
+const agentResizeHandle = document.getElementById('agent-resize-handle');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
 
 let thinkingMode = false;
 
-// 初始化聊天窗口
+// 初始化 Agent 侧边栏
 export function initChat() {
-  // 切换折叠状态
-  toggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // 防止触发拖拽开始
-    chatContainer.classList.toggle('collapsed');
-    toggleBtn.textContent = chatContainer.classList.contains('collapsed') ? '+' : '_';
+  // 切换按钮：打开侧边栏
+  agentToggle.addEventListener('click', () => {
+    agentSidebar.classList.add('open');
+    agentToggle.classList.add('hidden');
+    agentInput.focus();
   });
 
-  // 实现拖拽
-  let isDragging = false;
-  let offset = { x: 0, y: 0 };
+  // 最小化按钮：关闭侧边栏
+  agentMinimize.addEventListener('click', () => {
+    agentSidebar.classList.remove('open');
+    agentToggle.classList.remove('hidden');
+  });
 
-  chatHeader.addEventListener('mousedown', (e) => {
-    if (e.target === toggleBtn) return;
+  // 点击侧边栏外部关闭（点击 canvas 区域时）
+  document.addEventListener('click', (e) => {
+    if (!agentSidebar.classList.contains('open')) return;
+    if (agentSidebar.contains(e.target) || agentToggle.contains(e.target)) return;
+    agentSidebar.classList.remove('open');
+    agentToggle.classList.remove('hidden');
+  });
 
-    isDragging = true;
-    // 获取当前鼠标相对于容器左上角的偏移
-    const rect = chatContainer.getBoundingClientRect();
-    offset.x = e.clientX - rect.left;
-    offset.y = e.clientY - rect.top;
+  // 拖拽拉伸手柄：调整侧边栏宽度
+  let isResizing = false;
+  const MIN_WIDTH = 280;
+  const MAX_WIDTH = 600;
 
-    // 拖拽时禁用过渡效果
-    chatContainer.style.transition = 'none';
-
-    // 改变鼠标指针
-    document.body.style.cursor = 'move';
+  agentResizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing = true;
+    agentResizeHandle.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
   });
 
   document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-
-    // 计算新位置
-    let left = e.clientX - offset.x;
-    let top = e.clientY - offset.y;
-
-    // 限制在屏幕内
-    const rect = chatContainer.getBoundingClientRect();
-    left = Math.max(0, Math.min(window.innerWidth - rect.width, left));
-    top = Math.max(0, Math.min(window.innerHeight - rect.height, top));
-
-    // 应用新位置
-    chatContainer.style.left = left + 'px';
-    chatContainer.style.top = top + 'px';
-    chatContainer.style.right = 'auto';
-    chatContainer.style.bottom = 'auto';
+    if (!isResizing) return;
+    const newWidth = window.innerWidth - e.clientX;
+    const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+    agentSidebar.style.width = clamped + 'px';
   });
 
   document.addEventListener('mouseup', () => {
-    if (!isDragging) return;
-    isDragging = false;
-
-    // 恢复过渡效果
-    chatContainer.style.transition = 'height 0.3s ease';
-    document.body.style.cursor = 'default';
+    if (!isResizing) return;
+    isResizing = false;
+    agentResizeHandle.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   });
 
-  // 发送消息事件
-  sendBtn.addEventListener('click', sendMessage);
-  chatInput.addEventListener('keypress', (e) => {
+  // 发送消息
+  agentSend.addEventListener('click', sendMessage);
+  agentInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
   });
 
   // 思考模式切换
-  if (thinkingToggle) {
-    thinkingToggle.addEventListener('click', () => {
+  if (agentThink) {
+    agentThink.addEventListener('click', () => {
       thinkingMode = !thinkingMode;
-      thinkingToggle.classList.toggle('active', thinkingMode);
-      thinkingToggle.title = thinkingMode
+      agentThink.classList.toggle('active', thinkingMode);
+      agentThink.title = thinkingMode
         ? '深度思考模式已开启（DeepSeek深度推理）'
         : '开启DeepSeek思考模式（深度推理，耗时更长但结果更准确）';
     });
@@ -94,12 +90,11 @@ export function initChat() {
 
 // 发送消息到后端
 async function sendMessage() {
-  const text = chatInput.value.trim();
+  const text = agentInput.value.trim();
   if (!text) return;
 
-  // 添加用户消息到界面
   addMessage(text, 'user');
-  chatInput.value = '';
+  agentInput.value = '';
 
   // 创建 AI 消息容器
   const aiMsgDiv = addMessage('', 'ai');
@@ -145,32 +140,34 @@ async function sendMessage() {
     const { thinking, answer } = splitThinkingAndAnswer(fullContent);
     if (!thinking && !answer) {
       aiMsgDiv.textContent = '正在思考...';
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+      agentMessages.scrollTop = agentMessages.scrollHeight;
       return;
     }
     const sections = [];
     if (thinking) {
       sections.push(
-        `<div style="margin-bottom:8px;"><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">思考过程</div><div style="white-space:pre-wrap;">${escapeHtml(thinking)}</div></div>`,
+        `<div class="msg-thinking-label">思考过程</div><div class="msg-thinking-content">${escapeHtml(thinking)}</div>`,
       );
     }
     if (answer) {
+      if (sections.length > 0) sections.push('<div style="height:6px"></div>');
       sections.push(
-        `<div><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">正式输出</div><div style="white-space:pre-wrap;">${escapeHtml(answer)}</div></div>`,
+        `<div class="msg-answer-label">正式输出</div><div class="msg-answer-content">${escapeHtml(answer)}</div>`,
       );
     }
     aiMsgDiv.innerHTML = sections.join('');
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    agentMessages.scrollTop = agentMessages.scrollHeight;
   };
 
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, thinking_mode: thinkingMode }),
+      body: JSON.stringify({
+        message: text,
+        thinking_mode: thinkingMode,
+      }),
     });
-
-    if (!response.ok) throw new Error('Network response was not ok');
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -180,56 +177,52 @@ async function sendMessage() {
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
-
+      // 过滤掉状态变更标记（由后端直接处理）
       if (chunk.includes(STATE_CHANGED_MARKER)) {
         loadFromServer();
       }
+      const cleanChunk = chunk.replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
+      fullContent += cleanChunk;
 
-      fullContent += chunk;
-      const now = performance.now();
-      if (now - lastRenderTime >= renderInterval) {
+      const now = Date.now();
+      if (now - lastRenderTime > renderInterval) {
         renderContent();
         lastRenderTime = now;
       }
     }
     renderContent();
-
-    // 检查是否执行了指令（提取标签内容并检查是否为空列表）
-    const match = fullContent.match(/<commands>([\s\S]*?)<\/commands>/);
-    if (match && match[1].trim() !== '[]') {
-      // 立即触发状态加载和渲染
-      await loadFromServer();
-
-      const systemMsg = document.createElement('div');
-      systemMsg.className = 'message ai';
-      systemMsg.style.fontSize = '11px';
-      systemMsg.style.opacity = '0.7';
-      systemMsg.textContent = '[系统] 电路操作指令已执行。';
-      chatMessages.appendChild(systemMsg);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-  } catch (error) {
-    aiMsgDiv.textContent = `错误: ${error.message || '连接失败'}`;
-    console.error('Chat error:', error);
+  } catch (err) {
+    aiMsgDiv.textContent = '连接失败，请检查后端是否运行。';
+    console.error('Chat error:', err);
   }
 }
 
-// 在界面上添加消息
-function addMessage(text, type, isLoading = false) {
-  const msgDiv = document.createElement('div');
-  msgDiv.className = `message ${type}`;
-  msgDiv.textContent = text;
-
-  chatMessages.appendChild(msgDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-
-  return msgDiv;
+// 添加消息到界面
+export function addMessage(text, type) {
+  const div = document.createElement('div');
+  div.className = `agent-message ${type}`;
+  if (type === 'ai') {
+    // AI 消息用 textContent 初始占位，后续 SSE 流式填充 innerHTML
+    div.textContent = text || '...';
+  } else if (type === 'round') {
+    div.className = 'agent-round-marker';
+    div.textContent = text;
+  } else {
+    div.textContent = text;
+  }
+  agentMessages.appendChild(div);
+  agentMessages.scrollTop = agentMessages.scrollHeight;
+  return div;
 }
 
-// 移除消息
-function removeMessage(id) {
-  const el = document.getElementById(id);
-  if (el) el.remove();
+// 暴露给 app.js 用于 round 标记和自动展开
+export function openAgentSidebar() {
+  agentSidebar.classList.add('open');
+  agentToggle.classList.add('hidden');
+}
+
+export function getAgentMessages() {
+  return agentMessages;
 }
 
 // 自动初始化

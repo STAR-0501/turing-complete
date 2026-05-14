@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, Response
+﻿from flask import Flask, request, jsonify, render_template, Response
 import glob
 import json
 import os
@@ -2408,8 +2408,8 @@ if __name__ == '__main__':
     logger.info("电路设计应用启动中...")
     logger.info("电路数据文件路径: %s", CIRCUIT_DATA_FILE)
     logger.info("模块数据文件路径: %s", MODULES_DATA_FILE)
-    logger.info("打开软件: http://localhost:5000")
+    logger.info("打开软件: http://localhost:5002")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5002)

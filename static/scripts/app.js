@@ -34,6 +34,7 @@ let zoom = 1; // 缩放级别
 let camera = { x: 0, y: 0 }; // 相机位置
 let signalAnimation = null;
 let isSignalAnimating = false;
+let wireAnimationEnabled = true;
 let isEditingComment = false; // 是否正在编辑注释
 let commentTargetElement = null; // 当前正在编辑注释的元件
 let lastClickedElement = null; // 最后点击的元件（用于区分拖动和点击）
@@ -209,6 +210,11 @@ async function init() {
   document.getElementById('btn-clear').addEventListener('click', clearCircuit);
   document.getElementById('btn-ai-comment').addEventListener('click', aiAutoComment);
   document.getElementById('btn-ai-layout').addEventListener('click', aiAutoLayout);
+  document.getElementById('btn-wire-anim').addEventListener('click', function () {
+    wireAnimationEnabled = !wireAnimationEnabled;
+    this.classList.toggle('active', wireAnimationEnabled);
+    document.getElementById('status-bar').textContent = wireAnimationEnabled ? '线路动画已开启' : '线路动画已关闭';
+  });
 
   // 初始化模块相关功能
   initModulePanel();
@@ -1169,11 +1175,16 @@ function handleMouseDown(e) {
         elements = calculateCircuit(elements, wires);
         const targetSnapshot = takeCircuitStateSnapshot();
 
-        applyCircuitStateSnapshot(beforeSnapshot);
-        element.state = targetSnapshot.elementStates.get(element.id) || false;
+        if (wireAnimationEnabled) {
+          applyCircuitStateSnapshot(beforeSnapshot);
+          element.state = targetSnapshot.elementStates.get(element.id) || false;
 
-        signalAnimation = buildSignalAnimation(element.id, beforeSnapshot, targetSnapshot);
-        isSignalAnimating = true;
+          signalAnimation = buildSignalAnimation(element.id, beforeSnapshot, targetSnapshot);
+          isSignalAnimating = true;
+        } else {
+          signalAnimation = null;
+          isSignalAnimating = false;
+        }
 
         document.getElementById('status-bar').textContent = `输入状态已切换为: ${element.state ? '1' : '0'}`;
         render(ctx, elements, wires, selectedElement, selectedWire, null, [], [], null, false, zoom, camera);
