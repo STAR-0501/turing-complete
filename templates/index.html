@@ -28,7 +28,7 @@
         <div class="status-bar" id="status-bar">就绪</div>
 
         <!-- Agent 侧边栏切换按钮 -->
-        <div id="agent-toggle" class="agent-toggle" title="打开 Agent">Agent</div>
+        <div id="agent-toggle" class="agent-toggle" title="打开 Agent">◀</div>
 
         <!-- Agent 侧边栏 -->
         <div id="agent-sidebar" class="agent-sidebar">
@@ -38,8 +38,13 @@
                     <div class="agent-header-icon">◆</div>
                     <h3>Agent</h3>
                 </div>
+                <div class="agent-header-center">
+                    <select id="conversation-select" class="conversation-select">
+                        <option value="">当前对话</option>
+                    </select>
+                </div>
                 <div class="agent-header-actions">
-                    <button id="agent-minimize" class="agent-header-btn" title="最小化">—</button>
+                    <button id="agent-minimize" class="agent-header-btn" title="最小化">▶</button>
                 </div>
             </div>
             <div id="agent-messages" class="agent-messages">

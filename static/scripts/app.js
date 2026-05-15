@@ -1627,10 +1627,10 @@ function drawTemporaryElement(ctx, element) {
       ctx.fillText('NOT', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'INPUT':
-      ctx.fillText('IN:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
+      ctx.fillText('IN', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'OUTPUT':
-      ctx.fillText('OUT:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
+      ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'FUNCTION':
       // 绘制模块块边框

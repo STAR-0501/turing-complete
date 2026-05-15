@@ -13,11 +13,13 @@ const agentThink = document.getElementById('agent-think');
 const agentMinimize = document.getElementById('agent-minimize');
 const agentResizeHandle = document.getElementById('agent-resize-handle');
 const agentPromptSuggestions = document.getElementById('agent-prompt-suggestions');
+const conversationSelect = document.getElementById('conversation-select');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
 
 let thinkingMode = false;
+let currentSessionId = ''; // 当前对话的 session_id
 
 // 初始化 Agent 侧边栏
 export function initChat() {
@@ -111,6 +113,78 @@ export function initChat() {
         : '开启DeepSeek思考模式（深度推理，耗时更长但结果更准确）';
     });
   }
+
+  // 加载历史对话列表
+  loadConversationList();
+
+  // 对话选择切换
+  conversationSelect.addEventListener('change', () => {
+    const sessId = conversationSelect.value;
+    if (!sessId) {
+      // 选择"当前对话"——清空并显示默认欢迎语
+      agentMessages.innerHTML = '<div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>';
+      return;
+    }
+    loadConversationMessages(sessId);
+  });
+}
+
+// 加载历史对话列表
+async function loadConversationList() {
+  try {
+    const res = await fetch('/api/conversations');
+    const data = await res.json();
+    // 保留第一个"当前对话"选项
+    while (conversationSelect.options.length > 1) {
+      conversationSelect.remove(1);
+    }
+    if (data.conversations) {
+      for (const conv of data.conversations) {
+        const opt = document.createElement('option');
+        opt.value = conv.session_id;
+        const dateStr = conv.date || '';
+        const preview = conv.preview ? conv.preview.replace(/[\n\r]/g, ' ').substring(0, 30) : '';
+        opt.textContent = dateStr ? `${dateStr} ${preview}` : (preview || conv.session_id);
+        conversationSelect.appendChild(opt);
+      }
+    }
+  } catch (err) {
+    console.error('加载对话列表失败:', err);
+  }
+}
+
+// 加载指定对话的消息
+async function loadConversationMessages(sessionId) {
+  try {
+    const res = await fetch('/api/conversations/' + sessionId);
+    const data = await res.json();
+    if (data.messages) {
+      // 清空消息区
+      agentMessages.innerHTML = '';
+      for (const msg of data.messages) {
+        const type = msg.type;
+        const content = msg.content || '';
+        if (type === 'user') {
+          addMessage(content, 'user');
+        } else if (type === 'assistant') {
+          const div = addMessage('', 'ai');
+          // 显示纯文本内容（不含 thinking/answer 标记）
+          const cleaned = content
+            .replace(new RegExp(THINKING_MARKER, 'g'), '')
+            .replace(new RegExp(ANSWER_MARKER, 'g'), '')
+            .replace(/<commands>[\s\S]*?<\/commands>/g, '')
+            .trim();
+          div.textContent = cleaned || '(空回复)';
+        } else if (type === 'system') {
+          const div = addMessage('[系统] ' + content, 'ai');
+          div.style.opacity = '0.6';
+        }
+        // 忽略 llm_request, llm_response, command, observe, plan 等内部类型
+      }
+    }
+  } catch (err) {
+    console.error('加载对话消息失败:', err);
+  }
 }
 
 // 发送消息到后端
@@ -196,12 +270,27 @@ async function sendMessage() {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let sessionParsed = false;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
+
+      // 解析首块中的 session_id 标记
+      if (!sessionParsed && chunk.startsWith('__TC_SESSION__:')) {
+        const nlIdx = chunk.indexOf('\n');
+        if (nlIdx !== -1) {
+          currentSessionId = chunk.substring('__TC_SESSION__:'.length, nlIdx).trim();
+          sessionParsed = true;
+          // 选择框切到当前会话（如果已在列表中）
+          const opt = conversationSelect.querySelector(`option[value="${currentSessionId}"]`);
+          if (opt) opt.selected = true;
+        }
+        continue; // 跳过标记行
+      }
+
       // 过滤掉状态变更标记（由后端直接处理）
       if (chunk.includes(STATE_CHANGED_MARKER)) {
         loadFromServer();
@@ -216,6 +305,8 @@ async function sendMessage() {
       }
     }
     renderContent();
+    // 发送完成后刷新对话列表
+    loadConversationList();
   } catch (err) {
     aiMsgDiv.textContent = '连接失败，请检查后端是否运行。';
     console.error('Chat error:', err);

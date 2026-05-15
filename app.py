@@ -2276,6 +2276,72 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
         yield f"调用 AI 失败: {str(e)}"
 
 
+@app.route('/api/conversations', methods=['GET'])
+def list_conversations():
+    """列出所有历史对话"""
+    import os
+    try:
+        files = []
+        for fname in os.listdir(LOG_DIR):
+            if not fname.startswith('conversation_') or not fname.endswith('.jsonl'):
+                continue
+            fpath = os.path.join(LOG_DIR, fname)
+            # 从文件名解析: conversation_{date}_{session_id}.jsonl
+            parts = fname.replace('.jsonl', '').split('_', 2)
+            date_str = parts[1] if len(parts) > 1 else ''
+            sess_id = parts[2] if len(parts) > 2 else ''
+            # 读取第一行获取预览
+            preview = ''
+            msg_count = 0
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        msg_count += 1
+                        if not preview and line.strip():
+                            import json
+                            try:
+                                entry = json.loads(line)
+                                content = entry.get('content', '')
+                                if content:
+                                    preview = content[:80]
+                            except:
+                                pass
+            except:
+                pass
+            files.append({
+                'session_id': sess_id,
+                'date': date_str,
+                'message_count': msg_count,
+                'preview': preview,
+                'filename': fname,
+            })
+        # 按日期降序排列
+        files.sort(key=lambda x: x['date'], reverse=True)
+        return jsonify({'conversations': files})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/conversations/<session_id>', methods=['GET'])
+def get_conversation(session_id):
+    """读取指定对话的消息"""
+    import os
+    try:
+        for fname in os.listdir(LOG_DIR):
+            if session_id in fname and fname.endswith('.jsonl'):
+                fpath = os.path.join(LOG_DIR, fname)
+                messages = []
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            import json
+                            messages.append(json.loads(line))
+                return jsonify({'messages': messages, 'filename': fname})
+        return jsonify({'status': 'error', 'message': '对话未找到'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """
@@ -2294,6 +2360,7 @@ def chat():
         full_response = [""]
 
         def generate():
+            yield f"__TC_SESSION__:{session_id}\n"
             for chunk in call_llm_stream(message, max_rounds_override=max_rounds, thinking_mode=thinking_mode, session_id=session_id):
                 full_response[0] += chunk
                 yield chunk

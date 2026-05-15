@@ -178,7 +178,7 @@ body {
 .agent-prompt-suggestions {
   display: none;
   gap: 6px;
-  padding: 8px 16px 0;
+  padding: 2px 16px 0;
   flex-shrink: 0;
 }
 
@@ -311,31 +311,43 @@ body {
 
 /* 侧边栏头部 */
 .agent-header {
-  padding: 16px 20px;
+  padding: 10px 14px;
   background: linear-gradient(135deg, rgba(0, 255, 255, 0.08), rgba(0, 200, 255, 0.04));
   border-bottom: 1px solid rgba(0, 255, 255, 0.15);
   display: flex;
-  justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+  gap: 4px;
 }
 
 .agent-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .agent-header-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   background: linear-gradient(135deg, rgba(0, 255, 255, 0.25), rgba(0, 200, 255, 0.1));
   border: 1px solid rgba(0, 255, 255, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.agent-header-icon {
+  font-size: 12px;
+}
+
+.agent-header h3 {
   font-size: 14px;
+  color: #00ffff;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .agent-header h3 {
@@ -371,6 +383,39 @@ body {
   background: rgba(0, 255, 255, 0.15);
   color: #00ffff;
   border-color: rgba(0, 255, 255, 0.4);
+}
+
+/* 对话选择器 */
+.agent-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 0 4px;
+  min-width: 0;
+}
+
+.conversation-select {
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  color: #00ffff;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  max-width: 130px;
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-select:hover {
+  border-color: rgba(0, 255, 255, 0.5);
+}
+
+.conversation-select option {
+  background: #1a1a2e;
+  color: #00ffff;
 }
 
 /* 消息区域 */
@@ -470,7 +515,7 @@ body {
 
 /* 输入区域 — 社交消息风格 */
 .agent-input-area {
-  padding: 0 16px 12px;
+  padding: 6px 16px 12px;
   border-top: 1px solid rgba(0, 255, 255, 0.12);
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.3);
