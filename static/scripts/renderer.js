@@ -136,74 +136,27 @@ export function render(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    // 清空填充颜色（只保留文字，不覆盖背景色块）
+    ctx.fillStyle = elementColor;
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
     switch (element.type) {
       case 'AND':
-        // 绘制与门符号
-        ctx.strokeStyle = elementColor;
-        ctx.lineWidth = 2;
-        // 简化与门：使用更小的尺寸，居中绘制
-        const andCenterX = element.x + element.width / 2;
-        const andCenterY = element.y + element.height / 2;
-        const andSize = Math.min(element.width, element.height) * 0.7;
-
-        ctx.beginPath();
-        ctx.moveTo(andCenterX - andSize / 2, andCenterY - andSize / 3);
-        ctx.lineTo(andCenterX - andSize / 2, andCenterY + andSize / 3);
-        ctx.arc(andCenterX + andSize / 4, andCenterY, andSize / 3, Math.PI * 1.5, Math.PI * 0.5);
-        ctx.closePath();
-        ctx.stroke();
+        ctx.fillText('AND', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'OR':
-        // 绘制或门符号
-        ctx.strokeStyle = elementColor;
-        ctx.lineWidth = 2;
-        // 简化或门：使用更小的尺寸，居中绘制
-        const orCenterX = element.x + element.width / 2;
-        const orCenterY = element.y + element.height / 2;
-        const orSize = Math.min(element.width, element.height) * 0.7;
-
-        ctx.beginPath();
-        ctx.moveTo(orCenterX - orSize / 2, orCenterY - orSize / 3);
-        ctx.lineTo(orCenterX - orSize / 2, orCenterY + orSize / 3);
-        ctx.arc(orCenterX + orSize / 4, orCenterY, orSize / 3, Math.PI * 1.5, Math.PI * 0.5);
-        ctx.closePath();
-        ctx.stroke();
-        // 绘制或门的弯曲输入
-        ctx.beginPath();
-        ctx.arc(orCenterX - orSize / 2, orCenterY, orSize / 6, Math.PI * 0.5, Math.PI * 1.5);
-        ctx.stroke();
+        ctx.fillText('OR', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'NOT':
-        // 绘制非门符号
-        ctx.strokeStyle = elementColor;
-        ctx.lineWidth = 2;
-        // 简化非门：使用更小的尺寸，居中绘制
-        const notCenterX = element.x + element.width / 2;
-        const notCenterY = element.y + element.height / 2;
-        const notSize = Math.min(element.width, element.height) * 0.7;
-
-        // 绘制主体矩形
-        ctx.beginPath();
-        ctx.rect(notCenterX - notSize / 3, notCenterY - notSize / 4, notSize / 2, notSize / 2);
-        ctx.stroke();
-        // 绘制输出线和圆圈
-        ctx.beginPath();
-        ctx.moveTo(notCenterX + notSize / 6, notCenterY);
-        ctx.lineTo(notCenterX + notSize / 3, notCenterY);
-        ctx.stroke();
-        // 绘制非门的圆圈
-        ctx.beginPath();
-        ctx.arc(notCenterX + notSize / 3 + notSize / 12, notCenterY, notSize / 12, 0, Math.PI * 2);
-        ctx.fillStyle = elementColor;
-        ctx.fill();
+        ctx.fillText('NOT', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'INPUT':
-        // 绘制输入块
-        ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
+        ctx.fillText('IN', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'OUTPUT':
-        // 绘制输出块
-        ctx.fillText(element.state ? '1' : '0', element.x + element.width / 2, element.y + element.height / 2);
+        ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'FUNCTION':
         // 绘制模块块边框
@@ -239,10 +192,13 @@ export function render(
       if (element.type === 'FUNCTION' && element.outputStates) {
         const outputIndex = element.outputs.indexOf(output);
         portState = element.outputStates[outputIndex] || false;
+      } else {
+        // 非模块元件：输出端口状态与元件状态一致
+        portState = element.state || false;
       }
 
       // 根据端口状态显示不同颜色
-      ctx.fillStyle = portState ? '#00ff00' : '#666666';
+      ctx.fillStyle = portState ? '#00ff00' : '#ff0000';
       ctx.beginPath();
       ctx.arc(portX, portY, 5, 0, Math.PI * 2);
       ctx.fill();

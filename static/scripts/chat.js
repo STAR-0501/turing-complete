@@ -12,6 +12,7 @@ const agentSend = document.getElementById('agent-send');
 const agentThink = document.getElementById('agent-think');
 const agentMinimize = document.getElementById('agent-minimize');
 const agentResizeHandle = document.getElementById('agent-resize-handle');
+const agentPromptSuggestions = document.getElementById('agent-prompt-suggestions');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
@@ -29,14 +30,6 @@ export function initChat() {
 
   // 最小化按钮：关闭侧边栏
   agentMinimize.addEventListener('click', () => {
-    agentSidebar.classList.remove('open');
-    agentToggle.classList.remove('hidden');
-  });
-
-  // 点击侧边栏外部关闭（点击 canvas 区域时）
-  document.addEventListener('click', (e) => {
-    if (!agentSidebar.classList.contains('open')) return;
-    if (agentSidebar.contains(e.target) || agentToggle.contains(e.target)) return;
     agentSidebar.classList.remove('open');
     agentToggle.classList.remove('hidden');
   });
@@ -70,10 +63,42 @@ export function initChat() {
     document.body.style.userSelect = '';
   });
 
+  // textarea 自动扩展高度（无滚动条，随内容增长）
+  const autoResize = () => {
+    agentInput.style.height = 'auto';
+    agentInput.style.height = agentInput.scrollHeight + 'px';
+  };
+
+  // 输入框内容变化时切换快捷提示的显示（空则显示，有内容则隐藏）
+  const updateSuggestions = () => {
+    const empty = agentInput.value.trim() === '';
+    agentPromptSuggestions.classList.toggle('visible', empty);
+  };
+  agentInput.addEventListener('input', () => {
+    autoResize();
+    updateSuggestions();
+  });
+  // 初始状态：如果输入框为空则显示快捷提示
+  updateSuggestions();
+  autoResize();
+
+  // 快捷提示按钮：填充输入框
+  agentPromptSuggestions.querySelectorAll('.agent-suggestion-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      agentInput.value = btn.getAttribute('data-prompt');
+      agentPromptSuggestions.classList.remove('visible');
+      autoResize();
+      agentInput.focus();
+    });
+  });
+
   // 发送消息
   agentSend.addEventListener('click', sendMessage);
-  agentInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
+  agentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
 
   // 思考模式切换

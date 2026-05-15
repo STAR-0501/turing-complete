@@ -23,8 +23,6 @@
             <button id="btn-grid"><span>网格</span><span>0</span></button>
             <button id="btn-undo"><span>撤销</span><span>Ctrl+Z</span></button>
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
-            <button id="btn-ai-comment"><span>AI注释</span><span>C</span></button>
-            <button id="btn-ai-layout"><span>AI整理</span><span>L</span></button>
             <button id="btn-wire-anim" class="active"><span>✨动画</span></button>
         </div>
         <div class="status-bar" id="status-bar">就绪</div>
@@ -47,10 +45,16 @@
             <div id="agent-messages" class="agent-messages">
                 <div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>
             </div>
+            <div class="agent-prompt-suggestions" id="agent-prompt-suggestions">
+                <button class="agent-suggestion-btn" data-prompt="请为电路中的所有元件添加注释，说明每个元件的功能和作用">AI注释</button>
+                <button class="agent-suggestion-btn" data-prompt="请整理当前电路的布局，让电路更加清晰美观">AI整理</button>
+            </div>
             <div class="agent-input-area">
-                <input type="text" id="agent-input" placeholder="输入指令..." autocomplete="off">
-                <button id="agent-think" class="agent-think-btn" title="开启思考模式">思考</button>
-                <button id="agent-send" class="agent-send-btn">发送</button>
+                <textarea id="agent-input" placeholder="输入指令..." rows="1"></textarea>
+                <div class="agent-input-footer">
+                    <button id="agent-think" class="agent-think-btn" title="开启深度思考模式">深度思考</button>
+                    <button id="agent-send" class="agent-send-btn">发送</button>
+                </div>
             </div>
         </div>
 
@@ -88,11 +92,6 @@
             </div>
         </div>
 
-        <!-- AI 加载遮罩 -->
-        <div id="ai-loading" class="loading-overlay" style="display: none;">
-            <div class="loading-spinner"></div>
-            <div class="loading-text">AI 正在处理中...</div>
-        </div>
     </div>
     <script type="module" src="{{ url_for('static', filename='scripts/app.js') }}?v=2"></script>
     <script type="module" src="{{ url_for('static', filename='scripts/chat.js') }}?v=2"></script>
