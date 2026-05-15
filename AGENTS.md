@@ -11,17 +11,17 @@
 ├── app.py                  # Flask server: routes, SSE streaming, LLM agent loop (5-mode)
 ├── ai_commands.py          # CircuitManager, simulation engine, command execution
 ├── templates/
-│   └── index.html          # Single-page app shell
+│   └── index.html          # (93L)   Single-page app shell
 ├── static/
 │   ├── scripts/
-│   │   ├── app.js          # (3051L) Canvas editor: events, tools, drag-drop, state
-│   │   ├── circuit.js      # (359L)  Element evaluation / propagation
-│   │   ├── renderer.js     # (395L)  Canvas draw: elements, wires, overlays
-│   │   ├── chat.js         # (225L)  Chat UI + SSE streaming + multi-round display
-│   │   ├── elements.js     # (222L)  Element type defs & DOM creation
-│   │   └── utils.js        # (39L)   generateId, distance, isPointOnWire
+│   │   ├── app.js          # (2645L) Canvas editor: events, tools, drag-drop, state, grid snap
+│   │   ├── circuit.js      # (334L)  Element evaluation / propagation
+│   │   ├── renderer.js     # (317L)  Canvas draw: elements (text labels), wires, overlays
+│   │   ├── chat.js         # (219L)  Agent sidebar UI + SSE streaming + textarea input
+│   │   ├── elements.js     # (212L)  Element type defs & DOM creation
+│   │   └── utils.js        # (36L)   generateId, distance, isPointOnWire
 │   └── style/css/
-│       └── styles.css      # (476L)
+│       └── styles.css      # (740L)
 ├── circuit_data.json       # Persisted circuit state
 ├── modules_data.json       # Persisted custom module blocks
 ├── skills.md               # Self-evolving skills base (agent-extracted skills)
@@ -55,6 +55,13 @@
 | Streaming command execution | `app.py`: `_feed_stream_commands` | Real-time build execution during LLM streaming |
 | Conversation logging | `app.py`: `_log_conversation` | JSONL logs in `log/` (gitignored) |
 | Frontend round markers | `chat.js`: `ROUND_MARKER` | `__TC_ROUND__` markers create per-round message divs |
+| Agent sidebar / chat | `chat.js` + `static/style/css/styles.css` | Collapsible right sidebar, SSE streaming, thinking split, prompt suggestions |
+| Wire animation toggle | `app.js`: `wireAnimationEnabled` / `btn-wire-anim` | Toolbar button to toggle signal propagation animation |
+| Grid snapping | `app.js`: `snapToGrid()` / `syncGridToCamera()` | 20px snap aligned to background grid; `GRID_SIZE` constant |
+| Element labels | `renderer.js`: switch cases | AND/OR/NOT/IN/OUT text labels (no graphic symbols) |
+| Agent prompt suggestions | `chat.js`: `agentPromptSuggestions` / `index.html` | "AI注释"/"AI整理" buttons above textarea when empty |
+| Agent textarea input | `chat.js`: `keydown` handler | Multi-line textarea, Ctrl+Enter to send, Enter for newline |
+| Agent sidebar resize | `chat.js`: resize handle + `styles.css` | Left-edge drag handle to adjust width (280–600px) |
 
 ## Conventions
 
@@ -109,3 +116,13 @@ pip install -r requirements.txt   # install deps
 - `__TC_ROUND__` markers create separate message divs per round in the chat UI
 - `__TC_STATE_CHANGED__` triggers canvas reload when circuit state changes
 - Streaming command executor (`_feed_stream_commands`) executes build commands in real-time during LLM output; post-hoc extraction serves as fallback
+- Agent input is a `<textarea>` with auto-height; send via `Ctrl+Enter`, newline via `Enter`
+- Prompt suggestion buttons ("AI注释"/"AI整理") appear above input when empty, fill predefined text on click
+- "深度思考" toggle enables AI reasoning mode (`reasoning_effort: high`)
+- Grid snap (20px) is always active; grid visual syncs with camera via `syncGridToCamera()`
+- Element rendering uses text labels (AND/OR/NOT/IN/OUT) centered in the element box
+- Agent input is a `<textarea>` with auto-height; send via `Ctrl+Enter`, newline via `Enter`
+- Prompt suggestion buttons ("AI注释"/"AI整理") appear above input when empty, fill predefined text on click
+- "深度思考" toggle enables AI reasoning mode (`reasoning_effort: high`)
+- Grid snap (20px) is always active; grid visual syncs with camera via `syncGridToCamera()`
+- Element rendering uses text labels (AND/OR/NOT/IN/OUT) centered in the element box

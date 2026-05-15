@@ -272,8 +272,11 @@ async function init() {
       return; // 屏蔽其他所有快捷键
     }
 
-    // 如果注释弹窗打开，屏蔽快捷键
+    // 如果注释弹窗打开，屏蔽快捷键（但放行输入框正常编辑）
     if (isEditingComment) {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return; // 放行正常输入
+      }
       e.preventDefault();
       return;
     }
@@ -1350,6 +1353,10 @@ function handleMouseDown(e) {
       selectedElements = [];
       document.getElementById('status-bar').textContent = '框选模式：拖动鼠标选择多个元件';
     } else {
+      // 左键空白处——清除选中状态
+      selectedElement = null;
+      selectedWire = null;
+      selectedElements = [];
       // 左键 - 拖动视角
       isPanning = true;
       isSelecting = false;
@@ -1620,10 +1627,10 @@ function drawTemporaryElement(ctx, element) {
       ctx.fillText('NOT', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'INPUT':
-      ctx.fillText('IN', element.x + element.width / 2, element.y + element.height / 2);
+      ctx.fillText('IN:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'OUTPUT':
-      ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
+      ctx.fillText('OUT:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'FUNCTION':
       // 绘制模块块边框

@@ -153,10 +153,10 @@ export function render(
         ctx.fillText('NOT', element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'INPUT':
-        ctx.fillText('IN', element.x + element.width / 2, element.y + element.height / 2);
+        ctx.fillText('IN:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'OUTPUT':
-        ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
+        ctx.fillText('OUT:' + (element.state ? '1' : '0'), element.x + element.width / 2, element.y + element.height / 2);
         break;
       case 'FUNCTION':
         // 绘制模块块边框
@@ -255,71 +255,30 @@ export function render(
       ctx.fill();
       ctx.stroke();
 
-      // 绘制元件符号
+      // 绘制元件符号（文字标签）
       ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-      ctx.font = 14 / zoom + 'px Arial';
+      ctx.font = 'bold ' + (22 / zoom) + 'px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       switch (template.type) {
         case 'AND':
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-          ctx.lineWidth = 2 / zoom;
-          const andCenterX = x + width / 2;
-          const andCenterY = y + height / 2;
-          const andSize = Math.min(width, height) * 0.7;
-
-          ctx.beginPath();
-          ctx.moveTo(andCenterX - andSize / 2, andCenterY - andSize / 3);
-          ctx.lineTo(andCenterX - andSize / 2, andCenterY + andSize / 3);
-          ctx.arc(andCenterX + andSize / 4, andCenterY, andSize / 3, Math.PI * 1.5, Math.PI * 0.5);
-          ctx.closePath();
-          ctx.stroke();
+          ctx.fillText('AND', x + width / 2, y + height / 2);
           break;
         case 'OR':
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-          ctx.lineWidth = 2 / zoom;
-          const orCenterX = x + width / 2;
-          const orCenterY = y + height / 2;
-          const orSize = Math.min(width, height) * 0.7;
-
-          ctx.beginPath();
-          ctx.moveTo(orCenterX - orSize / 2, orCenterY - orSize / 3);
-          ctx.lineTo(orCenterX - orSize / 2, orCenterY + orSize / 3);
-          ctx.arc(orCenterX + orSize / 4, orCenterY, orSize / 3, Math.PI * 1.5, Math.PI * 0.5);
-          ctx.closePath();
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(orCenterX - orSize / 2, orCenterY, orSize / 6, Math.PI * 0.5, Math.PI * 1.5);
-          ctx.stroke();
+          ctx.fillText('OR', x + width / 2, y + height / 2);
           break;
         case 'NOT':
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-          ctx.lineWidth = 2 / zoom;
-          const notCenterX = x + width / 2;
-          const notCenterY = y + height / 2;
-          const notSize = Math.min(width, height) * 0.7;
-
-          ctx.beginPath();
-          ctx.rect(notCenterX - notSize / 3, notCenterY - notSize / 4, notSize / 2, notSize / 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(notCenterX + notSize / 6, notCenterY);
-          ctx.lineTo(notCenterX + notSize / 3, notCenterY);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(notCenterX + notSize / 3 + notSize / 12, notCenterY, notSize / 12, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-          ctx.fill();
+          ctx.fillText('NOT', x + width / 2, y + height / 2);
           break;
         case 'INPUT':
-          ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+          ctx.fillText('IN:' + (template.state ? '1' : '0'), x + width / 2, y + height / 2);
           break;
         case 'OUTPUT':
-          ctx.fillText(template.state ? '1' : '0', x + width / 2, y + height / 2);
+          ctx.fillText('OUT:' + (template.state ? '1' : '0'), x + width / 2, y + height / 2);
           break;
         case 'FUNCTION':
-          ctx.font = 12 / zoom + 'px Arial';
+          ctx.font = 'bold ' + (12 / zoom) + 'px sans-serif';
           ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
           break;
       }
