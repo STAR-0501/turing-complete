@@ -11,17 +11,17 @@
 ├── app.py                  # Flask server: routes, SSE streaming, LLM agent loop (5-mode)
 ├── ai_commands.py          # CircuitManager, simulation engine, command execution
 ├── templates/
-│   └── index.html          # (93L)   Single-page app shell
+│   └── index.html          # (98L)   Single-page app shell
 ├── static/
 │   ├── scripts/
-│   │   ├── app.js          # (2645L) Canvas editor: events, tools, drag-drop, state, grid snap
+│   │   ├── app.js          # (2652L) Canvas editor: events, tools, drag-drop, state, grid snap
 │   │   ├── circuit.js      # (334L)  Element evaluation / propagation
-│   │   ├── renderer.js     # (317L)  Canvas draw: elements (text labels), wires, overlays
-│   │   ├── chat.js         # (219L)  Agent sidebar UI + SSE streaming + textarea input
+│   │   ├── renderer.js     # (279L)  Canvas draw: elements (text labels), wires, overlays
+│   │   ├── chat.js         # (298L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
 │   │   ├── elements.js     # (212L)  Element type defs & DOM creation
 │   │   └── utils.js        # (36L)   generateId, distance, isPointOnWire
 │   └── style/css/
-│       └── styles.css      # (740L)
+│       └── styles.css      # (779L)
 ├── circuit_data.json       # Persisted circuit state
 ├── modules_data.json       # Persisted custom module blocks
 ├── skills.md               # Self-evolving skills base (agent-extracted skills)
@@ -62,6 +62,9 @@
 | Agent prompt suggestions | `chat.js`: `agentPromptSuggestions` / `index.html` | "AI注释"/"AI整理" buttons above textarea when empty |
 | Agent textarea input | `chat.js`: `keydown` handler | Multi-line textarea, Ctrl+Enter to send, Enter for newline |
 | Agent sidebar resize | `chat.js`: resize handle + `styles.css` | Left-edge drag handle to adjust width (280–600px) |
+| Conversation history API | `app.py`: `list_conversations()` / `get_conversation()` | `GET /api/conversations` 列表 + `GET /api/conversations/<id>` 消息 |
+| Conversation selector UI | `chat.js`: `loadConversationList()` / `loadConversationMessages()` + `index.html` | Agent header 下拉框切换 log/ 目录下的历史对话 |
+| SSE session marker | `app.py`: `/api/chat` `generate()` | 流首行 `__TC_SESSION__:{id}` 标记，前端自动追踪当前会话 |
 
 ## Conventions
 
@@ -115,6 +118,7 @@ pip install -r requirements.txt   # install deps
 - `plan.md` and `summary.md` provide session continuity across restarts
 - `__TC_ROUND__` markers create separate message divs per round in the chat UI
 - `__TC_STATE_CHANGED__` triggers canvas reload when circuit state changes
+- `__TC_SESSION__:{id}` sent as first line of SSE stream; frontend uses it to track current conversation session
 - Streaming command executor (`_feed_stream_commands`) executes build commands in real-time during LLM output; post-hoc extraction serves as fallback
 - Agent input is a `<textarea>` with auto-height; send via `Ctrl+Enter`, newline via `Enter`
 - Prompt suggestion buttons ("AI注释"/"AI整理") appear above input when empty, fill predefined text on click
