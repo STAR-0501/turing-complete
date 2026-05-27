@@ -1,4 +1,4 @@
-﻿from flask import Flask, request, jsonify, render_template, Response
+from flask import Flask, request, jsonify, render_template, Response
 import glob
 import json
 import os
@@ -2471,12 +2471,145 @@ def load_modules():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ── Arduino 导出 ──────────────────────────────────────────────────────
+
+@app.route('/api/export-arduino', methods=['POST'])
+def export_arduino():
+    """一键将当前电路转写为 Arduino 代码。
+
+    Request body (optional JSON):
+        {"upload": false, "port": "COM3"}
+
+    Returns:
+        JSON with generated sketch code and optional upload status.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        should_upload = body.get("upload", False)
+        port = body.get("port", "")
+
+        # ── 读取当前电路数据 ──────────────────────────────────────────
+        circuit_data = circuit_manager.get_state()
+        modules_data = {}
+        if os.path.exists(MODULES_DATA_FILE):
+            try:
+                with open(MODULES_DATA_FILE, "r", encoding="utf-8") as f:
+                    modules_data = json.load(f)
+            except Exception:
+                modules_data = {}
+
+        # ── 解析并生成代码 ─────────────────────────────────────────────
+        from turing_to_arduino.circuit_parser import parse_circuit
+        from turing_to_arduino.code_generator import generate_arduino_sketch
+
+        dag = parse_circuit(circuit_data, modules_data)
+        sketch = generate_arduino_sketch(dag)
+
+        result = {
+            "status": "success",
+            "sketch": sketch,
+            "inputs": len(dag.inputs),
+            "outputs": len(dag.outputs),
+            "gates": len(dag.gates),
+        }
+
+        # ── 可选：编译上传 ────────────────────────────────────────────
+        if should_upload:
+            from turing_to_arduino.uploader import (
+                check_arduino_cli,
+                compile_sketch,
+                upload_sketch,
+                detect_boards,
+            )
+
+            if not check_arduino_cli():
+                from turing_to_arduino.uploader import _get_arduino_cli_install_guide
+                return jsonify({
+                    "status": "error",
+                    "message": "arduino-cli not found.\n"
+                               f"{_get_arduino_cli_install_guide()}",
+                    "sketch": sketch,
+                }), 400
+
+            import tempfile
+            sketch_dir = tempfile.mkdtemp(prefix="tc_arduino_")
+            # Arduino CLI requires .ino filename == parent directory name
+            sketch_name = os.path.basename(sketch_dir) + ".ino"
+            sketch_path = os.path.join(sketch_dir, sketch_name)
+            with open(sketch_path, "w", encoding="utf-8") as f:
+                f.write(sketch)
+
+            # ── 自动检测端口 ──────────────────────────────────────
+            if not port:
+                boards = detect_boards()
+                detected_port = None
+                if isinstance(boards, list):
+                    for b in boards:
+                        addr = b.get("address", "")
+                        if addr:
+                            detected_port = addr
+                            break
+                if not detected_port:
+                    return jsonify({
+                        "status": "error",
+                        "message": "未检测到连接的 Arduino 板子。\n请确认 USB 已连接。",
+                        "sketch": sketch,
+                    }), 400
+                port = detected_port
+
+            compile_ok, _, compile_err = compile_sketch(sketch_dir)
+            if not compile_ok:
+                return jsonify({
+                    "status": "error",
+                    "message": f"Compilation failed:\n{compile_err}",
+                    "sketch": sketch,
+                }), 500
+
+            upload_ok, _, upload_err = upload_sketch(sketch_dir, port)
+            if not upload_ok:
+                return jsonify({
+                    "status": "error",
+                    "message": f"Upload failed:\n{upload_err}",
+                    "sketch": sketch,
+                }), 500
+
+            import shutil
+            try:
+                shutil.rmtree(sketch_dir)
+            except Exception:
+                pass
+
+            result["uploaded"] = True
+            result["port"] = port
+
+        return jsonify(result)
+
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        logger.error("导出 Arduino 失败: %s", e)
+        return jsonify({"status": "error", "message": f"Export failed: {e}"}), 500
+
+
+@app.route('/api/detect-boards', methods=['GET'])
+def detect_boards_api():
+    """Detect connected Arduino boards."""
+    try:
+        from turing_to_arduino.uploader import detect_boards
+        boards = detect_boards()
+        # detect_boards() returns normalized format [{address, label, name, fqbn}, ...]
+        return jsonify({"boards": boards})
+    except Exception as e:
+        logger.error("检测 Arduino 板子失败: %s", e)
+        return jsonify({"boards": [], "error": str(e)})
+
+
 if __name__ == '__main__':
     logger.info("电路设计应用启动中...")
     logger.info("电路数据文件路径: %s", CIRCUIT_DATA_FILE)
     logger.info("模块数据文件路径: %s", MODULES_DATA_FILE)
-    logger.info("打开软件: http://localhost:5002")
+    logger.info("打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None
-    app.run(debug=False, host='0.0.0.0', port=5002)
+    app.run(debug=False, host='0.0.0.0', port=5000)

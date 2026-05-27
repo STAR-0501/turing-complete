@@ -255,30 +255,34 @@ export function render(
       ctx.fill();
       ctx.stroke();
 
-      // 绘制元件符号（文字标签）
+      // 绘制元件符号（文字标签，大小随框大小变化，与红绿色元件一致）
       ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
-      ctx.font = 'bold ' + (22 / zoom) + 'px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       switch (template.type) {
         case 'AND':
+          ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('AND', x + width / 2, y + height / 2);
           break;
         case 'OR':
+          ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('OR', x + width / 2, y + height / 2);
           break;
         case 'NOT':
+          ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('NOT', x + width / 2, y + height / 2);
           break;
         case 'INPUT':
+          ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('IN', x + width / 2, y + height / 2);
           break;
         case 'OUTPUT':
+          ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('OUT', x + width / 2, y + height / 2);
           break;
         case 'FUNCTION':
-          ctx.font = 'bold ' + (12 / zoom) + 'px sans-serif';
+          ctx.font = 'bold ' + Math.max(8, Math.min(14, height * 0.25)) + 'px sans-serif';
           ctx.fillText(template.name || 'Func', x + width / 2, y + height / 2);
           break;
       }

@@ -101,12 +101,6 @@ async function init() {
   // 从本地存储加载电路状态
   loadFromLocalStorage();
 
-  // 从服务器加载电路状态
-  await loadFromServer();
-
-  // 初始化历史记录
-  saveState();
-
   // 事件监听
   window.addEventListener('mousemove', handleMouseMove); // 改为 window 监听，以支持鼠标在任何位置（包括覆盖层）
   window.addEventListener('mouseup', handleMouseUp);
@@ -231,6 +225,136 @@ async function init() {
     document.getElementById('status-bar').textContent = wireAnimationEnabled ? '线路动画已开启' : '线路动画已关闭';
   });
 
+  // Arduino 导出 + 端口选择
+  const arduinoModal = document.getElementById('arduino-modal');
+  const arduinoStatus = document.getElementById('arduino-status');
+  const arduinoCode = document.getElementById('arduino-code');
+  const arduinoPortSelect = document.getElementById('arduino-port-select');
+
+  /** 检测板子并填充端口下拉框 */
+  async function refreshBoardList() {
+    try {
+      const resp = await fetch('/api/detect-boards');
+      const data = await resp.json();
+      arduinoPortSelect.innerHTML = '<option value="">-- 自动检测 --</option>';
+      if (data.boards && data.boards.length > 0) {
+        for (const b of data.boards) {
+          const opt = document.createElement('option');
+          opt.value = b.address;
+          opt.textContent = b.address + ' (' + (b.name || 'Unknown') + ')';
+          arduinoPortSelect.appendChild(opt);
+        }
+      } else {
+        arduinoPortSelect.innerHTML = '<option value="">未检测到板子（选择或自动检测）</option>';
+      }
+    } catch (e) {
+      console.error('检测板子失败:', e);
+    }
+  }
+
+  /** 生成 Arduino 代码（不编译上传） */
+  async function generateArduinoCode() {
+    const resp = await fetch('/api/export-arduino', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upload: false }),
+    });
+    return await resp.json();
+  }
+
+  /** 编译并上传 */
+  async function compileAndUpload(port) {
+    const resp = await fetch('/api/export-arduino', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upload: true, port: port || '' }),
+    });
+    return await resp.json();
+  }
+
+  // ── 按钮: 打开 Arduino 弹窗 ───────────────────────────────────────
+  document.getElementById('btn-export-arduino').addEventListener('click', async function () {
+    const statusBar = document.getElementById('status-bar');
+    statusBar.textContent = '正在生成 Arduino 代码...';
+
+    arduinoStatus.textContent = '⏳ 正在生成代码...';
+    arduinoStatus.style.color = '#888';
+    arduinoCode.textContent = '';
+    arduinoModal.style.display = 'flex';
+
+    // 并行: 生成代码 + 检测板子
+    const [codeResult] = await Promise.all([
+      generateArduinoCode(),
+      refreshBoardList(),
+    ]);
+
+    if (codeResult.status === 'success') {
+      arduinoStatus.textContent = '✅ 代码已生成，选择端口后点击「编译并上传」';
+      arduinoStatus.style.color = '#4a9';
+      statusBar.textContent = 'Arduino 代码已生成';
+    } else {
+      arduinoStatus.textContent = '❌ ' + (codeResult.message || '代码生成失败');
+      arduinoStatus.style.color = '#e55';
+      statusBar.textContent = 'Arduino 代码生成失败';
+    }
+
+    if (codeResult.sketch) {
+      arduinoCode.textContent = codeResult.sketch;
+    }
+  });
+
+  // ── 按钮: 编译并上传 ────────────────────────────────────────────────
+  document.getElementById('btn-arduino-upload').addEventListener('click', async function () {
+    const port = arduinoPortSelect.value;
+    const statusBar = document.getElementById('status-bar');
+
+    arduinoStatus.textContent = '⏳ 正在编译并上传...';
+    arduinoStatus.style.color = '#888';
+    statusBar.textContent = 'Arduino 编译中...';
+
+    const data = await compileAndUpload(port);
+
+    if (data.status === 'success' && data.uploaded) {
+      arduinoStatus.textContent = '✅ 编译并上传成功！（端口: ' + (data.port || port) + '）';
+      arduinoStatus.style.color = '#4a9';
+      statusBar.textContent = 'Arduino 编译上传成功';
+    } else {
+      const msg = data.message || '操作失败';
+      arduinoStatus.textContent = '❌ ' + msg;
+      arduinoStatus.style.color = '#e55';
+      statusBar.textContent = 'Arduino 编译上传失败';
+    }
+
+    if (data.sketch) {
+      arduinoCode.textContent = data.sketch;
+    }
+  });
+
+  // ── 按钮: 刷新端口 ─────────────────────────────────────────────────
+  document.getElementById('btn-arduino-refresh').addEventListener('click', function () {
+    refreshBoardList();
+  });
+
+  // ── Arduino 模态框控制 ──────────────────────────────────────────────
+  document.getElementById('btn-arduino-close').addEventListener('click', () => {
+    arduinoModal.style.display = 'none';
+  });
+  arduinoModal.addEventListener('click', (e) => {
+    if (e.target === arduinoModal) arduinoModal.style.display = 'none';
+  });
+  document.getElementById('btn-arduino-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(arduinoCode.textContent).catch(() => {});
+  });
+  document.getElementById('btn-arduino-download').addEventListener('click', () => {
+    const blob = new Blob([arduinoCode.textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sketch.ino';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
   // 清除所有工具按钮的高亮（跳过动画开关这类独立 toggle）
   function clearToolbarActive() {
     document.querySelectorAll('.toolbar button').forEach((btn) => {
@@ -239,8 +363,8 @@ async function init() {
     });
   }
 
-  // 初始化模块相关功能
-  initModulePanel();
+  // 初始化模块相关功能（fire-and-forget，不阻塞 UI 事件绑定）
+  initModulePanel().catch((err) => console.error('initModulePanel 异常:', err));
 
   // 初始化注释功能
   initCommentModal();
@@ -404,6 +528,12 @@ async function init() {
 
     }
   }
+
+  // 从服务器加载电路状态（延迟到 UI 事件绑定之后，防止网络挂起阻塞工具栏）
+  await loadFromServer();
+
+  // 初始化历史记录
+  saveState();
 
   // 保存初始状态
   // 同步网格与相机
@@ -1610,38 +1740,42 @@ function drawTemporaryElement(ctx, element) {
   ctx.fill();
   ctx.stroke();
 
-  // 绘制元件符号
+  // 绘制元件符号（文字大小跟随框大小变化，与红绿色元件一致）
   ctx.fillStyle = '#00ffff';
-  ctx.font = 'bold ' + (22 / zoom) + 'px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   switch (element.type) {
     case 'AND':
+      ctx.font = 'bold ' + Math.max(10, Math.min(22, element.height * 0.35)) + 'px sans-serif';
       ctx.fillText('AND', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'OR':
+      ctx.font = 'bold ' + Math.max(10, Math.min(22, element.height * 0.35)) + 'px sans-serif';
       ctx.fillText('OR', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'NOT':
+      ctx.font = 'bold ' + Math.max(10, Math.min(22, element.height * 0.35)) + 'px sans-serif';
       ctx.fillText('NOT', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'INPUT':
+      ctx.font = 'bold ' + Math.max(10, Math.min(22, element.height * 0.35)) + 'px sans-serif';
       ctx.fillText('IN', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'OUTPUT':
+      ctx.font = 'bold ' + Math.max(10, Math.min(22, element.height * 0.35)) + 'px sans-serif';
       ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
       break;
     case 'FUNCTION':
       // 绘制模块块边框
       ctx.strokeStyle = '#00ffff';
-      ctx.lineWidth = 2 / zoom;
-      ctx.setLineDash([5 / zoom, 5 / zoom]);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
       ctx.strokeRect(element.x, element.y, element.width, element.height);
       ctx.setLineDash([]);
-      // 绘制模块名称
+      // 绘制模块名称（文字大小跟随框大小变化，与红绿色元件一致）
       ctx.fillStyle = '#00ffff';
-      ctx.font = 12 / zoom + 'px Arial';
+      ctx.font = Math.max(8, Math.min(14, element.height * 0.25)) + 'px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(element.name || 'Func', element.x + element.width / 2, element.y + element.height / 2);
@@ -2436,7 +2570,12 @@ async function saveToServer() {
  */
 export async function loadFromServer() {
   try {
-    const response = await fetch('http://localhost:5000/api/load-circuit');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch('http://localhost:5000/api/load-circuit', {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
     const result = await response.json();
 
     // 保存当前选中的元件ID
@@ -2887,7 +3026,12 @@ async function saveModuleToServer(modData) {
  */
 async function loadModulesFromServer() {
   try {
-    const response = await fetch('http://localhost:5000/api/load-modules');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch('http://localhost:5000/api/load-modules', {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
     const result = await response.json();
     if (result.modules) {
       // 仅在模块列表发生变化时更新，防止界面闪烁

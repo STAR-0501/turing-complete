@@ -24,6 +24,7 @@
             <button id="btn-undo"><span>撤销</span><span>Ctrl+Z</span></button>
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
             <button id="btn-wire-anim" class="active"><span>✨动画</span></button>
+            <button id="btn-export-arduino" style="background:rgba(0,200,100,0.25);border-color:rgba(0,200,100,0.5)"><span>Arduino</span><span>导出</span></button>
         </div>
         <div class="status-bar" id="status-bar">就绪</div>
 
@@ -93,6 +94,29 @@
                 <div class="modal-buttons">
                     <button id="cancel-comment" class="btn-cancel">取消</button>
                     <button id="confirm-comment" class="btn-confirm">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Arduino 导出弹窗 -->
+        <div id="arduino-modal" class="modal">
+            <div class="modal-content" style="max-width:700px;width:90%">
+                <h3>Arduino 导出</h3>
+                <div id="arduino-status" style="margin-bottom:8px;font-size:13px;color:#888"></div>
+                <!-- 端口选择区 -->
+                <div id="arduino-port-area" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:13px">
+                    <span style="color:#ccc">端口:</span>
+                    <select id="arduino-port-select" style="flex:1;padding:4px 8px;border-radius:4px;border:1px solid #555;background:#2a2a2a;color:#ddd;font-size:13px">
+                        <option value="">-- 自动检测 --</option>
+                    </select>
+                    <button id="btn-arduino-refresh" style="padding:4px 12px;border-radius:4px;border:1px solid #555;background:#3a3a3a;color:#ddd;cursor:pointer">刷新</button>
+                    <button id="btn-arduino-upload" style="padding:4px 16px;border-radius:4px;border:1px solid #0a8;background:#0a8;color:#fff;cursor:pointer;font-weight:bold">编译并上传</button>
+                </div>
+                <pre id="arduino-code" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;overflow:auto;max-height:360px;font-size:12px;white-space:pre-wrap;word-break:break-all"></pre>
+                <div class="modal-buttons" style="margin-top:10px">
+                    <button id="btn-arduino-close" class="btn-cancel">关闭</button>
+                    <button id="btn-arduino-copy" class="btn-cancel" style="background:#555;color:#fff">复制代码</button>
+                    <button id="btn-arduino-download" class="btn-cancel" style="background:#4a9;color:#fff">下载 .ino</button>
                 </div>
             </div>
         </div>

@@ -1,344 +1,233 @@
 /**
- * Agent 侧边栏模块
- * 处理与 AI 的对话和指令同步 — 右侧滑入侧边栏
+ * 聊天模块
+ * 处理与 AI 的对话和指令同步
  */
 import { loadFromServer } from './app.js';
 
-const agentSidebar = document.getElementById('agent-sidebar');
-const agentToggle = document.getElementById('agent-toggle');
-const agentMessages = document.getElementById('agent-messages');
-const agentInput = document.getElementById('agent-input');
-const agentSend = document.getElementById('agent-send');
-const agentThink = document.getElementById('agent-think');
-const agentMinimize = document.getElementById('agent-minimize');
-const agentResizeHandle = document.getElementById('agent-resize-handle');
-const agentPromptSuggestions = document.getElementById('agent-prompt-suggestions');
-const conversationSelect = document.getElementById('conversation-select');
+const chatContainer = document.getElementById('chat-container');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-chat');
+const toggleBtn = document.getElementById('toggle-chat');
+const chatHeader = document.querySelector('.chat-header');
+const thinkingToggle = document.getElementById('thinking-toggle');
 const THINKING_MARKER = '__TC_THINKING__';
 const ANSWER_MARKER = '__TC_ANSWER__';
 const STATE_CHANGED_MARKER = '__TC_STATE_CHANGED__';
 
 let thinkingMode = false;
-let currentSessionId = ''; // 当前对话的 session_id
 
-// 初始化 Agent 侧边栏
+// 初始化聊天窗口
 export function initChat() {
-  // 切换按钮：打开侧边栏
-  agentToggle.addEventListener('click', () => {
-    agentSidebar.classList.add('open');
-    agentToggle.classList.add('hidden');
-    agentInput.focus();
-  });
-
-  // 最小化按钮：关闭侧边栏
-  agentMinimize.addEventListener('click', () => {
-    agentSidebar.classList.remove('open');
-    agentToggle.classList.remove('hidden');
-  });
-
-  // 拖拽拉伸手柄：调整侧边栏宽度
-  let isResizing = false;
-  const MIN_WIDTH = 280;
-  const MAX_WIDTH = 600;
-
-  agentResizeHandle.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    isResizing = true;
-    agentResizeHandle.classList.add('active');
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-    const newWidth = window.innerWidth - e.clientX;
-    const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
-    agentSidebar.style.width = clamped + 'px';
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!isResizing) return;
-    isResizing = false;
-    agentResizeHandle.classList.remove('active');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  });
-
-  // textarea 自动扩展高度（无滚动条，随内容增长）
-  const autoResize = () => {
-    agentInput.style.height = 'auto';
-    agentInput.style.height = agentInput.scrollHeight + 'px';
-  };
-
-  // 输入框内容变化时切换快捷提示的显示（空则显示，有内容则隐藏）
-  const updateSuggestions = () => {
-    const empty = agentInput.value.trim() === '';
-    agentPromptSuggestions.classList.toggle('visible', empty);
-  };
-  agentInput.addEventListener('input', () => {
-    autoResize();
-    updateSuggestions();
-  });
-  // 初始状态：如果输入框为空则显示快捷提示
-  updateSuggestions();
-  autoResize();
-
-  // 快捷提示按钮：填充输入框
-  agentPromptSuggestions.querySelectorAll('.agent-suggestion-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      agentInput.value = btn.getAttribute('data-prompt');
-      agentPromptSuggestions.classList.remove('visible');
-      autoResize();
-      agentInput.focus();
+    // 切换折叠状态
+    toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 防止触发拖拽开始
+        chatContainer.classList.toggle('collapsed');
+        toggleBtn.textContent = chatContainer.classList.contains('collapsed') ? '+' : '_';
     });
-  });
 
-  // 发送消息
-  agentSend.addEventListener('click', sendMessage);
-  agentInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
+    // 实现拖拽
+    let isDragging = false;
+    let offset = { x: 0, y: 0 };
 
-  // 思考模式切换
-  if (agentThink) {
-    agentThink.addEventListener('click', () => {
-      thinkingMode = !thinkingMode;
-      agentThink.classList.toggle('active', thinkingMode);
-      agentThink.title = thinkingMode
-        ? '深度思考模式已开启（DeepSeek深度推理）'
-        : '开启DeepSeek思考模式（深度推理，耗时更长但结果更准确）';
+    chatHeader.addEventListener('mousedown', (e) => {
+        if (e.target === toggleBtn) return;
+        
+        isDragging = true;
+        // 获取当前鼠标相对于容器左上角的偏移
+        const rect = chatContainer.getBoundingClientRect();
+        offset.x = e.clientX - rect.left;
+        offset.y = e.clientY - rect.top;
+        
+        // 拖拽时禁用过渡效果
+        chatContainer.style.transition = 'none';
+        
+        // 改变鼠标指针
+        document.body.style.cursor = 'move';
     });
-  }
 
-  // 加载历史对话列表
-  loadConversationList();
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        // 计算新位置
+        let left = e.clientX - offset.x;
+        let top = e.clientY - offset.y;
+        
+        // 限制在屏幕内
+        const rect = chatContainer.getBoundingClientRect();
+        left = Math.max(0, Math.min(window.innerWidth - rect.width, left));
+        top = Math.max(0, Math.min(window.innerHeight - rect.height, top));
+        
+        // 应用新位置
+        chatContainer.style.left = left + 'px';
+        chatContainer.style.top = top + 'px';
+        chatContainer.style.right = 'auto';
+        chatContainer.style.bottom = 'auto';
+    });
 
-  // 对话选择切换
-  conversationSelect.addEventListener('change', () => {
-    const sessId = conversationSelect.value;
-    if (!sessId) {
-      // 选择"当前对话"——清空并显示默认欢迎语
-      agentMessages.innerHTML = '<div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>';
-      return;
-    }
-    loadConversationMessages(sessId);
-  });
-}
+    document.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        // 恢复过渡效果
+        chatContainer.style.transition = 'height 0.3s ease';
+        document.body.style.cursor = 'default';
+    });
 
-// 加载历史对话列表
-async function loadConversationList() {
-  try {
-    const res = await fetch('/api/conversations');
-    const data = await res.json();
-    // 保留第一个"当前对话"选项
-    while (conversationSelect.options.length > 1) {
-      conversationSelect.remove(1);
-    }
-    if (data.conversations) {
-      for (const conv of data.conversations) {
-        const opt = document.createElement('option');
-        opt.value = conv.session_id;
-        const dateStr = conv.date || '';
-        const preview = conv.preview ? conv.preview.replace(/[\n\r]/g, ' ').substring(0, 30) : '';
-        opt.textContent = dateStr ? `${dateStr} ${preview}` : (preview || conv.session_id);
-        conversationSelect.appendChild(opt);
-      }
-    }
-  } catch (err) {
-    console.error('加载对话列表失败:', err);
-  }
-}
+    // 发送消息事件
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
 
-// 加载指定对话的消息
-async function loadConversationMessages(sessionId) {
-  try {
-    const res = await fetch('/api/conversations/' + sessionId);
-    const data = await res.json();
-    if (data.messages) {
-      // 清空消息区
-      agentMessages.innerHTML = '';
-      for (const msg of data.messages) {
-        const type = msg.type;
-        const content = msg.content || '';
-        if (type === 'user') {
-          addMessage(content, 'user');
-        } else if (type === 'assistant') {
-          const div = addMessage('', 'ai');
-          // 显示纯文本内容（不含 thinking/answer 标记）
-          const cleaned = content
-            .replace(new RegExp(THINKING_MARKER, 'g'), '')
-            .replace(new RegExp(ANSWER_MARKER, 'g'), '')
-            .replace(/<commands>[\s\S]*?<\/commands>/g, '')
-            .trim();
-          div.textContent = cleaned || '(空回复)';
-        } else if (type === 'system') {
-          const div = addMessage('[系统] ' + content, 'ai');
-          div.style.opacity = '0.6';
-        }
-        // 忽略 llm_request, llm_response, command, observe, plan 等内部类型
-      }
+    // 思考模式切换
+    if (thinkingToggle) {
+        thinkingToggle.addEventListener('click', () => {
+            thinkingMode = !thinkingMode;
+            thinkingToggle.classList.toggle('active', thinkingMode);
+            thinkingToggle.title = thinkingMode ? '深度思考模式已开启（DeepSeek深度推理）' : '开启DeepSeek思考模式（深度推理，耗时更长但结果更准确）';
+        });
     }
-  } catch (err) {
-    console.error('加载对话消息失败:', err);
-  }
 }
 
 // 发送消息到后端
 async function sendMessage() {
-  const text = agentInput.value.trim();
-  if (!text) return;
+    const text = chatInput.value.trim();
+    if (!text) return;
 
-  addMessage(text, 'user');
-  agentInput.value = '';
+    // 添加用户消息到界面
+    addMessage(text, 'user');
+    chatInput.value = '';
 
-  // 创建 AI 消息容器
-  const aiMsgDiv = addMessage('', 'ai');
-  let fullContent = '';
-  let lastRenderTime = 0;
-  const renderInterval = 50;
-  const escapeHtml = (text) =>
-    String(text || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    // 创建 AI 消息容器
+    const aiMsgDiv = addMessage('', 'ai');
+    let fullContent = '';
+    let lastRenderTime = 0;
+    const renderInterval = 50;
+    const escapeHtml = (text) => String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
-  const splitThinkingAndAnswer = (raw) => {
-    const cleaned = raw
-      .replace(/<commands>[\s\S]*?<\/commands>/g, '')
-      .replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
-    const thinkIdx = cleaned.indexOf(THINKING_MARKER);
-    const answerIdx = cleaned.indexOf(ANSWER_MARKER);
-    let thinking = '';
-    let answer = '';
-    if (thinkIdx === -1 && answerIdx === -1) {
-      answer = cleaned.trim();
-      return { thinking, answer };
-    }
-    if (thinkIdx !== -1) {
-      const fromThink = cleaned.slice(thinkIdx + THINKING_MARKER.length);
-      const answerPosInThink = fromThink.indexOf(ANSWER_MARKER);
-      if (answerPosInThink === -1) {
-        thinking = fromThink.trim();
-      } else {
-        thinking = fromThink.slice(0, answerPosInThink).trim();
-        answer = fromThink.slice(answerPosInThink + ANSWER_MARKER.length).trim();
-      }
-      return { thinking, answer };
-    }
-    answer = cleaned.slice(answerIdx + ANSWER_MARKER.length).trim();
-    return { thinking, answer };
-  };
-
-  const renderContent = () => {
-    const { thinking, answer } = splitThinkingAndAnswer(fullContent);
-    if (!thinking && !answer) {
-      aiMsgDiv.textContent = '正在思考...';
-      agentMessages.scrollTop = agentMessages.scrollHeight;
-      return;
-    }
-    const sections = [];
-    if (thinking) {
-      sections.push(
-        `<div class="msg-thinking-label">思考过程</div><div class="msg-thinking-content">${escapeHtml(thinking)}</div>`,
-      );
-    }
-    if (answer) {
-      if (sections.length > 0) sections.push('<div style="height:6px"></div>');
-      sections.push(
-        `<div class="msg-answer-label">正式输出</div><div class="msg-answer-content">${escapeHtml(answer)}</div>`,
-      );
-    }
-    aiMsgDiv.innerHTML = sections.join('');
-    agentMessages.scrollTop = agentMessages.scrollHeight;
-  };
-
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text,
-        thinking_mode: thinkingMode,
-      }),
-    });
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let sessionParsed = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-
-      // 解析首块中的 session_id 标记
-      if (!sessionParsed && chunk.startsWith('__TC_SESSION__:')) {
-        const nlIdx = chunk.indexOf('\n');
-        if (nlIdx !== -1) {
-          currentSessionId = chunk.substring('__TC_SESSION__:'.length, nlIdx).trim();
-          sessionParsed = true;
-          // 选择框切到当前会话（如果已在列表中）
-          const opt = conversationSelect.querySelector(`option[value="${currentSessionId}"]`);
-          if (opt) opt.selected = true;
+    const splitThinkingAndAnswer = (raw) => {
+        const cleaned = raw
+            .replace(/<commands>[\s\S]*?<\/commands>/g, '')
+            .replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
+        const thinkIdx = cleaned.indexOf(THINKING_MARKER);
+        const answerIdx = cleaned.indexOf(ANSWER_MARKER);
+        let thinking = '';
+        let answer = '';
+        if (thinkIdx === -1 && answerIdx === -1) {
+            answer = cleaned.trim();
+            return { thinking, answer };
         }
-        continue; // 跳过标记行
-      }
+        if (thinkIdx !== -1) {
+            const fromThink = cleaned.slice(thinkIdx + THINKING_MARKER.length);
+            const answerPosInThink = fromThink.indexOf(ANSWER_MARKER);
+            if (answerPosInThink === -1) {
+                thinking = fromThink.trim();
+            } else {
+                thinking = fromThink.slice(0, answerPosInThink).trim();
+                answer = fromThink.slice(answerPosInThink + ANSWER_MARKER.length).trim();
+            }
+            return { thinking, answer };
+        }
+        answer = cleaned.slice(answerIdx + ANSWER_MARKER.length).trim();
+        return { thinking, answer };
+    };
 
-      // 过滤掉状态变更标记（由后端直接处理）
-      if (chunk.includes(STATE_CHANGED_MARKER)) {
-        loadFromServer();
-      }
-      const cleanChunk = chunk.replace(new RegExp(STATE_CHANGED_MARKER, 'g'), '');
-      fullContent += cleanChunk;
+    const renderContent = () => {
+        const { thinking, answer } = splitThinkingAndAnswer(fullContent);
+        if (!thinking && !answer) {
+            aiMsgDiv.textContent = '正在思考...';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return;
+        }
+        const sections = [];
+        if (thinking) {
+            sections.push(
+                `<div style="margin-bottom:8px;"><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">思考过程</div><div style="white-space:pre-wrap;">${escapeHtml(thinking)}</div></div>`
+            );
+        }
+        if (answer) {
+            sections.push(
+                `<div><div style="font-size:11px;opacity:0.7;margin-bottom:2px;">正式输出</div><div style="white-space:pre-wrap;">${escapeHtml(answer)}</div></div>`
+            );
+        }
+        aiMsgDiv.innerHTML = sections.join('');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    };
 
-      const now = Date.now();
-      if (now - lastRenderTime > renderInterval) {
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, thinking_mode: thinkingMode })
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            
+            if (chunk.includes(STATE_CHANGED_MARKER)) {
+                loadFromServer();
+            }
+
+            fullContent += chunk;
+            const now = performance.now();
+            if (now - lastRenderTime >= renderInterval) {
+                renderContent();
+                lastRenderTime = now;
+            }
+        }
         renderContent();
-        lastRenderTime = now;
-      }
+
+        // 检查是否执行了指令（提取标签内容并检查是否为空列表）
+        const match = fullContent.match(/<commands>([\s\S]*?)<\/commands>/);
+        if (match && match[1].trim() !== '[]') {
+            // 立即触发状态加载和渲染
+            await loadFromServer();
+
+            const systemMsg = document.createElement('div');
+            systemMsg.className = 'message ai';
+            systemMsg.style.fontSize = '11px';
+            systemMsg.style.opacity = '0.7';
+            systemMsg.textContent = '[系统] 电路操作指令已执行。';
+            chatMessages.appendChild(systemMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+    } catch (error) {
+        aiMsgDiv.textContent = `错误: ${error.message || '连接失败'}`;
+        console.error('Chat error:', error);
     }
-    renderContent();
-    // 发送完成后刷新对话列表
-    loadConversationList();
-  } catch (err) {
-    aiMsgDiv.textContent = '连接失败，请检查后端是否运行。';
-    console.error('Chat error:', err);
-  }
 }
 
-// 添加消息到界面
-export function addMessage(text, type) {
-  const div = document.createElement('div');
-  div.className = `agent-message ${type}`;
-  if (type === 'ai') {
-    // AI 消息用 textContent 初始占位，后续 SSE 流式填充 innerHTML
-    div.textContent = text || '...';
-  } else if (type === 'round') {
-    div.className = 'agent-round-marker';
-    div.textContent = text;
-  } else {
-    div.textContent = text;
-  }
-  agentMessages.appendChild(div);
-  agentMessages.scrollTop = agentMessages.scrollHeight;
-  return div;
+// 在界面上添加消息
+function addMessage(text, type, isLoading = false) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${type}`;
+    msgDiv.textContent = text;
+    
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return msgDiv;
 }
 
-// 暴露给 app.js 用于 round 标记和自动展开
-export function openAgentSidebar() {
-  agentSidebar.classList.add('open');
-  agentToggle.classList.add('hidden');
-}
-
-export function getAgentMessages() {
-  return agentMessages;
+// 移除消息
+function removeMessage(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
 }
 
 // 自动初始化
