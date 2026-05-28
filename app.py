@@ -2551,6 +2551,49 @@ def load_modules():
 
 # ── Arduino 导出 ──────────────────────────────────────────────────────
 
+
+def _format_upload_error(raw_err: str, port: str) -> str:
+    """将 arduino-cli 上传错误格式化为用户友好的中文提示。
+
+    常见可恢复错误（端口被占用、权限被拒）建议重试，其他错误保持原文。
+    """
+    err_lower = raw_err.lower()
+
+    if "cannot open port" in err_lower or "unable to open port" in err_lower:
+        return (
+            f"上传到 {port} 失败：端口被占用或拒绝访问。\n"
+            "可能的原因：\n"
+            "  1. 其他程序（如 Arduino IDE、串口监视器）正在使用该端口\n"
+            "  2. USB 线松动或接触不良\n"
+            "  3. 驱动问题\n\n"
+            "请关闭占用端口的程序，检查 USB 连接后重试。\n"
+            "原错误信息：\n"
+            f"{raw_err.strip()}"
+        )
+
+    if ("permission" in err_lower and "denied" in err_lower) or \
+       ("access" in err_lower and "denied" in err_lower):
+        return (
+            f"上传到 {port} 失败：权限不足。\n"
+            "  Windows：请以管理员身份运行本程序\n"
+            "  Linux：  将用户添加到 dialout 组：sudo usermod -a -G dialout $USER\n"
+            "  macOS：  检查 /dev/tty.* 权限\n\n"
+            "原错误信息：\n"
+            f"{raw_err.strip()}"
+        )
+
+    if "timeout" in err_lower:
+        return (
+            f"上传到 {port} 超时。\n"
+            "请检查 USB 连接是否正常，然后重试。\n\n"
+            "原错误信息：\n"
+            f"{raw_err.strip()}"
+        )
+
+    # 兜底：保持原文，加一句重试建议
+    return f"上传失败（{port}）：\n{raw_err.strip()}\n\n请检查连接后重试。"
+
+
 @app.route('/api/export-arduino', methods=['POST'])
 def export_arduino():
     """一键将当前电路转写为 Arduino 代码。
@@ -2645,9 +2688,11 @@ def export_arduino():
 
             upload_ok, _, upload_err = upload_sketch(sketch_dir, port)
             if not upload_ok:
+                friendly_msg = _format_upload_error(upload_err, port)
                 return jsonify({
                     "status": "error",
-                    "message": f"Upload failed:\n{upload_err}",
+                    "message": friendly_msg,
+                    "error_detail": upload_err,
                     "sketch": sketch,
                 }), 500
 
