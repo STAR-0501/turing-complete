@@ -8,20 +8,23 @@
 
 ```
 ./
-├── app.py                  # Flask server: routes, SSE streaming, LLM agent loop (5-mode)
-├── ai_commands.py          # CircuitManager, simulation engine, command execution
+├── app.py                  # (2296L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
+├── ai_commands.py          # (609L)  CircuitManager, simulation engine, command execution
 ├── templates/
-│   └── index.html          # (98L)   Single-page app shell
+│   └── index.html          # (121L)  Single-page app shell
 ├── static/
-│   ├── scripts/
-│   │   ├── app.js          # (2652L) Canvas editor: events, tools, drag-drop, state, grid snap
+│   ├── scripts/            # (see static/scripts/AGENTS.md)
+│   │   ├── app.js          # (2780L) Canvas editor: events, tools, drag-drop, state, grid snap
 │   │   ├── circuit.js      # (334L)  Element evaluation / propagation
-│   │   ├── renderer.js     # (279L)  Canvas draw: elements (text labels), wires, overlays
-│   │   ├── chat.js         # (298L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
+│   │   ├── renderer.js     # (283L)  Canvas draw: elements (text labels), wires, overlays
+│   │   ├── chat.js         # (210L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
 │   │   ├── elements.js     # (212L)  Element type defs & DOM creation
-│   │   └── utils.js        # (36L)   generateId, distance, isPointOnWire
+│   │   └── utils.js        # (39L)   generateId, distance, isPointOnWire
 │   └── style/css/
 │       └── styles.css      # (779L)
+├── turing_to_arduino/      # (see turing_to_arduino/AGENTS.md) — standalone Python module
+├── docs/
+│   └── superpowers/        # Arduino converter design docs (plans + specs)
 ├── circuit_data.json       # Persisted circuit state
 ├── modules_data.json       # Persisted custom module blocks
 ├── skills.md               # Self-evolving skills base (agent-extracted skills)
@@ -33,8 +36,13 @@
 ├── CLAUDE.md               # Behavioral guidelines for coding LLMs
 ├── agenda.md               # Scratchpad / TODO
 ├── 重构计划.md              # Chinese refactoring plan (app.py modularization)
+├── README.md               # Project readme (150L)
+├── ROADMAP.md              # Project roadmap (25L)
 └── log/                    # AI conversation logs (JSONL, gitignored)
 ```
+
+> **Note:** `src/` and `tests/` directories exist but contain only `__pycache__` (no source files).
+> Committed source is what matters — see files above.
 
 ## Where To Look
 

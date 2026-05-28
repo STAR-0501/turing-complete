@@ -44,18 +44,35 @@ http://localhost:5000
 turing-complete/
 ├── app.py                  # Flask 后端：路由、AI 自治循环、会话管理
 ├── ai_commands.py           # 电路数据管理 + 布尔仿真引擎
-├── circuit_data.json        # 电路持久化文件 (.gitignore)
-├── functions_data.json      # 自定义模块持久化文件 (.gitignore)
+├── templates/
+│   └── index.html          # 单页应用入口
 ├── static/
-│   ├── scripts/
-│   │   ├── app.js           # 前端主逻辑：拖拽、连线、工具切换、快捷键
-│   │   ├── circuit.js       # 前端电路计算引擎
-│   │   ├── chat.js          # AI 聊天窗口（流式 SSE + 指令执行）
-│   │   ├── elements.js      # 元件模板定义
-│   │   ├── renderer.js      # Canvas 渲染器
-│   │   └── utils.js         # 工具模块
-│   └── style/css/styles.css # 全局样式（赛博朋克风格）
-└── templates/index.html     # 单页应用入口
+│   ├── scripts/            # (见 static/scripts/AGENTS.md)
+│   │   ├── app.js          # 前端主逻辑：拖拽、连线、工具切换、快捷键
+│   │   ├── circuit.js      # 前端电路计算引擎
+│   │   ├── renderer.js     # Canvas 渲染器
+│   │   ├── chat.js         # AI 聊天窗口（流式 SSE + 指令执行）
+│   │   ├── elements.js     # 元件模板定义
+│   │   └── utils.js        # 工具模块
+│   └── style/css/
+│       └── styles.css      # 全局样式（赛博朋克风格）
+├── turing_to_arduino/      # (见 turing_to_arduino/AGENTS.md) — Arduino 代码转换
+├── docs/
+│   └── superpowers/        # Arduino 转换器设计文档
+├── circuit_data.json       # 电路持久化文件 (.gitignore)
+├── modules_data.json       # 自定义模块持久化文件 (.gitignore)
+├── skills.md               # AI 自进化技能库
+├── plan.md                 # AI 计划持久化
+├── summary.md              # AI 会话摘要持久化
+├── requirements.txt        # 依赖清单
+├── app.spec                # PyInstaller 打包配置
+├── AI_INSTRUCTIONS.md      # AI 代理指令协议
+├── CLAUDE.md               # 编码 LLM 行为指南
+├── agenda.md               # 草稿箱 / TODO
+├── 重构计划.md              # app.py 模块化重构计划
+├── README.md               # 项目说明
+├── ROADMAP.md              # 项目路线图
+└── log/                    # AI 对话日志 (JSONL, gitignored)
 ```
 
 ### 后端核心模块 (`ai_commands.py`)
@@ -195,4 +212,4 @@ turing-complete/
 | 端口占用 | `app.py` 最后一行改 `port=5001` |
 | AI 不工作 | 检查 `AI_CONFIG["api_key"]` 和网络连接 |
 | 电路不计算 | 检查输入端是否都已连线 |
-| 文件损坏 | 删除 `circuit_data.json` 和 `functions_data.json` 重启 |
+| 文件损坏 | 删除 `circuit_data.json` 和 `modules_data.json` 重启 |
