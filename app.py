@@ -2686,7 +2686,26 @@ def export_arduino():
                     "sketch": sketch,
                 }), 500
 
-            upload_ok, _, upload_err = upload_sketch(sketch_dir, port)
+            max_retries = 3
+            upload_ok = False
+            upload_err = ""
+            for attempt in range(1, max_retries + 1):
+                upload_ok, _, upload_err = upload_sketch(sketch_dir, port)
+                if upload_ok:
+                    break
+                # 仅对端口争用类错误自动重试
+                err_lower = (upload_err or "").lower()
+                is_port_contention = (
+                    "cannot open port" in err_lower or
+                    "unable to open port" in err_lower or
+                    ("access" in err_lower and "denied" in err_lower) or
+                    ("permission" in err_lower and "denied" in err_lower)
+                )
+                if not is_port_contention or attempt >= max_retries:
+                    break
+                import time
+                time.sleep(1.5)
+
             if not upload_ok:
                 friendly_msg = _format_upload_error(upload_err, port)
                 return jsonify({
