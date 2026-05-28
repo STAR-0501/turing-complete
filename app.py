@@ -21,11 +21,66 @@ import uuid
 #   max_tokens: 每次 LLM 调用的输出长度上限 (默认 4000)
 #   connect_timeout: 连接超时秒数 (默认 10)
 #   read_timeout: 读取超时秒数 (默认 180)
-AI_CONFIG = {
-    "api_key": "sk-38d03b2f9c8d44f886f9e146d179d933",
-    "base_url": "https://api.deepseek.com", # 或者您的代理地址，例如 https://api.deepseek.com
-    "model": "deepseek-v4-flash" # 或 deepseek-chat 等
+# AI 配置管理 - 从 ai_config.json 文件加载
+CONFIG_FILE = "ai_config.json"
+_AI_CONFIG_DEFAULTS = {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "max_tokens": 4000,
+    "connect_timeout": 10,
+    "read_timeout": 180,
+    "protocol": "",
+    "anthropic_version": "2023-06-01",
+    "agent_max_rounds": 100,
+    "agent_max_cmds_per_round": 200,
+    "agent_no_progress_stop_rounds": 30
 }
+_ai_config_cache = None
+
+
+def load_ai_config():
+    global _ai_config_cache
+    config = dict(_AI_CONFIG_DEFAULTS)
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            file_config = json.load(f)
+        config.update(file_config)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    _ai_config_cache = config
+    return config
+
+
+def get_ai_config():
+    global _ai_config_cache
+    if _ai_config_cache is None:
+        return load_ai_config()
+    return _ai_config_cache
+
+
+def save_ai_config(data):
+    global _ai_config_cache
+    config = get_ai_config()
+    config.update(data)
+    _atomic_write_json(CONFIG_FILE, config)
+    _ai_config_cache = config
+    return config
+
+
+def is_ai_configured():
+    cfg = get_ai_config()
+    key = cfg.get("api_key", "")
+    return bool(key) and key != "YOUR_API_KEY_HERE"
+
+
+def _build_api_url(endpoint):
+    """构建 API URL，防止用户提供的 base_url 已包含路径时重复拼接。"""
+    base = str(get_ai_config()['base_url']).rstrip('/')
+    if base.endswith(endpoint):
+        return base
+    return f"{base}{endpoint}"
+
 
 # 关闭Flask的HTTP请求日志
 log = logging.getLogger('werkzeug')
@@ -249,6 +304,31 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/config', methods=['GET'])
+def api_get_config():
+    cfg = get_ai_config()
+    return jsonify({
+        'configured': is_ai_configured(),
+        'base_url': cfg.get('base_url', ''),
+        'model': cfg.get('model', ''),
+        'max_tokens': cfg.get('max_tokens', 4000),
+        'connect_timeout': cfg.get('connect_timeout', 10),
+        'read_timeout': cfg.get('read_timeout', 180)
+    })
+
+
+@app.route('/api/config', methods=['POST'])
+def api_set_config():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data'}), 400
+        save_ai_config(data)
+        return jsonify({'status': 'ok', 'configured': is_ai_configured()})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/save-circuit', methods=['POST', 'OPTIONS'])
 def save_circuit():
     # 处理OPTIONS预检请求
@@ -294,8 +374,8 @@ def ai_execute():
 @app.route('/api/ai/generate-comments', methods=['POST'])
 def ai_generate_comments():
     try:
-        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
-            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        if not is_ai_configured():
+            return jsonify({'status': 'error', 'message': '请先在 Agent 侧边栏配置 API 参数'}), 400
 
         current_state = circuit_manager.get_state()
         elements = current_state.get('elements', [])
@@ -352,13 +432,13 @@ def ai_generate_comments():
         ]
 
         response = requests.post(
-            f"{AI_CONFIG['base_url']}/chat/completions",
+            _build_api_url('/chat/completions'),
             headers={
-                "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+                "Authorization": f"Bearer {get_ai_config()['api_key']}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": AI_CONFIG.get("model", "default"),
+                "model": get_ai_config().get("model", "default"),
                 "messages": messages,
                 "temperature": 0.3
             },
@@ -396,8 +476,8 @@ def ai_generate_layout():
     根据当前电路结构，让AI整理布局
     """
     try:
-        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
-            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        if not is_ai_configured():
+            return jsonify({'status': 'error', 'message': '请先在 Agent 侧边栏配置 API 参数'}), 400
 
         current_state = circuit_manager.get_state()
         elements = current_state.get('elements', [])
@@ -432,8 +512,8 @@ def ai_generate_circuit():
     根据用户需求生成电路
     """
     try:
-        if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
-            return jsonify({'status': 'error', 'message': '请先在 app.py 中配置 AI_CONFIG[api_key]'}), 400
+        if not is_ai_configured():
+            return jsonify({'status': 'error', 'message': '请先在 Agent 侧边栏配置 API 参数'}), 400
 
         data = request.json
         user_requirement = data.get('requirement', '')
@@ -925,10 +1005,10 @@ def _append_chat_memory(role, content):
 
 
 def _get_ai_protocol():
-    protocol = str(AI_CONFIG.get("protocol", "")).strip().lower()
+    protocol = str(get_ai_config().get("protocol", "")).strip().lower()
     if protocol:
         return protocol
-    base_url = str(AI_CONFIG.get("base_url", "")).lower()
+    base_url = str(get_ai_config().get("base_url", "")).lower()
     if "/anthropic" in base_url:
         return "anthropic"
     return "openai"
@@ -1558,37 +1638,36 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
 
 def _call_llm_once(system_prompt, request_messages):
     protocol = _get_ai_protocol()
-    base_url = str(AI_CONFIG['base_url']).rstrip('/')
     if protocol == "anthropic":
-        request_url = f"{base_url}/v1/messages"
+        request_url = _build_api_url('/v1/messages')
         request_headers = {
-            "x-api-key": AI_CONFIG['api_key'],
-            "anthropic-version": AI_CONFIG.get("anthropic_version", "2023-06-01"),
+            "x-api-key": get_ai_config()['api_key'],
+            "anthropic-version": get_ai_config().get("anthropic_version", "2023-06-01"),
             "Content-Type": "application/json"
         }
         request_payload = {
-            "model": AI_CONFIG["model"],
+            "model": get_ai_config()["model"],
             "system": system_prompt,
             "messages": request_messages,
             "temperature": 0.2,
-            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
             "stream": False
         }
     else:
-        request_url = f"{base_url}/chat/completions"
+        request_url = _build_api_url('/chat/completions')
         request_headers = {
-            "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+            "Authorization": f"Bearer {get_ai_config()['api_key']}",
             "Content-Type": "application/json"
         }
         request_payload = {
-            "model": AI_CONFIG["model"],
+            "model": get_ai_config()["model"],
             "messages": [{"role": "system", "content": system_prompt}] + request_messages,
             "temperature": 0.2,
-            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
             "stream": False
         }
-    connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
-    read_timeout = float(AI_CONFIG.get("read_timeout", 180))
+    connect_timeout = float(get_ai_config().get("connect_timeout", 10))
+    read_timeout = float(get_ai_config().get("read_timeout", 180))
     response = requests.post(
         request_url,
         headers=request_headers,
@@ -1613,32 +1692,31 @@ def _call_llm_once(system_prompt, request_messages):
 
 def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
     protocol = _get_ai_protocol()
-    base_url = str(AI_CONFIG['base_url']).rstrip('/')
     if protocol == "anthropic":
-        request_url = f"{base_url}/v1/messages"
+        request_url = _build_api_url('/v1/messages')
         request_headers = {
-            "x-api-key": AI_CONFIG['api_key'],
-            "anthropic-version": AI_CONFIG.get("anthropic_version", "2023-06-01"),
+            "x-api-key": get_ai_config()['api_key'],
+            "anthropic-version": get_ai_config().get("anthropic_version", "2023-06-01"),
             "Content-Type": "application/json"
         }
         request_payload = {
-            "model": AI_CONFIG["model"],
+            "model": get_ai_config()["model"],
             "system": system_prompt,
             "messages": request_messages,
             "temperature": 0.2,
-            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
             "stream": True
         }
     else:
-        request_url = f"{base_url}/chat/completions"
+        request_url = _build_api_url('/chat/completions')
         request_headers = {
-            "Authorization": f"Bearer {AI_CONFIG['api_key']}",
+            "Authorization": f"Bearer {get_ai_config()['api_key']}",
             "Content-Type": "application/json"
         }
         request_payload = {
-            "model": AI_CONFIG["model"],
+            "model": get_ai_config()["model"],
             "messages": [{"role": "system", "content": system_prompt}] + request_messages,
-            "max_tokens": int(AI_CONFIG.get("max_tokens", 4000)),
+            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
             "stream": True
         }
         if thinking_mode:
@@ -1647,8 +1725,8 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
         else:
             request_payload["temperature"] = 0.2
 
-    connect_timeout = float(AI_CONFIG.get("connect_timeout", 10))
-    read_timeout = float(AI_CONFIG.get("read_timeout", 180))
+    connect_timeout = float(get_ai_config().get("connect_timeout", 10))
+    read_timeout = float(get_ai_config().get("read_timeout", 180))
     resp = requests.post(
         request_url,
         headers=request_headers,
@@ -1745,8 +1823,8 @@ def _quick_classify(user_message):
 
 
 def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False, session_id=None):
-    if AI_CONFIG["api_key"] == "YOUR_API_KEY_HERE":
-        yield "请先在 app.py 中配置您的 AI_CONFIG['api_key']。"
+    if not is_ai_configured():
+        yield "请先在 Agent 侧边栏配置 API 参数。"
         return
 
     mode = _quick_classify(user_message)
@@ -1782,7 +1860,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
             max_rounds = int(max_rounds_override)
             logger.info("使用自定义轮数: %d", max_rounds)
         else:
-            max_rounds = int(AI_CONFIG.get("agent_max_rounds", 100))
+            max_rounds = int(get_ai_config().get("agent_max_rounds", 100))
         if max_rounds < 1:
             max_rounds = 1
         request_messages = _get_chat_messages_with_memory(user_message)
@@ -1795,7 +1873,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
         cycle_rounds = 0
         last_execution_error = ""
         same_error_rounds = 0
-        no_progress_stop_rounds = int(AI_CONFIG.get(
+        no_progress_stop_rounds = int(get_ai_config().get(
             "agent_no_progress_stop_rounds", 30))
         if no_progress_stop_rounds < 3:
             no_progress_stop_rounds = 3
@@ -1841,7 +1919,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
             command_results = []
             execution_error = ""
             commands_truncated = False
-            MAX_CMDS_PER_ROUND = int(AI_CONFIG.get(
+            MAX_CMDS_PER_ROUND = int(get_ai_config().get(
                 "agent_max_cmds_per_round", 200))
             if MAX_CMDS_PER_ROUND < 10:
                 MAX_CMDS_PER_ROUND = 10
@@ -2270,7 +2348,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
         _append_chat_memory("assistant", assistant_memory_text)
 
         if finish_reason in {"length", "max_tokens"}:
-            yield "\n[系统] 输出达到 max_tokens 上限，思考或回复可能被截断。可在 AI_CONFIG 中调大 max_tokens。"
+            yield "\n[系统] 输出达到 max_tokens 上限，思考或回复可能被截断。可在 Agent 侧边栏配置中调大 max_tokens。"
 
     except Exception as e:
         yield f"调用 AI 失败: {str(e)}"
@@ -2382,7 +2460,7 @@ def fallback_chat(message, error_msg):
     reply = ""
 
     # 如果 API Key 没填，提示用户，但仍然尝试处理简单指令
-    is_config_error = "YOUR_API_KEY_HERE" in error_msg
+    is_config_error = not is_ai_configured()
 
     if "清空" in message or "clear" in message:
         execute_circuit_command('clear_circuit', {})
@@ -2395,7 +2473,7 @@ def fallback_chat(message, error_msg):
         commands_executed.append({'command': 'add_element', 'type': 'AND'})
     else:
         if is_config_error:
-            reply = "⚠️ 您尚未在 app.py 中配置 AI_CONFIG['api_key']。目前我只能处理简单的指令如“添加与门”、“清空画布”。"
+            reply = "⚠️ 您尚未在 app.py 中配置 get_ai_config()['api_key']。目前我只能处理简单的指令如“添加与门”、“清空画布”。"
         else:
             reply = f"抱歉，调用 AI 时遇到了错误: {error_msg}。"
 

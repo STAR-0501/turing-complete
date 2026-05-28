@@ -488,6 +488,132 @@ body {
   border-radius: 12px;
 }
 
+/* AI 配置表单 */
+.ai-config-form {
+  padding: 8px 0;
+  width: 100%;
+}
+
+.ai-config-header {
+  font-size: 15px;
+  font-weight: bold;
+  color: #00ffff;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.ai-config-field {
+  margin-bottom: 12px;
+}
+
+.ai-config-field label {
+  display: block;
+  font-size: 12px;
+  color: rgba(0, 255, 255, 0.7);
+  margin-bottom: 4px;
+}
+
+.ai-config-field input[type="text"],
+.ai-config-field input[type="password"],
+.ai-config-field input[type="number"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #e0f8f8;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ai-config-field input[type="text"]:focus,
+.ai-config-field input[type="password"]:focus,
+.ai-config-field input[type="number"]:focus {
+  border-color: #00ffff;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
+}
+
+.ai-config-password-wrap {
+  display: flex;
+  gap: 4px;
+}
+
+.ai-config-password-wrap input {
+  flex: 1;
+}
+
+.ai-config-pwd-toggle {
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #00ffff;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+
+.ai-config-pwd-toggle:hover {
+  background: rgba(0, 255, 255, 0.25);
+}
+
+.ai-config-advanced {
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ai-config-advanced summary {
+  cursor: pointer;
+  color: rgba(0, 255, 255, 0.7);
+  font-size: 12px;
+  user-select: none;
+}
+
+.ai-config-advanced summary:hover {
+  color: #00ffff;
+}
+
+.ai-config-advanced .ai-config-field {
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.ai-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-config-save-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  border-radius: 6px;
+  background: rgba(0, 255, 255, 0.15);
+  color: #00ffff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-config-save-btn:hover {
+  background: rgba(0, 255, 255, 0.3);
+}
+
+.ai-config-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-config-status {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* 娑堟伅涓殑鎬濊€?杈撳嚭鍒嗛殧 */
 .agent-message .msg-thinking-label {
   font-size: 11px;

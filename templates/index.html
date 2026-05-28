@@ -50,6 +50,44 @@
             </div>
             <div id="agent-messages" class="agent-messages">
                 <div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>
+                <!-- AI 配置表单 -->
+                <div id="ai-config-form" class="ai-config-form" style="display:none">
+                    <div class="ai-config-header">AI 配置</div>
+                    <div class="ai-config-field">
+                        <label>API 请求地址</label>
+                        <input type="text" id="cfg-base-url" placeholder="https://api.deepseek.com">
+                    </div>
+                    <div class="ai-config-field">
+                        <label>API Key</label>
+                        <div class="ai-config-password-wrap">
+                            <input type="password" id="cfg-api-key" placeholder="sk-...">
+                            <button class="ai-config-pwd-toggle" id="cfg-pwd-toggle" title="显示/隐藏">👁</button>
+                        </div>
+                    </div>
+                    <div class="ai-config-field">
+                        <label>模型 ID</label>
+                        <input type="text" id="cfg-model" placeholder="deepseek-v4-flash">
+                    </div>
+                    <details class="ai-config-advanced">
+                        <summary>高级设置</summary>
+                        <div class="ai-config-field">
+                            <label>单次输出最大 Token 数</label>
+                            <input type="number" id="cfg-max-tokens" value="4000" min="1" max="32000">
+                        </div>
+                        <div class="ai-config-field">
+                            <label>连接超时（秒）</label>
+                            <input type="number" id="cfg-connect-timeout" value="10" min="1" max="120">
+                        </div>
+                        <div class="ai-config-field">
+                            <label>读取超时（秒）</label>
+                            <input type="number" id="cfg-read-timeout" value="180" min="1" max="600">
+                        </div>
+                    </details>
+                    <div class="ai-config-actions">
+                        <button class="ai-config-save-btn" id="cfg-save-btn">保存配置</button>
+                        <span class="ai-config-status" id="cfg-status"></span>
+                    </div>
+                </div>
             </div>
             <div class="agent-prompt-suggestions" id="agent-prompt-suggestions">
                 <button class="agent-suggestion-btn" data-prompt="请为电路中的所有元件添加注释，说明每个元件的功能和作用">AI注释</button>

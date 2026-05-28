@@ -122,11 +122,127 @@ export function initChat() {
     const sessId = conversationSelect.value;
     if (!sessId) {
       // 选择"当前对话"——清空并显示默认欢迎语
-      agentMessages.innerHTML = '<div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>';
+      const welcomeHtml = '<div class="agent-message ai">你好！我是 Agent，可以帮你构建电路。例如："帮我放一个与门"或"连接这两个元件"。</div>';
+      agentMessages.innerHTML = welcomeHtml;
       return;
     }
     loadConversationMessages(sessId);
   });
+
+  // 检查配置状态，决定显示表单还是聊天
+  checkAiConfig();
+
+  // 密码显示/隐藏切换
+  const pwdToggle = document.getElementById('cfg-pwd-toggle');
+  const cfgApiKey = document.getElementById('cfg-api-key');
+  if (pwdToggle && cfgApiKey) {
+    pwdToggle.addEventListener('click', () => {
+      const isPassword = cfgApiKey.type === 'password';
+      cfgApiKey.type = isPassword ? 'text' : 'password';
+      pwdToggle.textContent = isPassword ? '🙈' : '👁';
+    });
+  }
+
+  // 保存配置按钮
+  const cfgSaveBtn = document.getElementById('cfg-save-btn');
+  if (cfgSaveBtn) {
+    cfgSaveBtn.addEventListener('click', saveAiConfig);
+  }
+}
+
+// 检查 AI 配置状态，切换表单/聊天界面
+async function checkAiConfig() {
+  const configForm = document.getElementById('ai-config-form');
+  const promptSuggestions = document.getElementById('agent-prompt-suggestions');
+  const inputArea = document.querySelector('.agent-input-area');
+  const welcomeMsg = document.querySelector('.agent-message');
+
+  if (!configForm) return;
+
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+
+    if (data.configured) {
+      configForm.style.display = 'none';
+      if (promptSuggestions) promptSuggestions.style.display = '';
+      if (inputArea) inputArea.style.display = '';
+      if (welcomeMsg) welcomeMsg.style.display = '';
+    } else {
+      configForm.style.display = 'block';
+      if (promptSuggestions) promptSuggestions.style.display = 'none';
+      if (inputArea) inputArea.style.display = 'none';
+      if (welcomeMsg) welcomeMsg.style.display = 'none';
+      // 填充当前值
+      const baseUrlInput = document.getElementById('cfg-base-url');
+      const modelInput = document.getElementById('cfg-model');
+      const maxTokensInput = document.getElementById('cfg-max-tokens');
+      const connectTimeoutInput = document.getElementById('cfg-connect-timeout');
+      const readTimeoutInput = document.getElementById('cfg-read-timeout');
+      if (baseUrlInput && data.base_url) baseUrlInput.value = data.base_url;
+      if (modelInput && data.model) modelInput.value = data.model;
+      if (maxTokensInput && data.max_tokens) maxTokensInput.value = data.max_tokens;
+      if (connectTimeoutInput && data.connect_timeout) connectTimeoutInput.value = data.connect_timeout;
+      if (readTimeoutInput && data.read_timeout) readTimeoutInput.value = data.read_timeout;
+    }
+  } catch (err) {
+    console.error('检查 AI 配置失败:', err);
+  }
+}
+
+// 保存 AI 配置
+async function saveAiConfig() {
+  const cfgSaveBtn = document.getElementById('cfg-save-btn');
+  const cfgStatus = document.getElementById('cfg-status');
+  if (!cfgSaveBtn || !cfgStatus) return;
+
+  const apiKey = document.getElementById('cfg-api-key').value.trim();
+  const baseUrl = document.getElementById('cfg-base-url').value.trim();
+  const model = document.getElementById('cfg-model').value.trim();
+  const maxTokens = parseInt(document.getElementById('cfg-max-tokens').value, 10) || 4000;
+  const connectTimeout = parseInt(document.getElementById('cfg-connect-timeout').value, 10) || 10;
+  const readTimeout = parseInt(document.getElementById('cfg-read-timeout').value, 10) || 180;
+
+  if (!apiKey) {
+    cfgStatus.textContent = '请输入 API Key';
+    cfgStatus.style.color = '#ff6b6b';
+    return;
+  }
+
+  cfgSaveBtn.disabled = true;
+  cfgSaveBtn.textContent = '保存中...';
+  cfgStatus.textContent = '';
+
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        base_url: baseUrl || undefined,
+        model: model || undefined,
+        max_tokens: maxTokens,
+        connect_timeout: connectTimeout,
+        read_timeout: readTimeout
+      })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      cfgStatus.textContent = '✓ 配置已保存';
+      cfgStatus.style.color = '#00ff88';
+      // 重新检查配置状态，切换到聊天界面
+      setTimeout(() => checkAiConfig(), 800);
+    } else {
+      cfgStatus.textContent = '保存失败: ' + (data.message || '未知错误');
+      cfgStatus.style.color = '#ff6b6b';
+    }
+  } catch (err) {
+    cfgStatus.textContent = '保存失败: ' + err.message;
+    cfgStatus.style.color = '#ff6b6b';
+  } finally {
+    cfgSaveBtn.disabled = false;
+    cfgSaveBtn.textContent = '保存配置';
+  }
 }
 
 // 加载历史对话列表
