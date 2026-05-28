@@ -36,10 +36,27 @@ export function initChat() {
     agentToggle.classList.remove('hidden');
   });
 
-  // 拖拽拉伸手柄：调整侧边栏宽度
+  // 拖拽拉伸手柄：调整侧边栏宽度（仅拖拽时挂载 document 监听器，释放后立即移除）
   let isResizing = false;
   const MIN_WIDTH = 280;
   const MAX_WIDTH = 600;
+
+  const onResizeMove = (e) => {
+    if (!isResizing) return;
+    const newWidth = window.innerWidth - e.clientX;
+    const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+    agentSidebar.style.width = clamped + 'px';
+  };
+
+  const onResizeEnd = () => {
+    if (!isResizing) return;
+    isResizing = false;
+    agentResizeHandle.classList.remove('active');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
+  };
 
   agentResizeHandle.addEventListener('mousedown', (e) => {
     e.preventDefault();
@@ -48,21 +65,8 @@ export function initChat() {
     agentResizeHandle.classList.add('active');
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) return;
-    const newWidth = window.innerWidth - e.clientX;
-    const clamped = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
-    agentSidebar.style.width = clamped + 'px';
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!isResizing) return;
-    isResizing = false;
-    agentResizeHandle.classList.remove('active');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('mouseup', onResizeEnd);
   });
 
   // textarea 自动扩展高度（无滚动条，随内容增长）

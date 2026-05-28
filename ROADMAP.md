@@ -18,7 +18,8 @@
 10. Function 的更名
 11. 自动识别端口
 12. 修复错乱提示
-13. 事件监听器未清理：chat.js document mousemove/mouseup 匿名函数无移除逻辑，多次调用 initChat 会导致重复绑定；app.js window contextmenu 同理
+13. APIKEY 简单测试
+14. [已修] 事件监听器未清理：chat.js mousemove/mouseup 改为拖拽时挂载/释放后移除；app.js contextmenu 改为命名函数
 
 ## AI 快捷按钮（AI注释/AI整理 一栏）候选功能
 - AI连线：自动将选中元件按逻辑关系连线

@@ -116,9 +116,7 @@ async function init() {
 
   canvas.addEventListener('auxclick', handleMouseDown); // 支持中键点击
   // 阻止右键菜单（使用 window 监听确保捕获所有右键点击）
-  window.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-  });
+  window.addEventListener('contextmenu', handleContextMenu);
   // 添加滚轮缩放功能
   canvas.addEventListener('wheel', handleWheel);
   window.addEventListener('resize', resizeCanvas);
@@ -1113,6 +1111,10 @@ function updateSignalAnimation(now) {
  * 处理鼠标按下事件
  * @param {MouseEvent} e - 鼠标事件
  */
+function handleContextMenu(e) {
+  e.preventDefault();
+}
+
 function handleMouseDown(e) {
   const rect = canvas.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
