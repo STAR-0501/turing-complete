@@ -74,9 +74,16 @@ def is_ai_configured():
     return bool(key) and key != "YOUR_API_KEY_HERE"
 
 
-def _build_api_url(endpoint):
-    """构建 API URL，防止用户提供的 base_url 已包含路径时重复拼接。"""
-    base = str(get_ai_config()['base_url']).rstrip('/')
+def _build_api_url(endpoint, base_url=None):
+    """���� API URL����ֹ�û��ṩ�� base_url �Ѱ���·��ʱ�ظ�ƴ�ӡ�
+    
+    Args:
+        endpoint: API ·������ '/chat/completions'
+        base_url: ��ѡ�Զ��� base_url��Ĭ�ϴӱ����õ� config �ж�ȡ
+    """
+    if base_url is None:
+        base_url = get_ai_config()['base_url']
+    base = str(base_url).rstrip('/')
     if base.endswith(endpoint):
         return base
     return f"{base}{endpoint}"
@@ -341,13 +348,12 @@ def api_test_apikey():
         model = data.get('model', '').strip() or 'deepseek-v4-flash'
 
         if not api_key:
-            return jsonify({'status': 'error', 'message': '请输入 API Key'}), 400
+            return jsonify({'status': 'error', 'message': '������ API Key'}), 400
 
-        # 判断协议
+        # �ж�Э�鲢ʹ�� _build_api_url ��ֹ·���ظ�
         base_lower = base_url.lower()
         if '/anthropic' in base_lower:
-            proto = 'anthropic'
-            test_url = base_url.rstrip('/') + '/messages'
+            test_url = _build_api_url('/messages', base_url=base_url)
             headers = {
                 'x-api-key': api_key,
                 'anthropic-version': '2023-06-01',
@@ -359,8 +365,7 @@ def api_test_apikey():
                 'messages': [{'role': 'user', 'content': 'hi'}]
             }
         else:
-            proto = 'openai'
-            test_url = base_url.rstrip('/') + '/chat/completions'
+            test_url = _build_api_url('/chat/completions', base_url=base_url)
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
