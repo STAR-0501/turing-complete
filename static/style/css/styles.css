@@ -588,16 +588,20 @@ body {
   gap: 12px;
 }
 
-.ai-config-save-btn {
+.ai-config-save-btn,
+.ai-config-test-btn {
   flex: 1;
   padding: 10px;
-  border: 1px solid rgba(0, 255, 255, 0.5);
   border-radius: 6px;
-  background: rgba(0, 255, 255, 0.15);
-  color: #00ffff;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.ai-config-save-btn {
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  background: rgba(0, 255, 255, 0.15);
+  color: #00ffff;
 }
 
 .ai-config-save-btn:hover {
@@ -605,6 +609,21 @@ body {
 }
 
 .ai-config-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-config-test-btn {
+  border: 1px solid rgba(255, 200, 0, 0.5);
+  background: rgba(255, 200, 0, 0.12);
+  color: #ffc800;
+}
+
+.ai-config-test-btn:hover {
+  background: rgba(255, 200, 0, 0.25);
+}
+
+.ai-config-test-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

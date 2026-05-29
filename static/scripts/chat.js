@@ -152,6 +152,31 @@ export function initChat() {
   if (cfgSaveBtn) {
     cfgSaveBtn.addEventListener('click', saveAiConfig);
   }
+
+  // 测试连接按钮
+  const cfgTestBtn = document.getElementById('cfg-test-btn');
+  if (cfgTestBtn) {
+    cfgTestBtn.addEventListener('click', testAiConfig);
+  }
+
+  // 更换 API Key 按钮
+  const changeBtn = document.getElementById('btn-change-apikey');
+  if (changeBtn) {
+    changeBtn.addEventListener('click', () => {
+      const configForm = document.getElementById('ai-config-form');
+      if (configForm) {
+        configForm.style.display = 'block';
+        changeBtn.style.display = 'none';
+        // 隐藏聊天/输入区域
+        const promptSuggestions = document.getElementById('agent-prompt-suggestions');
+        const inputArea = document.querySelector('.agent-input-area');
+        const welcomeMsg = document.querySelector('.agent-message');
+        if (promptSuggestions) promptSuggestions.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'none';
+        if (welcomeMsg) welcomeMsg.style.display = 'none';
+      }
+    });
+  }
 }
 
 // 检查 AI 配置状态，切换表单/聊天界面
@@ -160,6 +185,7 @@ async function checkAiConfig() {
   const promptSuggestions = document.getElementById('agent-prompt-suggestions');
   const inputArea = document.querySelector('.agent-input-area');
   const welcomeMsg = document.querySelector('.agent-message');
+  const changeBtn = document.getElementById('btn-change-apikey');
 
   if (!configForm) return;
 
@@ -172,11 +198,13 @@ async function checkAiConfig() {
       if (promptSuggestions) promptSuggestions.style.display = '';
       if (inputArea) inputArea.style.display = '';
       if (welcomeMsg) welcomeMsg.style.display = '';
+      if (changeBtn) changeBtn.style.display = '';  // 显示更换按钮
     } else {
       configForm.style.display = 'block';
       if (promptSuggestions) promptSuggestions.style.display = 'none';
       if (inputArea) inputArea.style.display = 'none';
       if (welcomeMsg) welcomeMsg.style.display = 'none';
+      if (changeBtn) changeBtn.style.display = 'none';
       // 填充当前值
       const baseUrlInput = document.getElementById('cfg-base-url');
       const modelInput = document.getElementById('cfg-model');
@@ -246,6 +274,53 @@ async function saveAiConfig() {
   } finally {
     cfgSaveBtn.disabled = false;
     cfgSaveBtn.textContent = '保存配置';
+  }
+}
+
+// 测试 API Key 连接
+async function testAiConfig() {
+  const cfgTestBtn = document.getElementById('cfg-test-btn');
+  const cfgStatus = document.getElementById('cfg-status');
+  if (!cfgTestBtn || !cfgStatus) return;
+
+  const apiKey = document.getElementById('cfg-api-key').value.trim();
+  const baseUrl = document.getElementById('cfg-base-url').value.trim();
+  const model = document.getElementById('cfg-model').value.trim();
+
+  if (!apiKey) {
+    cfgStatus.textContent = '请先输入 API Key';
+    cfgStatus.style.color = '#ff6b6b';
+    return;
+  }
+
+  cfgTestBtn.disabled = true;
+  cfgTestBtn.textContent = '测试中...';
+  cfgStatus.textContent = '';
+
+  try {
+    const res = await fetch('/api/test-apikey', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        base_url: baseUrl || undefined,
+        model: model || undefined
+      })
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      cfgStatus.textContent = data.message || '✓ 连接正常';
+      cfgStatus.style.color = '#00ff88';
+    } else {
+      cfgStatus.textContent = data.message || '测试失败';
+      cfgStatus.style.color = '#ff6b6b';
+    }
+  } catch (err) {
+    cfgStatus.textContent = '测试失败: ' + err.message;
+    cfgStatus.style.color = '#ff6b6b';
+  } finally {
+    cfgTestBtn.disabled = false;
+    cfgTestBtn.textContent = '测试连接';
   }
 }
 

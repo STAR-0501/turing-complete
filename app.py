@@ -329,6 +329,70 @@ def api_set_config():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/api/test-apikey', methods=['POST'])
+def api_test_apikey():
+    """测试 API Key 是否有效。
+    接受与 /api/config 相同的字段，做一次最小 API 调用验证。
+    """
+    try:
+        data = request.get_json() or {}
+        api_key = data.get('api_key', '').strip()
+        base_url = data.get('base_url', '').strip() or 'https://api.deepseek.com'
+        model = data.get('model', '').strip() or 'deepseek-v4-flash'
+
+        if not api_key:
+            return jsonify({'status': 'error', 'message': '请输入 API Key'}), 400
+
+        # 判断协议
+        base_lower = base_url.lower()
+        if '/anthropic' in base_lower:
+            proto = 'anthropic'
+            test_url = base_url.rstrip('/') + '/messages'
+            headers = {
+                'x-api-key': api_key,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json'
+            }
+            payload = {
+                'model': model,
+                'max_tokens': 10,
+                'messages': [{'role': 'user', 'content': 'hi'}]
+            }
+        else:
+            proto = 'openai'
+            test_url = base_url.rstrip('/') + '/chat/completions'
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+            payload = {
+                'model': model,
+                'messages': [{'role': 'user', 'content': 'hi'}],
+                'max_tokens': 5
+            }
+
+        resp = requests.post(test_url, headers=headers, json=payload, timeout=15)
+
+        if resp.status_code == 200:
+            return jsonify({'status': 'ok', 'message': '✓ API Key 有效，连接正常'})
+        elif resp.status_code == 401:
+            return jsonify({'status': 'error', 'message': 'API Key 无效或被拒绝（401）'})
+        elif resp.status_code == 403:
+            return jsonify({'status': 'error', 'message': 'API Key 权限不足（403）'})
+        elif resp.status_code == 429:
+            return jsonify({'status': 'error', 'message': '请求过于频繁，请稍后重试（429）'})
+        else:
+            detail = resp.text[:200]
+            return jsonify({'status': 'error', 'message': f'API 返回错误 ({resp.status_code}): {detail}'})
+
+    except requests.exceptions.ConnectTimeout:
+        return jsonify({'status': 'error', 'message': f'连接超时（{data.get("base_url","")}），请检查地址或网络'})
+    except requests.exceptions.ConnectionError:
+        return jsonify({'status': 'error', 'message': f'无法连接到 {data.get("base_url","")}，请检查地址或网络'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'测试失败: {str(e)}'}), 500
+
+
 @app.route('/api/save-circuit', methods=['POST', 'OPTIONS'])
 def save_circuit():
     # 处理OPTIONS预检请求
