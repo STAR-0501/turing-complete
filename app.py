@@ -75,11 +75,11 @@ def is_ai_configured():
 
 
 def _build_api_url(endpoint, base_url=None):
-    """���� API URL����ֹ�û��ṩ�� base_url �Ѱ���·��ʱ�ظ�ƴ�ӡ�
+    """构建 API URL，防止用户提供的 base_url 已包含路径时重复拼接。
     
     Args:
-        endpoint: API ·������ '/chat/completions'
-        base_url: ��ѡ�Զ��� base_url��Ĭ�ϴӱ����õ� config �ж�ȡ
+        endpoint: API 路径，如 '/chat/completions'
+        base_url: 可选自定义 base_url，默认从保存的 config 中读取
     """
     if base_url is None:
         base_url = get_ai_config()['base_url']
@@ -348,9 +348,9 @@ def api_test_apikey():
         model = data.get('model', '').strip() or 'deepseek-v4-flash'
 
         if not api_key:
-            return jsonify({'status': 'error', 'message': '������ API Key'}), 400
+            return jsonify({'status': 'error', 'message': '请输入 API Key'}), 400
 
-        # �ж�Э�鲢ʹ�� _build_api_url ��ֹ·���ظ�
+        # 判断协议并使用 _build_api_url 防止路径重复
         base_lower = base_url.lower()
         if '/anthropic' in base_lower:
             test_url = _build_api_url('/messages', base_url=base_url)
