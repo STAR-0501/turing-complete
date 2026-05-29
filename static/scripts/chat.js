@@ -101,7 +101,7 @@ export function initChat() {
   // 发送消息
   agentSend.addEventListener('click', sendMessage);
   agentInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter' && !(e.ctrlKey || e.metaKey || e.shiftKey)) {
       e.preventDefault();
       sendMessage();
     }
