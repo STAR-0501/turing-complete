@@ -177,6 +177,7 @@ body {
 /* Agent 蹇嵎鎻愮ず鎸夐挳 */
 .agent-prompt-suggestions {
   display: none;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 2px 16px 0;
   flex-shrink: 0;

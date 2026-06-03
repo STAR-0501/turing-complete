@@ -92,8 +92,15 @@
                 </div>
             </div>
             <div class="agent-prompt-suggestions" id="agent-prompt-suggestions">
+                <button class="agent-suggestion-btn" data-prompt="请为当前电路生成所有输入组合的仿真真值表，验证电路输出是否正确">AI测试</button>
+                <button class="agent-suggestion-btn" data-prompt="请检查当前电路，查找未连接的端口、短路、开路、逻辑错误等问题，并给出修复建议">AI查错</button>
                 <button class="agent-suggestion-btn" data-prompt="请为电路中的所有元件添加注释，说明每个元件的功能和作用">AI注释</button>
                 <button class="agent-suggestion-btn" data-prompt="请整理当前电路的布局，让电路更加清晰美观">AI整理</button>
+                <button class="agent-suggestion-btn" data-prompt="请将当前选中的元件封装为自定义模块，自动生成端口">AI模块化</button>
+                <button class="agent-suggestion-btn" data-prompt="请将当前电路中已放置的元件按逻辑关系自动连接起来">AI连线</button>
+                <button class="agent-suggestion-btn" data-prompt="请分析当前电路，统计逻辑门数量与层级深度，识别冗余逻辑">AI分析</button>
+                <button class="agent-suggestion-btn" data-prompt="请在保持功能不变的前提下，对当前电路进行逻辑化简，减少逻辑门数量">AI优化</button>
+                <button class="agent-suggestion-btn" data-prompt="请用自然语言描述当前电路的功能，识别它属于什么类型的数字电路">AI解释</button>
             </div>
             <div class="agent-input-area">
                 <textarea id="agent-input" placeholder="输入指令..." rows="1"></textarea>
