@@ -7,9 +7,9 @@
 ## 一、运行环境
 
 **后端**
-- Python 3.6+
-- Flask 3.0+
-- requests
+- Python 3.9+
+- Flask 3.1+
+- requests, pyyaml
 
 **前端**
 - 现代浏览器（Chrome / Edge / Firefox）
@@ -24,10 +24,10 @@
 
 ```bash
 # 1. 安装依赖
-pip install flask requests
+pip install -r requirements.txt
 
 # 2. （可选）配置 AI
-#    编辑 app.py，将 AI_CONFIG["api_key"] 改为你的 API Key
+#    编辑 ai_config.json，设置 api_key 和 model
 
 # 3. 启动
 python app.py
@@ -44,6 +44,13 @@ http://localhost:5000
 turing-complete/
 ├── app.py                  # Flask 后端：路由、AI 自治循环、会话管理
 ├── ai_commands.py           # 电路数据管理 + 布尔仿真引擎
+├── agent_config.py          # AgentConfig 数据类，YAML 配置加载
+├── instructions.py          # Instruction 分组管理，%%SCENARIO:xxx%% 标记
+├── permissions.py           # 权限枚举 + TOOL_PERMISSIONS + PermissionChecker
+├── retry.py                 # 指数退避重试机制
+├── subagent_manager.py      # 子代理管理器（信号量并发控制）
+├── turing_compactor.py      # 上下文溢出检测 + 智能压实
+├── turing_skills.py         # 技能系统：SkillManager + skills/ 目录管理
 ├── templates/
 │   └── index.html          # 单页应用入口
 ├── static/
@@ -56,34 +63,39 @@ turing-complete/
 │   │   └── utils.js        # 工具模块
 │   └── style/css/
 │       └── styles.css      # 全局样式（赛博朋克风格）
+├── skills/                 # 结构化技能定义（.md 文件）
 ├── turing_to_arduino/      # (见 turing_to_arduino/AGENTS.md) — Arduino 代码转换
 ├── docs/
-│   └── superpowers/        # Arduino 转换器设计文档
+│   └── superpowers/        # 设计文档（specs + 实施计划）
+│       └── plans/          # 各机制的实施方案
+├── agent_config.yaml       # YAML Agent 配置（启动时加载）
+├── ai_config.json          # AI 提供商配置（API Key、模型等）
 ├── circuit_data.json       # 电路持久化文件 (.gitignore)
 ├── modules_data.json       # 自定义模块持久化文件 (.gitignore)
-├── skills.md               # AI 自进化技能库
+├── skills.md               # 自动生成的技能索引（注入 AI 提示词）
 ├── plan.md                 # AI 计划持久化
 ├── summary.md              # AI 会话摘要持久化
-├── requirements.txt        # 依赖清单
+├── requirements.txt        # 依赖清单（flask, requests, pyyaml）
 ├── app.spec                # PyInstaller 打包配置
-├── AI_INSTRUCTIONS.md      # AI 代理指令协议
+├── AI_INSTRUCTIONS.md      # AI 代理指令协议（文本 + JSON 双格式）
 ├── CLAUDE.md               # 编码 LLM 行为指南
-├── agenda.md               # 草稿箱 / TODO
-├── 重构计划.md              # app.py 模块化重构计划
 ├── README.md               # 项目说明
 ├── ROADMAP.md              # 项目路线图
 └── log/                    # AI 对话日志 (JSONL, gitignored)
 ```
 
-### 后端核心模块 (`ai_commands.py`)
+### 后端核心模块
 
-| 组件 | 职责 |
-|------|------|
-| `CircuitManager` | 电路持久化（原子写入）、元件/导线 CRUD |
-| `SimulationContext` | 仿真上下文（elements、wires、depth） |
-| `_simulate_elements_until_stable` | 迭代仿真直到所有信号稳定 |
-| `_calc_and/or/not/output_state` | 各类型元件的状态计算（策略模式） |
-| `_calculate_function_element` | 递归计算嵌套模块（深度上限 10） |
+| 文件 | 组件 | 职责 |
+|------|------|------|
+| `ai_commands.py` | `CircuitManager`, `SimulationContext` | 电路持久化、仿真引擎、指令执行 |
+| `agent_config.py` | `AgentConfig` | Agent 配置数据类，YAML 文件加载 |
+| `instructions.py` | `InstructionGroup`, `InstructionManager` | 指令分组管理，情景标记过滤 |
+| `permissions.py` | `Permission`, `TOOL_PERMISSIONS`, `PermissionChecker` | 工具级权限检查（READ/EXEC/WRITE/ADMIN） |
+| `retry.py` | `exponential_backoff`, `retry_call` | LLM 调用指数退避重试（3 次，最长 32s 间隔） |
+| `subagent_manager.py` | `SubagentManager` | 子代理并发执行（信号量限流，120s 超时） |
+| `turing_compactor.py` | `OverflowDetector`, `ContextCompactor` | Token 估算触发、历史对话智能压实 |
+| `turing_skills.py` | `Skill`, `SkillManager` | 结构化技能加载、skills/ 目录发现 |
 
 ### 后端 API 路由 (`app.py`)
 
@@ -99,6 +111,8 @@ turing-complete/
 | `/api/save-function` | 保存单个自定义模块 |
 | `/api/save-functions` | 批量保存模块列表 |
 | `/api/load-functions` | 加载模块列表 |
+| `/api/subagent` (POST) | 创建并派生子代理任务 |
+| `/api/subagent/<id>` (GET) | 查询子代理任务状态与结果 |
 
 ---
 
@@ -111,9 +125,12 @@ turing-complete/
 1. **快速分类**：先判断用户意图是 `circuit`（需要电路操作）还是 `chat`（日常对话）
 2. **chat 模式**：直接单次 LLM 调用回复，不进自治循环
 3. **circuit 模式**：进入多轮循环：
-   - 每轮读取当前电路状态，构建 system prompt
+   - 每轮读取当前电路状态，构建 system prompt（含指令情景过滤、技能注入）
    - LLM 输出 `<plan> <answer> <commands> <verify> <done>` 结构
    - 流式接收时**逐条实时执行**指令，每执行一条刷新画布
+   - 指令执行前经过**权限检查**（PermissionChecker）
+   - LLM 调用带有**指数退避重试**（3 次，429/5xx 自动恢复）
+   - 每轮结束后：**上下文压实**（OverflowDetector 估算 token，ContextCompactor 压缩历史，保留最近 2 轮）
    - 执行完后自动检查：状态变化、错误、验证用例
    - 如果未完成且未出错，继续下一轮
 
@@ -136,7 +153,7 @@ turing-complete/
 
 ### 系统提示词包含的规则
 
-- **命令上限**：每轮 ≤ 30 条，超出自动截断并提示下轮继续
+- **上下文压实**：每轮结束后自动压实历史对话，保留最近 2 轮完整内容
 - **模块思维**：复杂逻辑先搭建 → DEFINE_FUNC → SET+SAMPLE 验证 → CLEAR → 复用
 - **坐标规则**：输入 x=80、门 x=240、输出 x=560，y 间距 80，后端有重叠自动修正
 - **plan ≤ 80 字**：只写做什么 + 坐标策略，不写原理推导
@@ -210,6 +227,6 @@ turing-complete/
 |------|---------|
 | 启动失败 | 检查 Python 版本和依赖安装 |
 | 端口占用 | `app.py` 最后一行改 `port=5001` |
-| AI 不工作 | 检查 `AI_CONFIG["api_key"]` 和网络连接 |
+| AI 不工作 | 检查 `ai_config.json` 中的 `api_key` 和网络连接 |
 | 电路不计算 | 检查输入端是否都已连线 |
 | 文件损坏 | 删除 `circuit_data.json` 和 `modules_data.json` 重启 |

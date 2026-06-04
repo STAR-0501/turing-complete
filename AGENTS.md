@@ -8,34 +8,43 @@
 
 ```
 ./
-├── app.py                  # (2296L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
-├── ai_commands.py          # (609L)  CircuitManager, simulation engine, command execution
+├── app.py                  # (2615L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
+├── ai_commands.py          # (619L)  CircuitManager, simulation engine, command execution
+├── agent_config.py         # (132L)  AgentConfig dataclass, YAML config loading
+├── instructions.py         # (166L)  InstructionGroup + InstructionManager, %%SCENARIO:xxx%% markers
+├── permissions.py          # (60L)   Permission enum, TOOL_PERMISSIONS map, PermissionChecker
+├── retry.py                # (70L)   exponential_backoff, retry_call wrapper
+├── subagent_manager.py     # (197L)  SubagentManager, semaphore-limited concurrent subagent execution
+├── turing_compactor.py     # (105L)  OverflowDetector + ContextCompactor for context management
+├── turing_skills.py        # (477L)  Skill + SkillManager, skills/ directory management
 ├── templates/
 │   └── index.html          # (121L)  Single-page app shell
 ├── static/
 │   ├── scripts/            # (see static/scripts/AGENTS.md)
-│   │   ├── app.js          # (2780L) Canvas editor: events, tools, drag-drop, state, grid snap
+│   │   ├── app.js          # (2781L) Canvas editor: events, tools, drag-drop, state, grid snap
 │   │   ├── circuit.js      # (334L)  Element evaluation / propagation
 │   │   ├── renderer.js     # (283L)  Canvas draw: elements (text labels), wires, overlays
-│   │   ├── chat.js         # (210L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
+│   │   ├── chat.js         # (488L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
 │   │   ├── elements.js     # (212L)  Element type defs & DOM creation
 │   │   └── utils.js        # (39L)   generateId, distance, isPointOnWire
 │   └── style/css/
 │       └── styles.css      # (779L)
+├── skills/                 # Structured skill .md files (loaded by SkillManager)
 ├── turing_to_arduino/      # (see turing_to_arduino/AGENTS.md) — standalone Python module
 ├── docs/
-│   └── superpowers/        # Arduino converter design docs (plans + specs)
+│   └── superpowers/        # Design docs (plans + specs)
+│       └── plans/           # Implementation plan files per mechanism
+├── agent_config.yaml       # YAML AgentConfig (loaded at startup)
+├── ai_config.json          # AI provider config (API key, model, etc.)
 ├── circuit_data.json       # Persisted circuit state
 ├── modules_data.json       # Persisted custom module blocks
-├── skills.md               # Self-evolving skills base (agent-extracted skills)
+├── skills.md               # Auto-generated flat index of skills/ directory (read into Agent prompts)
 ├── plan.md                 # AI plan persistence (5-mode: Think→Plan→Build→Observe→Sum)
 ├── summary.md              # AI session summary persistence
-├── requirements.txt        # flask, requests
+├── requirements.txt        # flask, requests, pyyaml
 ├── app.spec                # PyInstaller config
-├── AI_INSTRUCTIONS.md      # Command protocol for AI agents
+├── AI_INSTRUCTIONS.md      # Command protocol for AI agents (text + JSON format)
 ├── CLAUDE.md               # Behavioral guidelines for coding LLMs
-├── agenda.md               # Scratchpad / TODO
-├── 重构计划.md              # Chinese refactoring plan (app.py modularization)
 ├── README.md               # Project readme (150L)
 ├── ROADMAP.md              # Project roadmap (25L)
 └── log/                    # AI conversation logs (JSONL, gitignored)
@@ -43,6 +52,7 @@
 
 > **Note:** `src/` and `tests/` directories exist but contain only `__pycache__` (no source files).
 > Committed source is what matters — see files above.
+> `circuit_data copy.json` (stale), `agenda.md` (doesn't exist), `重构计划.md` (deleted) — no longer present.
 
 ## Where To Look
 
@@ -58,7 +68,13 @@
 | Add/change module blocks | `ai_commands.py` + frontend `elements.js` | Both sides need updates |
 | Change AI 5-mode loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Think→Plan→Build→Observe→Sum |
 | AI plan/summary persistence | `app.py`: `PLAN_FILE` / `SUMMARY_FILE` | Atomic markdown writes to plan.md/summary.md |
-| AI self-evolution / skills system | `app.py`: `SKILLS_FILE` / `_merge_skills()` / `skills.md` | Agent `<skills>` block → extracted, deduped, persisted to skills.md |
+| AI self-evolution / skills system | `turing_skills.py` + `skills/` + `skills.md` | SkillManager reads skills/ dir; skills.md auto-generated index read into prompts |
+| Agent config (provider, model) | `agent_config.py` + `agent_config.yaml` + `ai_config.json` | YAML schema config + JSON provider config loaded at startup |
+| Context compaction | `turing_compactor.py` + `app.py` agent loop | OverflowDetector → ContextCompactor replaces MAX_CONTEXT_LEN=30 truncation |
+| Permission checks | `permissions.py` + `app.py` `execute_circuit_command` | Permission enum, TOOL_PERMISSIONS map, gate on agent tool calls |
+| Subagent system | `subagent_manager.py` + `app.py` `/api/subagent` routes | SPAWN_SUBAGENT/CHECK_SUBAGENT/WAIT_SUBAGENT commands |
+| Retry & backoff | `retry.py` + `app.py` `_call_llm_once`/`_call_llm_streaming` | exponential_backoff wrapping for 429/5xx errors |
+| Instruction scenarios | `instructions.py` + `AI_INSTRUCTIONS.md` | %%SCENARIO:always/test/debug/module/optimize%% markers |
 | Circuit pattern auto-detection | `app.py`: `_detect_circuit_pattern()` / `KNOWN_CIRCUIT_PATTERNS` | AI declares done=true → match topology → auto DEFINE_MODULE |
 | Streaming command execution | `app.py`: `_feed_stream_commands` | Real-time build execution during LLM streaming |
 | Conversation logging | `app.py`: `_log_conversation` | JSONL logs in `log/` (gitignored) |
@@ -70,9 +86,9 @@
 | Agent prompt suggestions | `chat.js`: `agentPromptSuggestions` / `index.html` | "AI注释"/"AI整理" buttons above textarea when empty |
 | Agent textarea input | `chat.js`: `keydown` handler | Multi-line textarea, Ctrl+Enter to send, Enter for newline |
 | Agent sidebar resize | `chat.js`: resize handle + `styles.css` | Left-edge drag handle to adjust width (280–600px) |
-| Conversation history API | `app.py`: `list_conversations()` / `get_conversation()` | `GET /api/conversations` 列表 + `GET /api/conversations/<id>` 消息 |
-| Conversation selector UI | `chat.js`: `loadConversationList()` / `loadConversationMessages()` + `index.html` | Agent header 下拉框切换 log/ 目录下的历史对话 |
-| SSE session marker | `app.py`: `/api/chat` `generate()` | 流首行 `__TC_SESSION__:{id}` 标记，前端自动追踪当前会话 |
+| Conversation history API | `app.py`: `list_conversations()` / `get_conversation()` | `GET /api/conversations` list + `GET /api/conversations/<id>` messages |
+| Conversation selector UI | `chat.js`: `loadConversationList()` / `loadConversationMessages()` + `index.html` | Agent header dropdown switching log/ conversation history |
+| SSE session marker | `app.py`: `/api/chat` `generate()` | First SSE line `__TC_SESSION__:{id}` marker; frontend tracks current session |
 
 ## Conventions
 
@@ -85,7 +101,7 @@
 - **Frontend global state:** module-level `let` vars in `app.js`
 - **No type hints in JS;** Python uses minimal type hints
 - **Flask routes** return `jsonify()` for API, `render_template()` for page
-- **AI config** hardcoded in `app.py` `AI_CONFIG` dict (DeepSeek API)
+- **AI config** loaded from `ai_config.json` (JSON, `_AI_CONFIG_DEFAULTS` fallback) + `agent_config.yaml` (YAML, `AgentConfig` dataclass)
 - **Data persistence** via atomic JSON writes (`_atomic_write_json`)
 - **SSE streaming** for AI responses (`text/event-stream`)
 - **CSS** in Chinese comments; single stylesheet
@@ -96,7 +112,7 @@
 
 - **Duplicated `_atomic_write_json`** (`app.py` and `ai_commands.py` both define it)
 - **Duplicated `build_io_summary`-like logic** across backend files
-- **API key hardcoded** in `app.py` `AI_CONFIG` (committed to git)
+- **AI config redundancy** — `ai_config.json` + `agent_config.yaml` coexist; `AI_CONFIG` dict in `app.py` deprecated but still present
 - **Frontend coupling:** `app.js` imports from `chat.js` at module level (potential circular refs)
 - **Mixed comment languages** (Chinese + English in same files, inconsistent)
 - **No error boundaries** in JS — canvas operations assume valid state
@@ -133,8 +149,10 @@ pip install -r requirements.txt   # install deps
 - "深度思考" toggle enables AI reasoning mode (`reasoning_effort: high`)
 - Grid snap (20px) is always active; grid visual syncs with camera via `syncGridToCamera()`
 - Element rendering uses text labels (AND/OR/NOT/IN/OUT) centered in the element box
-- Agent input is a `<textarea>` with auto-height; send via `Ctrl+Enter`, newline via `Enter`
-- Prompt suggestion buttons ("AI注释"/"AI整理") appear above input when empty, fill predefined text on click
-- "深度思考" toggle enables AI reasoning mode (`reasoning_effort: high`)
-- Grid snap (20px) is always active; grid visual syncs with camera via `syncGridToCamera()`
-- Element rendering uses text labels (AND/OR/NOT/IN/OUT) centered in the element box
+- **Context compaction** runs at end of each agent round: `OverflowDetector` checks token estimate → `ContextCompactor` summarizes older rounds while preserving last 2
+- **Permission system** gates all `execute_circuit_command()` calls: READ/WRITE/ADMIN levels, checked via `PermissionChecker.check_tool()`
+- **Subagent system** spawns concurrent LLM calls with `SubagentManager` (semaphore-limited), polled via `CHECK_SUBAGENT`/`WAIT_SUBAGENT` commands
+- **Retry mechanism** wraps `_call_llm_once` and `_call_llm_streaming` with exponential backoff (3 retries, max 32s interval)
+- **Skill system** uses `SkillManager` to load structured skills from `skills/` directory; `skills.md` is auto-generated flat index for prompt injection
+- **Instruction scenarios** use `%%SCENARIO:xxx%%` markers in `AI_INSTRUCTIONS.md` — 5 groups: always, test, debug, module, optimize
+- **Schema config** loaded via `AgentConfig.from_yaml()` at startup from `agent_config.yaml`

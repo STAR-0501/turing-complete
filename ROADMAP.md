@@ -1,3 +1,15 @@
+## Agent 机制增强（2026-06-04 已全部实现）
+
+1. ✅ **上下文压实** — turing_compactor.py：OverflowDetector + ContextCompactor 替代原有粗暴截断
+2. ✅ **权限系统** — permissions.py：Permission 枚举 + TOOL_PERMISSIONS + PermissionChecker
+3. ✅ **子代理系统** — subagent_manager.py：信号量并发控制、SPAWN/CHECK/WAIT 指令
+4. ✅ **重试与退避** — retry.py：exponential_backoff 包装 LLM 调用，429/5xx 自动恢复
+5. ✅ **技能系统** — turing_skills.py：结构化技能定义、SkillManager、skills/ 目录发现
+6. ✅ **指令系统** — instructions.py：InstructionGroup + %%SCENARIO:xxx%% 情景标记
+7. ✅ **配置治理** — agent_config.py + agent_config.yaml：AgentConfig 数据类 + YAML 加载
+
+---
+
 1. 修改函数内容
 2. 增强AI能力
 3. 界面导出/导入
