@@ -18,6 +18,7 @@ from permissions import PermissionChecker, Permission
 from retry import retry_call
 from turing_skills import Skill, SkillManager
 from instructions import InstructionManager
+from agent_config import get_agent_config, AgentConfig
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -78,6 +79,10 @@ def is_ai_configured():
     cfg = get_ai_config()
     key = cfg.get("api_key", "")
     return bool(key) and key != "YOUR_API_KEY_HERE"
+
+
+# Unified agent config (YAML-based, for new mechanisms)
+agent_cfg: AgentConfig = get_agent_config()
 
 
 def _build_api_url(endpoint, base_url=None):

@@ -1,0 +1,28 @@
+# Agent Configuration for Turing Complete
+# All settings have defaults — this file is optional.
+
+agent:
+  model:
+    name: deepseek-v4-flash
+    max_tokens: 4000
+    temperature: 0.7
+
+  retry:
+    max_retries: 3
+    base_delay: 1.0
+    max_delay: 30.0
+
+  context:
+    soft_limit_tokens: 32000
+    hard_limit_tokens: 48000
+
+  permissions:
+    default_level: write  # read | exec | write | admin
+
+  skills:
+    dir: skills
+    auto_discover: true
+
+  subagent:
+    max_concurrent: 3
+    default_timeout: 120
