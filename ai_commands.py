@@ -224,6 +224,17 @@ class CircuitManager:
         normalized = self._normalize_data(data)
         return normalized
 
+    def export_snapshot(self):
+        """Export full circuit snapshot including elements, wires, and module definitions."""
+        data = self._load_data()
+        normalized = self._normalize_data(data)
+        modules = self._load_modules()
+        return {
+            "elements": normalized.get("elements", []),
+            "wires": normalized.get("wires", []),
+            "modules": modules
+        }
+
     def _get_element_template(self, element_type):
         if element_type == 'AND':
             return {

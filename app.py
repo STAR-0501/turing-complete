@@ -5,6 +5,7 @@ import os
 import logging
 import sys
 from ai_commands import CircuitManager
+from subagent_manager import SubagentManager
 import re
 import requests
 import tempfile
@@ -130,6 +131,8 @@ LOG_DIR = os.path.join(BASE_DIR, 'log')
 circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, MODULES_DATA_FILE)
 # 权限检查器（默认 WRITE：允许读写仿真和添加，禁止删除/清除）
 perm_checker = PermissionChecker(level=Permission.WRITE)
+# 子代理管理器（并发执行独立电路任务）
+subagent_manager = SubagentManager()
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
 
@@ -2819,6 +2822,37 @@ def detect_boards_api():
     except Exception as e:
         logger.error("检测 Arduino 板子失败: %s", e)
         return jsonify({"boards": [], "error": str(e)})
+
+
+@app.route('/api/subagent', methods=['POST'])
+def api_create_subagent():
+    """Create a new subagent task for parallel circuit execution."""
+    try:
+        data = request.json
+        if not data or 'goal' not in data:
+            return jsonify({'status': 'error', 'message': 'Missing goal'}), 400
+        goal = data['goal']
+        snapshot = data.get('circuit_snapshot')
+        if snapshot is None:
+            snapshot = circuit_manager.export_snapshot()
+        task_id = subagent_manager.create(goal, snapshot)
+        return jsonify({'subagent_id': task_id, 'status': 'running'})
+    except Exception as e:
+        logger.error("创建子代理失败: %s", e)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/subagent/<task_id>', methods=['GET'])
+def api_get_subagent(task_id):
+    """Query subagent task status and result."""
+    try:
+        status = subagent_manager.get_status(task_id)
+        if status is None:
+            return jsonify({'status': 'error', 'message': 'Subagent not found'}), 404
+        return jsonify(status)
+    except Exception as e:
+        logger.error("查询子代理状态失败: %s", e)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 if __name__ == '__main__':

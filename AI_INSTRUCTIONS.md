@@ -58,6 +58,33 @@ WIRE g1 0 g2 1
 - 后续所有引用位置都可直接使用 alias
 - 支持大小写匹配及 `$` 前缀引用
 
+### 2.4 子代理指令（Subagent Commands）
+
+子代理（Subagent）是轻量级的一次性 Agent 实例，由主 Agent 派发用于执行并行电路任务。每个子代理拥有独立的会话上下文，可携带当前电路快照，执行完毕后返回结果。
+
+| 文本格式 | 说明 |
+|----------|------|
+| `SPAWN_SUBAGENT <goal>` | 派发子代理执行独立任务。自动携带当前电路快照。返回 `subagent_id`。 |
+| `CHECK_SUBAGENT <id>` | 查询子代理执行状态。返回 `running` / `completed` / `failed` 及结果。 |
+| `WAIT_SUBAGENT <id>` | 循环查询子代理直到 `completed` 或 `failed`，然后返回结果。 |
+
+**使用示例：**
+
+1. 主代理继续搭建电路的同时，派发子代理验证模块：
+   ```
+   SPAWN_SUBAGENT 验证HalfAdder模块真值表：A=0,B=1时 SUM=1,CARRY=0
+   ```
+
+2. 查询子代理状态：
+   ```
+   CHECK_SUBAGENT sa_abc123def456
+   ```
+
+3. 等待子代理完成：
+   ```
+   WAIT_SUBAGENT sa_abc123def456
+   ```
+
 ---
 
 ## 3. 反馈系统（v2）
