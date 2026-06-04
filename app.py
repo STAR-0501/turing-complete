@@ -12,6 +12,7 @@ import time
 import threading
 import copy
 import uuid
+from turing_compactor import OverflowDetector, ContextCompactor
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -2397,10 +2398,8 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
                     )
                 })
 
-            MAX_CONTEXT_LEN = 30
-            if len(request_messages) > MAX_CONTEXT_LEN:
-                request_messages = [request_messages[0]] + \
-                    request_messages[-(MAX_CONTEXT_LEN - 1):]
+            if OverflowDetector().should_compact(request_messages):
+                request_messages = ContextCompactor().compact(request_messages)
 
         yield STREAM_ANSWER_MARKER
         final_output = final_answer_text.strip() if final_answer_text else "已完成处理。"
