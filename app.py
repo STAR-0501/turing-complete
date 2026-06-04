@@ -13,6 +13,7 @@ import threading
 import copy
 import uuid
 from turing_compactor import OverflowDetector, ContextCompactor
+from permissions import PermissionChecker, Permission
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -127,6 +128,8 @@ LOG_DIR = os.path.join(BASE_DIR, 'log')
 
 # 初始化电路管理器
 circuit_manager = CircuitManager(CIRCUIT_DATA_FILE, MODULES_DATA_FILE)
+# 权限检查器（默认 WRITE：允许读写仿真和添加，禁止删除/清除）
+perm_checker = PermissionChecker(level=Permission.WRITE)
 
 # 初始化：如果文件不存在，创建一个空的电路数据文件
 
@@ -607,6 +610,10 @@ def execute_circuit_command(cmd, params):
     """
     执行命令并返回结果的辅助模块
     """
+    # 权限检查
+    allowed, err = perm_checker.check(cmd)
+    if not allowed:
+        raise PermissionError(err)
     if cmd == 'add_element':
         return circuit_manager.add_element(params['type'], params['x'], params['y'], params.get('alias'))
     elif cmd == 'remove_element':
