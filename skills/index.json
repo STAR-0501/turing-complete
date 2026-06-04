@@ -1,0 +1,148 @@
+{
+  "cp-fulladder": {
+    "id": "cp-fulladder",
+    "name": "Full Adder Circuit Pattern",
+    "description": "全加器 — 三个输入（A, B, CarryIn）相加，输出 SUM 与 CARRY",
+    "content": "- **用途**: 全加器 — 三个输入（A, B, CarryIn）相加，输出 SUM 与 CARRY\n- **输入**: A, B, CarryIn\n- **输出**: SUM, CARRY\n- **实现**: 2×HalfAdder + 1×OR（自动检测到 HalfAdder 后会一并注册）\n- **构建命令** (~15 条):\n  ```\n  ADD XOR 240 60 fa_xor1\n  ADD AND 240 140 fa_and1\n  WIRE $input1 0 fa_xor1 0\n  WIRE $input2 0 fa_xor1 1\n  WIRE $input1 0 fa_and1 0\n  WIRE $input2 0 fa_and1 1\n  ADD XOR 400 60 fa_xor2\n  ADD AND 400 140 fa_and2\n  WIRE fa_xor1 0 fa_xor2 0\n  WIRE $input3 0 fa_xor2 1\n  WIRE fa_xor1 0 fa_and2 0\n  WIRE $input3 0 fa_and2 1\n  ADD OR 560 140 fa_or\n  WIRE fa_and1 0 fa_or 0\n  WIRE fa_and2 0 fa_or 1\n  DEFINE_MODULE FullAdder\n  ```\n- **验证** (8 用例):\n  ```\n  000→SUM=0,CARRY=0  001→SUM=1,CARRY=0  010→SUM=1,CARRY=0  011→SUM=0,CARRY=1\n  100→SUM=1,CARRY=0  101→SUM=0,CARRY=1  110→SUM=0,CARRY=1  111→SUM=1,CARRY=1\n  ```\n- **复用**: 注册后可用 `ADD MODULE <x> <y> <alias> FullAdder`",
+    "tags": [
+      "circuit",
+      "pattern",
+      "full-adder"
+    ],
+    "source_url": null,
+    "checksum": "223d32816ee085b024e7e54d7cded4259a7e7b65f71a0a5da61faaac5d25b849"
+  },
+  "cp-halfadder": {
+    "id": "cp-halfadder",
+    "name": "Half Adder Circuit Pattern",
+    "description": "半加器 — 两个输入位相加，输出 SUM（和）与 CARRY（进位）",
+    "content": "- **用途**: 半加器 — 两个输入位相加，输出 SUM（和）与 CARRY（进位）\n- **输入**: A, B\n- **输出**: SUM, CARRY\n- **实现**: 1×XOR + 1×AND\n- **构建命令** (~6 条):\n  ```\n  ADD XOR 240 60 ha_xor\n  ADD AND 240 140 ha_and\n  WIRE $input1 0 ha_xor 0\n  WIRE $input2 0 ha_xor 1\n  WIRE $input1 0 ha_and 0\n  WIRE $input2 0 ha_and 1\n  DEFINE_MODULE HalfAdder\n  ```\n- **验证** (4 用例):\n  ```\n  00→SUM=0,CARRY=0  01→SUM=1,CARRY=0  10→SUM=1,CARRY=0  11→SUM=0,CARRY=1\n  ```\n- **复用**: 注册后可用 `ADD MODULE <x> <y> <alias> HalfAdder`",
+    "tags": [
+      "circuit",
+      "pattern",
+      "half-adder"
+    ],
+    "source_url": null,
+    "checksum": "83d8160489be36e25383f85113d25e9f7c9fb2e0ec3ebb0f838266b1ee510564"
+  },
+  "skill-arch-1": {
+    "id": "skill-arch-1",
+    "name": "5-Mode Agent Loop Structure",
+    "description": "AI agent performing autonomous circuit building",
+    "content": "- **Context**: AI agent performing autonomous circuit building.\n- **What**: Always use the cycle: `<think>` (analyze) → `<plan>` (break down) → `<build>` (execute commands) → `<observe>` (test/verify) → `<sum>` (summarize). Repeat until `<done>true</done>`.\n- **Why**: This separates reasoning from action, enables verification, and provides session continuity via plan.md/summary.md persistence.\n- **Example**: Each round produces all 5 sections; system processes each section independently.",
+    "tags": [
+      "architecture",
+      "agent",
+      "loop"
+    ],
+    "source_url": null,
+    "checksum": "e8bdd3b77fe8be94ff8b8951a398de22b89c06469d80973edbba3764388b9cf6"
+  },
+  "skill-arch-2": {
+    "id": "skill-arch-2",
+    "name": "State Change Markers for Frontend Sync",
+    "description": "SSE streaming from Flask to frontend canvas",
+    "content": "- **Context**: SSE streaming from Flask to frontend canvas.\n- **What**: After each successful state mutation command, yield `__TC_STATE_CHANGED__` marker. Frontend listens for this marker and re-fetches circuit state.\n- **Why**: Without explicit markers, the frontend canvas shows stale data. The marker is the only reliable trigger for canvas refresh.\n- **Example**: `yield STREAM_STATE_CHANGED_MARKER` after successful `add_element`/`add_wire`/`toggle_input`.",
+    "tags": [
+      "architecture",
+      "sse",
+      "frontend",
+      "sync"
+    ],
+    "source_url": null,
+    "checksum": "1f52d8dacc9a48d112134e6fdc81035990a7740755111cafeb842324c993b2a3"
+  },
+  "skill-arch-3": {
+    "id": "skill-arch-3",
+    "name": "Session Continuity via Persisted Plan/Summary",
+    "description": "Multi-round AI agent sessions that may be interrupted",
+    "content": "- **Context**: Multi-round AI agent sessions that may be interrupted.\n- **What**: Persist `<plan>` content to `plan.md` and `<sum>` content to `summary.md` after each round. Load both at session start.\n- **Why**: Enables recovery from interruption, gives AI full context across rounds, and supports long-running circuit building tasks.\n- **Example**: `_atomic_write_md(PLAN_FILE, plan_text)` + `_atomic_write_md(SUMMARY_FILE, sum_text)`.",
+    "tags": [
+      "architecture",
+      "session",
+      "persistence"
+    ],
+    "source_url": null,
+    "checksum": "9f0704975a37593569736be3498e7301cff8ea0b3168fdd47ae05ce8016b796d"
+  },
+  "skill-be-1": {
+    "id": "skill-be-1",
+    "name": "Atomic File Writes Prevent Corruption",
+    "description": "Writing JSON/markdown state files on any platform",
+    "content": "- **Context**: Writing JSON/markdown state files on any platform.\n- **What**: Always write to a temp file first, then `os.replace()` to atomically swap. Clean up stale `.tmp.*` files before writing.\n- **Why**: Direct writes risk file corruption on crash or concurrent access. Atomic swap ensures the file is always in a valid state.\n- **Example**: `_atomic_write_json()` / `_atomic_write_md()` pattern.",
+    "tags": [
+      "backend",
+      "io",
+      "atomic",
+      "persistence"
+    ],
+    "source_url": null,
+    "checksum": "ee7f3ef6e680b06d9b5ed4a6639d251015f7d3c1a506a5f5f3923bab8a4c4dbf"
+  },
+  "skill-be-2": {
+    "id": "skill-be-2",
+    "name": "Streaming Response Context Must Stay Alive",
+    "description": "Flask SSE endpoints that execute long-running agent loops",
+    "content": "- **Context**: Flask SSE endpoints that execute long-running agent loops.\n- **What**: The `request` context and `g` object are NOT available in background threads or streaming generators after the request handler returns. Pass all needed context explicitly as module parameters.\n- **Why**: Accessing `request` or `g` inside a generator that yields after the handler exits causes \"Working outside of request context\" RuntimeError.\n- **Example**: Extract `user_message` from `request.json` before entering the generator, pass as parameter.",
+    "tags": [
+      "backend",
+      "sse",
+      "streaming",
+      "flask"
+    ],
+    "source_url": null,
+    "checksum": "bde734254b2c03cbb3192e8c14d770cd657d9503ac42a50e41505d900d4989af"
+  },
+  "skill-dbg-1": {
+    "id": "skill-dbg-1",
+    "name": "File Write Conflicts Under Concurrency",
+    "description": "Windows environment, Flask with multiple concurrent request handlers accessing the same JSON file",
+    "content": "- **Context**: Windows environment, Flask with multiple concurrent request handlers accessing the same JSON file (`circuit_data.json`, `MODULEs_data.json`).\n- **What**: Use a `threading.Lock()` to serialize all file write operations. Never assume single-threaded access in a web server context.\n- **Why**: Without a lock, concurrent `_atomic_write_json` calls cause \"拒绝访问\" (access denied) errors on Windows, corrupting data silently.\n- **Example**: `_data_io_lock = threading.Lock()` + `_locked_write_json(path, data)` wrapper.",
+    "tags": [
+      "debugging",
+      "windows",
+      "concurrency"
+    ],
+    "source_url": null,
+    "checksum": "c4a773a8c669d88df08b3c54153ad9d4b71051bf9cf77ed463cdca41b9e156f2"
+  },
+  "skill-dbg-2": {
+    "id": "skill-dbg-2",
+    "name": "Alias Must Share Scope With All Commands in a Build Block",
+    "description": "AI agent building circuits with ADD and WIRE commands using aliases",
+    "content": "- **Context**: AI agent building circuits with `ADD <type> <x> <y> <alias>` then `WIRE <alias> ...`.\n- **What**: Execute ALL build commands in a single `_execute_commands_with_alias()` call so the alias map is built incrementally per command.\n- **Why**: Per-command execution resets the alias map each time, breaking `$last` and named alias references across wire commands.\n- **Example**: Buffer all `<build>` lines, then `_execute_commands_with_alias(buffer)` once.",
+    "tags": [
+      "debugging",
+      "alias",
+      "build"
+    ],
+    "source_url": null,
+    "checksum": "db8e4840180ec9f95f177c9224e54f0784433a459c6ab00681d3ddffa105ced3"
+  },
+  "skill-dbg-3": {
+    "id": "skill-dbg-3",
+    "name": "Dual Execution Paths Cause Repeats",
+    "description": "Streaming command executor and post-hoc fallback both run on the same LLM output",
+    "content": "- **Context**: Streaming command executor (`_feed_stream_commands`) and post-hoc fallback (`_execute_commands_text`) both run on the same LLM output.\n- **What**: Track whether streaming executed any commands. If yes, skip post-hoc fallback entirely.\n- **Why**: Both paths operating on the same build tags cause duplicate circuit elements and broken state.\n- **Example**: `if executed_command_count > 0: skip post-hoc`.",
+    "tags": [
+      "debugging",
+      "streaming",
+      "execution"
+    ],
+    "source_url": null,
+    "checksum": "02dd5975f247f1c78e182d8a3841b1e34a523be9b038ef561690f040949445cf"
+  },
+  "skill-fe-1": {
+    "id": "skill-fe-1",
+    "name": "Cache Busting for Static Files",
+    "description": "Flask serves static files without hashing; browser aggressively caches JS/CSS",
+    "content": "- **Context**: Flask serves static files without hashing; browser aggressively caches JS/CSS.\n- **What**: Add `?v=N` version query parameter to `<script>`/`<link>` tags after every meaningful JS/CSS change. Number up monotonically.\n- **Why**: Without cache busting, testers/developers see stale behavior and waste time debugging phantom issues.\n- **Example**: `src=\"/static/scripts/chat.js?v=2\"`.",
+    "tags": [
+      "frontend",
+      "caching",
+      "static"
+    ],
+    "source_url": null,
+    "checksum": "6f4e939da5d9fba5bb0c16137c25927704ad986819009985d1abf0dfaaac7d06"
+  }
+}

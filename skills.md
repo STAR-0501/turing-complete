@@ -1,6 +1,6 @@
 # Agent Skills (Self-Evolving Knowledge Base)
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-06-04_
 _Total skills: 11_
 
 > Skills are distilled, general-purpose knowledge extracted from agent work sessions.
@@ -73,7 +73,7 @@ _Total skills: 11_
 
 ### Skill-BE-2: Streaming Response Context Must Stay Alive
 - **Context**: Flask SSE endpoints that execute long-running agent loops.
-- **What**: The `request` context and `g` object are NOT available in background threads or streaming generators after the request handler returns. Pass all needed context explicitly as MODULE parameters.
+- **What**: The `request` context and `g` object are NOT available in background threads or streaming generators after the request handler returns. Pass all needed context explicitly as module parameters.
 - **Why**: Accessing `request` or `g` inside a generator that yields after the handler exits causes "Working outside of request context" RuntimeError.
 - **Example**: Extract `user_message` from `request.json` before entering the generator, pass as parameter.
 
@@ -81,30 +81,7 @@ _Total skills: 11_
 
 ## Circuit Patterns
 
-> 可复用子电路的构建方法和验证用例。当这些模式被自动识别并注册为模块后，可以直接用 `ADD MODULE <x> <y> <alias> <pattern_name>` 一行命令完成。
-
-### CP-HalfAdder
-- **用途**: 半加器 — 两个输入位相加，输出 SUM（和）与 CARRY（进位）
-- **输入**: A, B
-- **输出**: SUM, CARRY
-- **实现**: 1×XOR + 1×AND
-- **构建命令** (~6 条):
-  ```
-  ADD XOR 240 60 ha_xor
-  ADD AND 240 140 ha_and
-  WIRE $input1 0 ha_xor 0
-  WIRE $input2 0 ha_xor 1
-  WIRE $input1 0 ha_and 0
-  WIRE $input2 0 ha_and 1
-  DEFINE_MODULE HalfAdder
-  ```
-- **验证** (4 用例):
-  ```
-  00→SUM=0,CARRY=0  01→SUM=1,CARRY=0  10→SUM=1,CARRY=0  11→SUM=0,CARRY=1
-  ```
-- **复用**: 注册后可用 `ADD MODULE <x> <y> <alias> HalfAdder`
-
-### CP-FullAdder
+### CP-Fulladder: Full Adder Circuit Pattern
 - **用途**: 全加器 — 三个输入（A, B, CarryIn）相加，输出 SUM 与 CARRY
 - **输入**: A, B, CarryIn
 - **输出**: SUM, CARRY
@@ -134,6 +111,27 @@ _Total skills: 11_
   100→SUM=1,CARRY=0  101→SUM=0,CARRY=1  110→SUM=0,CARRY=1  111→SUM=1,CARRY=1
   ```
 - **复用**: 注册后可用 `ADD MODULE <x> <y> <alias> FullAdder`
+
+### CP-Halfadder: Half Adder Circuit Pattern
+- **用途**: 半加器 — 两个输入位相加，输出 SUM（和）与 CARRY（进位）
+- **输入**: A, B
+- **输出**: SUM, CARRY
+- **实现**: 1×XOR + 1×AND
+- **构建命令** (~6 条):
+  ```
+  ADD XOR 240 60 ha_xor
+  ADD AND 240 140 ha_and
+  WIRE $input1 0 ha_xor 0
+  WIRE $input2 0 ha_xor 1
+  WIRE $input1 0 ha_and 0
+  WIRE $input2 0 ha_and 1
+  DEFINE_MODULE HalfAdder
+  ```
+- **验证** (4 用例):
+  ```
+  00→SUM=0,CARRY=0  01→SUM=1,CARRY=0  10→SUM=1,CARRY=0  11→SUM=0,CARRY=1
+  ```
+- **复用**: 注册后可用 `ADD MODULE <x> <y> <alias> HalfAdder`
 
 ---
 

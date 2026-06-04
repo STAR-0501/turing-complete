@@ -16,6 +16,7 @@ import uuid
 from turing_compactor import OverflowDetector, ContextCompactor
 from permissions import PermissionChecker, Permission
 from retry import retry_call
+from turing_skills import Skill, SkillManager
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -125,6 +126,8 @@ MODULES_DATA_FILE = os.path.join(BASE_DIR, 'modules_data.json')
 PLAN_FILE = os.path.join(BASE_DIR, 'plan.md')
 SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
 SKILLS_FILE = os.path.join(BASE_DIR, 'skills.md')
+# 结构化技能管理器
+skill_manager = SkillManager(skills_dir="skills", base_dir=BASE_DIR)
 # 日志文件夹
 LOG_DIR = os.path.join(BASE_DIR, 'log')
 
@@ -186,14 +189,18 @@ def init_summary_file():
 
 
 def init_skills_file():
-    if not os.path.exists(SKILLS_FILE):
-        try:
-            with open(SKILLS_FILE, 'w', encoding='utf-8') as f:
-                f.write(
-                    "# Agent Skills (Self-Evolving Knowledge Base)\n\n_Last updated: 2026-05-14_\n_Total skills: 0_\n\n")
+    """初始化技能系统。使用 SkillManager 确保 skills/ 目录存在并生成 skills.md 索引。"""
+    try:
+        # SkillManager 已在模块级别初始化，这里确保索引文件存在
+        global skill_manager
+        if not os.path.exists(SKILLS_FILE):
+            skill_manager.regenerate_index_md(SKILLS_FILE)
             logger.info("已创建自学技能文件: %s", SKILLS_FILE)
-        except Exception as e:
-            logger.error("创建技能文件失败: %s", e)
+        if not os.path.exists(os.path.join(BASE_DIR, 'skills', 'index.json')):
+            skill_manager._save_index()
+            logger.info("已创建技能索引: skills/index.json")
+    except Exception as e:
+        logger.error("初始化技能系统失败: %s", e)
 
 
 def _atomic_write_md(path, content):
@@ -1330,6 +1337,8 @@ def _merge_skills(new_skills_text, existing_skills_text):
         return None
 
     # 从新内容中提取技能标题（### Skill-*）
+    new_headers = set(re.findall(
+        r'^###\s+(Skill-[\w-]+)', new_skills_text, re.MULTILINE))
     if not new_headers:
         # 新文本中未找到有效技能
         return None
@@ -2031,7 +2040,10 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
         # 加载持久化文件（plan.md、summary.md、skills.md），实现跨会话连续性
         plan_content = _load_md_file(PLAN_FILE)
         summary_content = _load_md_file(SUMMARY_FILE)
-        skills_content = _load_md_file(SKILLS_FILE)
+        # Use SkillManager to build skills section; fall back to raw file for backward compat
+        skills_content = skill_manager.build_prompt_section()
+        if not skills_content:
+            skills_content = _load_md_file(SKILLS_FILE)
         # 用于收集每轮的 plan/summary 内容
         plan_text_accumulator = ""
         sum_text_accumulator = ""
@@ -2310,15 +2322,29 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
             raw_skills_text = _extract_tag_text(full_content, "skills")
             if raw_skills_text and raw_skills_text.strip():
                 logger.info(
-                    "[Round %d] 发现 <skills> 块，尝试合并到 skills.md", round_idx)
+                    "[Round %d] 发现 <skills> 块，尝试合并到技能系统", round_idx)
+                # 1. 解析 <skills> 块为 Skill 对象
+                new_parsed = SkillManager.parse_skills_block(raw_skills_text)
+                any_changed = False
+                for new_skill in new_parsed:
+                    if skill_manager.merge(new_skill):
+                        any_changed = True
+                        logger.info(
+                            "  新增/更新技能: %s", new_skill.id)
+                # 2. 同时更新 flat skills.md（向后兼容）
                 existing_skills = _load_md_file(SKILLS_FILE)
                 merged = _merge_skills(raw_skills_text, existing_skills)
                 if merged is not None:
-                    _atomic_write_md(SKILLS_FILE, merged)
-                    skills_content = merged
-                    logger.info("已更新 skills.md (自学进化)")
+                    # Regenerate from structured index for consistency
+                    skill_manager.regenerate_index_md(SKILLS_FILE)
+                    skills_content = skill_manager.build_prompt_section()
+                    logger.info("已更新技能系统 (结构化+索引)")
+                elif any_changed:
+                    skill_manager.regenerate_index_md(SKILLS_FILE)
+                    skills_content = skill_manager.build_prompt_section()
+                    logger.info("已更新结构化技能文件并重新生成索引")
                 else:
-                    logger.info("skills.md 无变化（技能已存在或格式无效）")
+                    logger.info("技能无变化（已存在或格式无效）")
 
             # answer 回退
             if not answer_text:
