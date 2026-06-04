@@ -15,6 +15,7 @@ import copy
 import uuid
 from turing_compactor import OverflowDetector, ContextCompactor
 from permissions import PermissionChecker, Permission
+from retry import retry_call
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -1717,60 +1718,74 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
 
 
 def _call_llm_once(system_prompt, request_messages):
-    protocol = _get_ai_protocol()
-    if protocol == "anthropic":
-        request_url = _build_api_url('/v1/messages')
-        request_headers = {
-            "x-api-key": get_ai_config()['api_key'],
-            "anthropic-version": get_ai_config().get("anthropic_version", "2023-06-01"),
-            "Content-Type": "application/json"
-        }
-        request_payload = {
-            "model": get_ai_config()["model"],
-            "system": system_prompt,
-            "messages": request_messages,
-            "temperature": 0.2,
-            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
-            "stream": False
-        }
-    else:
-        request_url = _build_api_url('/chat/completions')
-        request_headers = {
-            "Authorization": f"Bearer {get_ai_config()['api_key']}",
-            "Content-Type": "application/json"
-        }
-        request_payload = {
-            "model": get_ai_config()["model"],
-            "messages": [{"role": "system", "content": system_prompt}] + request_messages,
-            "temperature": 0.2,
-            "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
-            "stream": False
-        }
-    connect_timeout = float(get_ai_config().get("connect_timeout", 10))
-    read_timeout = float(get_ai_config().get("read_timeout", 180))
-    response = requests.post(
-        request_url,
-        headers=request_headers,
-        json=request_payload,
-        timeout=(connect_timeout, read_timeout)
+    def _do_call():
+        protocol = _get_ai_protocol()
+        if protocol == "anthropic":
+            request_url = _build_api_url('/v1/messages')
+            request_headers = {
+                "x-api-key": get_ai_config()['api_key'],
+                "anthropic-version": get_ai_config().get("anthropic_version", "2023-06-01"),
+                "Content-Type": "application/json"
+            }
+            request_payload = {
+                "model": get_ai_config()["model"],
+                "system": system_prompt,
+                "messages": request_messages,
+                "temperature": 0.2,
+                "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
+                "stream": False
+            }
+        else:
+            request_url = _build_api_url('/chat/completions')
+            request_headers = {
+                "Authorization": f"Bearer {get_ai_config()['api_key']}",
+                "Content-Type": "application/json"
+            }
+            request_payload = {
+                "model": get_ai_config()["model"],
+                "messages": [{"role": "system", "content": system_prompt}] + request_messages,
+                "temperature": 0.2,
+                "max_tokens": int(get_ai_config().get("max_tokens", 4000)),
+                "stream": False
+            }
+        connect_timeout = float(get_ai_config().get("connect_timeout", 10))
+        read_timeout = float(get_ai_config().get("read_timeout", 180))
+        response = requests.post(
+            request_url,
+            headers=request_headers,
+            json=request_payload,
+            timeout=(connect_timeout, read_timeout)
+        )
+        # Retry on rate limiting (429) and server errors (5xx)
+        if response.status_code == 429 or response.status_code >= 500:
+            response.raise_for_status()
+        # Non-retryable errors (4xx except 429) propagate immediately
+        response.raise_for_status()
+        payload = response.json()
+        if protocol == "anthropic":
+            content = payload.get("content") or []
+            text = ''.join([c.get("text", "")
+                           for c in content if isinstance(c, dict)])
+            finish_reason = str(payload.get("stop_reason") or "")
+            return text, finish_reason
+        choices = payload.get("choices") or []
+        if not choices:
+            return "", ""
+        message = choices[0].get("message") or {}
+        finish_reason = str(choices[0].get("finish_reason") or "")
+        return str(message.get("content") or ""), finish_reason
+
+    retryable = (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ChunkedEncodingError,
     )
-    response.raise_for_status()
-    payload = response.json()
-    if protocol == "anthropic":
-        content = payload.get("content") or []
-        text = ''.join([c.get("text", "")
-                       for c in content if isinstance(c, dict)])
-        finish_reason = str(payload.get("stop_reason") or "")
-        return text, finish_reason
-    choices = payload.get("choices") or []
-    if not choices:
-        return "", ""
-    message = choices[0].get("message") or {}
-    finish_reason = str(choices[0].get("finish_reason") or "")
-    return str(message.get("content") or ""), finish_reason
+    return retry_call(_do_call, retryable_exceptions=retryable)
 
 
-def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
+def _open_sse_stream(system_prompt, request_messages, thinking_mode=False):
+    """Open SSE connection to LLM API. Returns (response, protocol)."""
     protocol = _get_ai_protocol()
     if protocol == "anthropic":
         request_url = _build_api_url('/v1/messages')
@@ -1814,29 +1829,80 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
         stream=True,
         timeout=(connect_timeout, read_timeout)
     )
+    # Retry on rate limiting (429) and server errors (5xx)
+    if resp.status_code == 429 or resp.status_code >= 500:
+        resp.raise_for_status()
     resp.raise_for_status()
+    return resp, protocol
+
+
+def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
+    retryable = (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        requests.exceptions.HTTPError,
+        requests.exceptions.ChunkedEncodingError,
+    )
+    resp, protocol = retry_call(
+        _open_sse_stream,
+        args=(system_prompt, request_messages),
+        kwargs={"thinking_mode": thinking_mode},
+        retryable_exceptions=retryable,
+    )
 
     finish_reason = ""
-    for raw_line in resp.iter_lines(decode_unicode=True):
-        if not raw_line:
-            continue
-        line = raw_line.strip()
-        if line.startswith("data:"):
-            line = line[len("data:"):].strip()
-        if not line or line == "[DONE]":
-            continue
+    try:
+        for raw_line in resp.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            line = raw_line.strip()
+            if line.startswith("data:"):
+                line = line[len("data:"):].strip()
+            if not line or line == "[DONE]":
+                continue
+            try:
+                chunk_json = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            text_part, thinking_part = _extract_chunk_parts(chunk_json, protocol)
+            fr = _extract_finish_reason(chunk_json, protocol)
+            if fr:
+                finish_reason = fr
+            if thinking_part:
+                yield thinking_part, finish_reason
+            if text_part:
+                yield text_part, finish_reason
+    except (requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError) as e:
+        # Mid-stream failure: attempt one reconnection
+        logger.warning("SSE stream interrupted mid-response, reconnecting: %s", e)
         try:
-            chunk_json = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        text_part, thinking_part = _extract_chunk_parts(chunk_json, protocol)
-        fr = _extract_finish_reason(chunk_json, protocol)
-        if fr:
-            finish_reason = fr
-        if thinking_part:
-            yield thinking_part, finish_reason
-        if text_part:
-            yield text_part, finish_reason
+            resp2, _ = _open_sse_stream(
+                system_prompt, request_messages, thinking_mode=thinking_mode
+            )
+            for raw_line in resp2.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = raw_line.strip()
+                if line.startswith("data:"):
+                    line = line[len("data:"):].strip()
+                if not line or line == "[DONE]":
+                    continue
+                try:
+                    chunk_json = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                text_part, thinking_part = _extract_chunk_parts(chunk_json, protocol)
+                fr = _extract_finish_reason(chunk_json, protocol)
+                if fr:
+                    finish_reason = fr
+                if thinking_part:
+                    yield thinking_part, finish_reason
+                if text_part:
+                    yield text_part, finish_reason
+        except Exception as re:
+            logger.warning("SSE reconnection also failed: %s", re)
+            raise
 
 
 def _quick_classify(user_message):
