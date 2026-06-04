@@ -17,6 +17,7 @@ from turing_compactor import OverflowDetector, ContextCompactor
 from permissions import PermissionChecker, Permission
 from retry import retry_call
 from turing_skills import Skill, SkillManager
+from instructions import InstructionManager
 
 # AI 配置 (请在此填入您的 API Key)
 # 可选的 agent 参数:
@@ -128,6 +129,8 @@ SUMMARY_FILE = os.path.join(BASE_DIR, 'summary.md')
 SKILLS_FILE = os.path.join(BASE_DIR, 'skills.md')
 # 结构化技能管理器
 skill_manager = SkillManager(skills_dir="skills", base_dir=BASE_DIR)
+# 动态指令注入系统（按任务场景组织 AI_INSTRUCTIONS.md 内容）
+instr_mgr = InstructionManager(base_file=os.path.join(BASE_DIR, "AI_INSTRUCTIONS.md"))
 # 日志文件夹
 LOG_DIR = os.path.join(BASE_DIR, 'log')
 
@@ -1579,7 +1582,8 @@ def _format_feedback_text(feedback):
 
 
 def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=None,
-                                    plan_content="", summary_content="", skills_content=""):
+                                    plan_content="", summary_content="", skills_content="",
+                                    scenarios=None):
     base = """你是一个电路模拟器自治执行助手。你以 5 阶段循环工作：Think→Plan→Build→Observe→Sum。
 每轮都必须依次输出这 5 个阶段的内容，系统会分别处理每个阶段。
 
@@ -1593,6 +1597,11 @@ def _build_autonomous_system_prompt(compact_state_json, modules_str, feedback=No
         base += f"{schema['text']}\n"
         base += f"  JSON: {schema['json_example']}\n"
         base += f"  说明: {schema['description']}\n\n"
+
+    # 动态指令注入：根据任务场景突出显示相关指令
+    scenario_section = instr_mgr.build_prompt_section(scenarios or [])
+    if scenario_section:
+        base += "\n" + scenario_section + "\n"
 
     base += """逻辑参考 (标准门实现):
 - NAND(A, B): NOT(AND(A, B))
@@ -2057,12 +2066,15 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
             available_modules = [
                 f.get('name') for f in modules_data] if modules_data else []
             modules_str = f"可用自定义模块: {', '.join(available_modules)}" if available_modules else "当前无自定义模块"
+            # 根据用户消息和当前模式确定活跃场景
+            active_scenarios = instr_mgr.resolve_scenario_from_mode(mode, user_message)
             system_prompt = _build_autonomous_system_prompt(
                 compact_state_json, modules_str,
                 feedback=previous_feedback,
                 plan_content=plan_content,
                 summary_content=summary_content,
-                skills_content=skills_content
+                skills_content=skills_content,
+                scenarios=active_scenarios
             )
             # 记录本轮 LLM 请求
             _log_conversation("llm_request",
