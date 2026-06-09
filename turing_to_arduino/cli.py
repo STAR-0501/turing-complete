@@ -185,7 +185,7 @@ def main() -> None:
             sys.exit(1)
 
         print("Compiling sketch...")
-        ok, out, err = compile_sketch(output_dir, args.fqbn)
+        ok, out, err = compile_sketch(str(output_dir), args.fqbn)
         if not ok:
             print(f"Compilation failed:\n{err}", file=sys.stderr)
             sys.exit(1)
@@ -198,7 +198,7 @@ def main() -> None:
             sys.exit(1)
 
         print("Uploading sketch...")
-        ok, out, err = upload_sketch(output_dir, args.port, args.fqbn)
+        ok, out, err = upload_sketch(str(output_dir), args.port, args.fqbn)
         if not ok:
             print(f"Upload failed:\n{err}", file=sys.stderr)
             sys.exit(1)

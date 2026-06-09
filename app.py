@@ -364,10 +364,11 @@ def api_test_apikey():
     """测试 API Key 是否有效。
     接受与 /api/config 相同的字段，做一次最小 API 调用验证。
     """
+    base_url = 'https://api.deepseek.com'  # default, overridden inside try
     try:
         data = request.get_json() or {}
         api_key = data.get('api_key', '').strip()
-        base_url = data.get('base_url', '').strip() or 'https://api.deepseek.com'
+        base_url = data.get('base_url', '').strip() or base_url
         model = data.get('model', '').strip() or 'deepseek-v4-flash'
 
         if not api_key:
@@ -414,9 +415,9 @@ def api_test_apikey():
             return jsonify({'status': 'error', 'message': f'API 返回错误 ({resp.status_code}): {detail}'})
 
     except requests.exceptions.ConnectTimeout:
-        return jsonify({'status': 'error', 'message': f'连接超时（{data.get("base_url","")}），请检查地址或网络'})
+        return jsonify({'status': 'error', 'message': f'连接超时（{base_url}），请检查地址或网络'})
     except requests.exceptions.ConnectionError:
-        return jsonify({'status': 'error', 'message': f'无法连接到 {data.get("base_url","")}，请检查地址或网络'})
+        return jsonify({'status': 'error', 'message': f'无法连接到 {base_url}，请检查地址或网络'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'测试失败: {str(e)}'}), 500
 
@@ -928,9 +929,10 @@ def _execute_commands_with_alias(commands):
             params['id'] = _resolve_element_ref(params['id'], alias_map)
             if params['id'] == '$last' and last_element_id:
                 params['id'] = last_element_id
-        if 'ids' in params and isinstance(params.get('ids'), list):
+        ids_val = params.get('ids')
+        if ids_val is not None and isinstance(ids_val, list):
             params['ids'] = [_resolve_element_ref(
-                v, alias_map) for v in params.get('ids') if v is not None]
+                v, alias_map) for v in ids_val if v is not None]
 
         if cmd in ('clear_circuit', 'define_module', 'remove_element', 'remove_wire'):
             _flush_pending_wires()
@@ -1866,12 +1868,15 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
         requests.exceptions.HTTPError,
         requests.exceptions.ChunkedEncodingError,
     )
-    resp, protocol = retry_call(
+    result = retry_call(
         _open_sse_stream,
         args=(system_prompt, request_messages),
         kwargs={"thinking_mode": thinking_mode},
         retryable_exceptions=retryable,
     )
+    if result is None:
+        raise RuntimeError("_open_sse_stream returned None after all retries")
+    resp, protocol = result
 
     finish_reason = ""
     try:
@@ -1942,7 +1947,11 @@ def _quick_classify(user_message):
     )
     messages = [{"role": "user", "content": user_message}]
     try:
-        text, _ = _call_llm_once(sys_prompt, messages)
+        result = _call_llm_once(sys_prompt, messages)
+        if result is None:
+            logger.warning("分类请求 LLM 调用返回 None，默认走 circuit 模式")
+            return "circuit"
+        text, _ = result
     except requests.ConnectionError as e:
         logger.warning("分类请求网络连接失败，默认走 circuit 模式: %s", e)
         return "circuit"
@@ -1952,6 +1961,9 @@ def _quick_classify(user_message):
     except requests.HTTPError as e:
         logger.warning("分类请求 API 错误 (HTTP %s)，默认走 circuit 模式",
                        e.response.status_code if e.response else "?")
+        return "circuit"
+    except TypeError:
+        logger.warning("分类请求 LLM 调用返回不可迭代结果，默认走 circuit 模式")
         return "circuit"
     except Exception as e:
         logger.warning("分类请求发生未知异常 (%s: %s)，默认走 circuit 模式",
@@ -2010,7 +2022,11 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
             f"{compact_json}"
         )
         request_messages = _get_chat_messages_with_memory(user_message)
-        text, fr = _call_llm_once(sys_prompt, request_messages)
+        result = _call_llm_once(sys_prompt, request_messages)
+        if result is None:
+            yield "（LLM 调用失败，请检查 API 配置）"
+            return
+        text, fr = result
         response_text = text if text else "(无法获取回答)"
         for line in response_text.splitlines():
             yield line + "\n"
@@ -2971,5 +2987,5 @@ if __name__ == '__main__':
     logger.info("打开软件: http://localhost:5000")
     # 禁用Flask的开发服务器banner
     cli = sys.modules['flask.cli']
-    cli.show_server_banner = lambda *x: None
+    setattr(cli, 'show_server_banner', lambda *x: None)
     app.run(debug=False, host='0.0.0.0', port=5000)

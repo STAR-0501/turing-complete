@@ -56,7 +56,8 @@ def retry_call(func, args=None, kwargs=None, max_retries=DEFAULT_MAX_RETRIES,
             if attempt < max_retries:
                 delay = exponential_backoff(attempt, base_delay)
                 time.sleep(delay)
-    raise last_exception
+    if last_exception is not None:
+        raise last_exception
 
 
 def retry(max_retries=DEFAULT_MAX_RETRIES, base_delay=DEFAULT_BASE_DELAY,
@@ -77,6 +78,7 @@ def retry(max_retries=DEFAULT_MAX_RETRIES, base_delay=DEFAULT_BASE_DELAY,
                     if attempt < max_retries:
                         delay = exponential_backoff(attempt, base_delay)
                         time.sleep(delay)
-            raise last_exception
+            if last_exception is not None:
+                raise last_exception
         return wrapper
     return decorator

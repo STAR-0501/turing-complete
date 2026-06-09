@@ -10,3 +10,4 @@ __pycache__/
 .sisyphus/
 log/
 ai_config.json
+.vscode/
