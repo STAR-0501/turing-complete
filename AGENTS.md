@@ -8,15 +8,16 @@
 
 ```
 ./
-├── app.py                  # (2615L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
-├── ai_commands.py          # (619L)  CircuitManager, simulation engine, command execution
+├── app.py                  # (2480L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
+├── _common.py              # (110L)  Shared utilities: atomic_write_json/text, AI config, build_api_url
+├── ai_commands.py          # (580L)  CircuitManager, simulation engine, command execution
 ├── agent_config.py         # (132L)  AgentConfig dataclass, YAML config loading
 ├── instructions.py         # (166L)  InstructionGroup + InstructionManager, %%SCENARIO:xxx%% markers
 ├── permissions.py          # (60L)   Permission enum, TOOL_PERMISSIONS map, PermissionChecker
 ├── retry.py                # (70L)   exponential_backoff, retry_call wrapper
-├── subagent_manager.py     # (197L)  SubagentManager, semaphore-limited concurrent subagent execution
+├── subagent_manager.py     # (190L)  SubagentManager, semaphore-limited concurrent subagent execution
 ├── turing_compactor.py     # (105L)  OverflowDetector + ContextCompactor for context management
-├── turing_skills.py        # (477L)  Skill + SkillManager, skills/ directory management
+├── turing_skills.py        # (450L)  Skill + SkillManager, skills/ directory management
 ├── templates/
 │   └── index.html          # (121L)  Single-page app shell
 ├── static/
@@ -64,6 +65,7 @@
 | Add backend route | `app.py` | Flask routes in `@app.route` blocks |
 | Change AI agent loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Multi-round Plan→Execute→Check |
 | Circuit state management | `ai_commands.py`: `CircuitManager` | Simulation context, commands |
+| Shared utilities | `_common.py` | `atomic_write_json`/`atomic_write_text`, `get_ai_config`, `build_api_url` — extracted to eliminate duplication |
 | Command protocol | `AI_INSTRUCTIONS.md` | Text & JSON formats for AI tools |
 | Add/change module blocks | `ai_commands.py` + frontend `elements.js` | Both sides need updates |
 | Change AI 5-mode loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Think→Plan→Build→Observe→Sum |
@@ -101,8 +103,8 @@
 - **Frontend global state:** module-level `let` vars in `app.js`
 - **No type hints in JS;** Python uses minimal type hints
 - **Flask routes** return `jsonify()` for API, `render_template()` for page
-- **AI config** loaded from `ai_config.json` (JSON, `_AI_CONFIG_DEFAULTS` fallback) + `agent_config.yaml` (YAML, `AgentConfig` dataclass)
-- **Data persistence** via atomic JSON writes (`_atomic_write_json`)
+- **AI config** loaded from `ai_config.json` (JSON, `_AI_CONFIG_DEFAULTS` fallback) + `agent_config.yaml` (YAML, `AgentConfig` dataclass); unified access via `_common.get_ai_config()`
+- **Data persistence** via atomic JSON writes (`atomic_write_json` in `_common.py`)
 - **SSE streaming** for AI responses (`text/event-stream`)
 - **CSS** in Chinese comments; single stylesheet
 - **No ORM, no database** — flat JSON file storage
@@ -110,14 +112,15 @@
 
 ## Anti-Patterns (This Project)
 
-- **Duplicated `_atomic_write_json`** (`app.py` and `ai_commands.py` both define it)
-- **Duplicated `build_io_summary`-like logic** across backend files
-- **AI config redundancy** — `ai_config.json` + `agent_config.yaml` coexist; `AI_CONFIG` dict in `app.py` deprecated but still present
+- **AI config redundancy** — `ai_config.json` + `agent_config.yaml` coexist; `_common.py` provides unified access but both files still exist
+- **Frontend-backend element template duplication** — `ai_commands.py` `_get_element_template()` and `elements.js` `create*()` define identical geometries; modifying one requires updating the other
+- **Frontend-backend simulation duplication** — `circuit.js` (client-side UI) and `ai_commands.py` (server-side AI verify) implement identical gate logic; both needed but should be kept in sync
 - **Frontend coupling:** `app.js` imports from `chat.js` at module level (potential circular refs)
 - **Mixed comment languages** (Chinese + English in same files, inconsistent)
 - **No error boundaries** in JS — canvas operations assume valid state
 - **PowerShell encoding pitfall:** `Set-Content` defaults to system ANSI (Windows-1252) — corrupts UTF-8 Chinese text; use `WriteAllText` with explicit UTF8
 - **No `as any`/`@ts-ignore`/`@ts-expect-error`** in JS — type safety enforced by convention
+- **`turing_to_arduino/` uses `print()`** instead of `logging` for debug output
 
 ## Commands
 

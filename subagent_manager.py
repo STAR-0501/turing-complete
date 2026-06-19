@@ -15,6 +15,8 @@ from typing import Optional
 
 import requests
 
+from _common import get_ai_config, build_api_url as _build_api_url
+
 logger = logging.getLogger(__name__)
 
 # Max concurrent subagent tasks
@@ -22,49 +24,13 @@ MAX_CONCURRENT = 3
 # Per-task execution timeout in seconds
 TASK_TIMEOUT = 120
 
-# AI config file path (same convention as app.py)
-CONFIG_FILE = "ai_config.json"
-
-_AI_CONFIG_DEFAULTS = {
-    "api_key": "",
-    "base_url": "https://api.deepseek.com",
-    "model": "deepseek-v4-flash",
-    "max_tokens": 4000,
-    "connect_timeout": 10,
-    "read_timeout": 180,
-    "protocol": "",
-    "anthropic_version": "2023-06-01"
-}
-
-
-def _load_config():
-    """Load AI config from ai_config.json (mirrors app.py helpers)."""
-    config = dict(_AI_CONFIG_DEFAULTS)
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            file_config = json.load(f)
-        config.update(file_config)
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return config
-
-
-def _build_api_url(endpoint, base_url=None):
-    """Build API URL (mirrors app.py helper)."""
-    if base_url is None:
-        base_url = _load_config()['base_url']
-    base = str(base_url).rstrip('/')
-    if base.endswith(endpoint):
-        return base
-    return f"{base}{endpoint}"
-
 
 def _call_llm(system_prompt, user_message):
     """Simplified non-streaming LLM call for subagent tasks.
 
     Mirrors app.py _call_llm_once but returns only text content.
     """
-    config = _load_config()
+    config = get_ai_config()
     api_key = config.get("api_key", "")
     if not api_key:
         raise RuntimeError("AI API key not configured")

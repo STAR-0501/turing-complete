@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
 import random
 import string
-import tempfile
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
+
+from _common import atomic_write_json
 
 
 def generate_id():
@@ -26,9 +26,9 @@ _data_io_lock = threading.Lock()
 
 
 def _locked_write_json(path, data):
-    """Thread-safe wrapper around _atomic_write_json."""
+    """Thread-safe wrapper around atomic_write_json."""
     with _data_io_lock:
-        _atomic_write_json(path, data)
+        atomic_write_json(path, data)
 
 
 def _locked_read_json(path):
@@ -44,31 +44,6 @@ def _locked_read_json(path):
                         logger.warning("Failed to read %s after retries", path)
                     time.sleep(0.01)
         return {"elements": [], "wires": []}
-
-
-def _atomic_write_json(path, data):
-    for stale in glob.glob(f"{path}.tmp.*"):
-        try:
-            os.remove(stale)
-        except OSError:
-            pass
-    dir_name = os.path.dirname(path) or os.getcwd()
-    with tempfile.NamedTemporaryFile(
-        mode='w', encoding='utf-8', dir=dir_name, prefix=f".{os.path.basename(path)}.tmp.",
-        delete=False
-    ) as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())
-        tmp_path = f.name
-    try:
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 @dataclass
@@ -131,35 +106,37 @@ class CircuitManager:
             "isInput": is_input
         }
 
-    def _normalize_wire_standard(self, wire, elements):
-        if "start" not in wire or "end" not in wire:
-            return None
-        start = wire.get("start", {})
-        end = wire.get("end", {})
-        start_el = next((e for e in elements if e.get("id")
-                        == start.get("elementId")), None)
-        end_el = next((e for e in elements if e.get(
-            "id") == end.get("elementId")), None)
-        if not start_el or not end_el:
-            if not start_el:
-                logger.debug("连线标准化: 找不到起始元件 %s", start.get("elementId"))
-            if not end_el:
-                logger.debug("连线标准化: 找不到目标元件 %s", end.get("elementId"))
+    def _normalize_wire(self, wire, elements):
+        """归一化单根导线，兼容 standard (start/end) 和 legacy (from/to) 两种格式。"""
+        # 提取端点数据（兼容两种格式）
+        if "start" in wire and "end" in wire:
+            src = wire.get("start", {})
+            dst = wire.get("end", {})
+        elif "from" in wire and "to" in wire:
+            src = wire.get("from", {})
+            dst = wire.get("to", {})
+        else:
             return None
 
-        start_is_input = start.get("isInput")
-        if start_is_input is None:
-            start_is_input = any(p.get("id") == start.get("portId")
-                                 for p in start_el.get("inputs", []))
-        end_is_input = end.get("isInput")
-        if end_is_input is None:
-            end_is_input = any(p.get("id") == end.get("portId")
-                               for p in end_el.get("inputs", []))
+        src_el = next((e for e in elements if e.get("id") == src.get("elementId")), None)
+        dst_el = next((e for e in elements if e.get("id") == dst.get("elementId")), None)
+        if not src_el or not dst_el:
+            if not src_el:
+                logger.debug("连线标准化: 找不到起始元件 %s", src.get("elementId"))
+            if not dst_el:
+                logger.debug("连线标准化: 找不到目标元件 %s", dst.get("elementId"))
+            return None
 
-        normalized_start = self._build_endpoint(
-            start_el, start.get("portId"), start_is_input)
-        normalized_end = self._build_endpoint(
-            end_el, end.get("portId"), end_is_input)
+        # 推断端口方向
+        src_is_input = src.get("isInput")
+        if src_is_input is None:
+            src_is_input = any(p.get("id") == src.get("portId") for p in src_el.get("inputs", []))
+        dst_is_input = dst.get("isInput")
+        if dst_is_input is None:
+            dst_is_input = any(p.get("id") == dst.get("portId") for p in dst_el.get("inputs", []))
+
+        normalized_start = self._build_endpoint(src_el, src.get("portId"), src_is_input)
+        normalized_end = self._build_endpoint(dst_el, dst.get("portId"), dst_is_input)
         if not normalized_start or not normalized_end:
             return None
 
@@ -171,42 +148,6 @@ class CircuitManager:
         if "state" in wire:
             normalized["state"] = wire["state"]
         return normalized
-
-    def _normalize_wire_legacy(self, wire, elements):
-        if "from" not in wire or "to" not in wire:
-            return None
-        from_data = wire.get("from", {})
-        to_data = wire.get("to", {})
-        from_el = next((e for e in elements if e.get(
-            "id") == from_data.get("elementId")), None)
-        to_el = next((e for e in elements if e.get("id")
-                     == to_data.get("elementId")), None)
-        if not from_el or not to_el:
-            if not from_el:
-                logger.debug("旧格式连线: 找不到起始元件 %s", from_data.get("elementId"))
-            if not to_el:
-                logger.debug("旧格式连线: 找不到目标元件 %s", to_data.get("elementId"))
-            return None
-
-        start = self._build_endpoint(from_el, from_data.get("portId"), False)
-        end = self._build_endpoint(to_el, to_data.get("portId"), True)
-        if not start or not end:
-            return None
-
-        normalized = {
-            "id": wire.get("id", generate_id()),
-            "start": start,
-            "end": end
-        }
-        if "state" in wire:
-            normalized["state"] = wire["state"]
-        return normalized
-
-    def _normalize_wire(self, wire, elements):
-        normalized = self._normalize_wire_standard(wire, elements)
-        if normalized is not None:
-            return normalized
-        return self._normalize_wire_legacy(wire, elements)
 
     def _normalize_data(self, data):
         elements = data.get("elements", [])
