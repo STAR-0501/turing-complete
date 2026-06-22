@@ -287,13 +287,13 @@ def _normalize_board_list(data: Any) -> list[dict[str, Any]]:
 
 
 def _normalize_platform_list(data: Any) -> list[dict[str, Any]]:
-    """规范化 arduino-cli 核心列表 JSON（支持 1.5+ 和旧版格式）。"""
+    """规范化 arduino-cli 核心列表 JSON（支持 1.5+ 和旧版格式）。
 
     arduino-cli 1.5+:  {"platforms": [...]}
-    Legacy format:     [...]
+    旧版格式:          [...]
 
-    Returns:
-        A list of platform dicts.
+    返回：
+        平台字典列表。
     """
     if isinstance(data, list):
         return data

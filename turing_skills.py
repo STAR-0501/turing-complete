@@ -97,8 +97,8 @@ class Skill:
         )
 
     def to_markdown(self) -> str:
-        """Serialize back to frontmatter + content format."""
-        tag序列化回 frontmatter + 内容格式。
+        """序列化回 frontmatter + 内容格式。"""
+        tags_str = ", ".join(self.tags)
         lines = ['---']
         if self.id:
             lines.append(f'id: {self.id}')
@@ -114,8 +114,8 @@ class Skill:
         return '\n'.join(lines)
 
     def compute_checksum(self) -> str:
-        """SHA-256 of normalized content."""
-        ret返回规范化内容的 SHA-256。lf.content)
+        """返回规范化内容的 SHA-256。"""
+        return Skill._compute_checksum(self.content)
 
     @staticmethod
     def _compute_checksum(content: str) -> str:
