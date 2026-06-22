@@ -15,6 +15,8 @@ from typing import Optional
 
 import requests
 
+from _common import get_ai_config, build_api_url as _build_api_url
+
 logger = logging.getLogger(__name__)
 
 # 最大并发子代理任务数
@@ -22,49 +24,13 @@ MAX_CONCURRENT = 3
 # 每个任务的执行超时（秒）
 TASK_TIMEOUT = 120
 
-# AI 配置文件路径（与 app.py 相同约定）
-CONFIG_FILE = "ai_config.json"
-
-_AI_CONFIG_DEFAULTS = {
-    "api_key": "",
-    "base_url": "https://api.deepseek.com",
-    "model": "deepseek-v4-flash",
-    "max_tokens": 4000,
-    "connect_timeout": 10,
-    "read_timeout": 180,
-    "protocol": "",
-    "anthropic_version": "2023-06-01"
-}
-
-
-def _load_config():
-    """从 ai_config.json 加载 AI 配置（镜像 app.py 辅助函数）。"""
-    config = dict(_AI_CONFIG_DEFAULTS)
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            file_config = json.load(f)
-        config.update(file_config)
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return config
-
-
-def _build_api_url(endpoint, base_url=None):
-    """构建 API URL（镜像 app.py 辅助函数）。"""
-    if base_url is None:
-        base_url = _load_config()['base_url']
-    base = str(base_url).rstrip('/')
-    if base.endswith(endpoint):
-        return base
-    return f"{base}{endpoint}"
-
 
 def _call_llm(system_prompt, user_message):
     """子代理任务的简化非流式 LLM 调用。
 
     镜像 app.py 的 _call_llm_once，但只返回文本内容。
     """
-    config = _load_config()
+    config = get_ai_config()
     api_key = config.get("api_key", "")
     if not api_key:
         raise RuntimeError("AI API key not configured")

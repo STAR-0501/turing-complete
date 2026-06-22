@@ -157,7 +157,7 @@ class InstructionManager:
 
         test_keywords = [
             "测试", "仿真", "验证", "test", "truth", "真值",
-            "verify", "真值表", "sample", "sim", "仿真",
+            "verify", "真值表", "sample", "sim",
         ]
         debug_keywords = [
             "查错", "检查", "错误", "问题", "debug", "bug",

@@ -11,10 +11,11 @@ import re
 import logging
 import threading
 import glob
-import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Optional, List
+
+from _common import atomic_write_json, atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -185,18 +186,7 @@ class SkillManager:
                 'source_url': skill.source_url,
                 'checksum': skill.checksum,
             }
-        dir_name = os.path.dirname(idx_path) or os.getcwd()
-        tmp = os.path.join(dir_name, f".index.json.tmp.{os.getpid()}")
-        try:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, idx_path)
-        except Exception:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(idx_path, data)
 
     def _discover(self):
         """扫描 skills/*.md 查找新/更新的文件，解析并更新 _skills。"""
@@ -433,31 +423,7 @@ class SkillManager:
 
         content = '\n'.join(lines)
 
-        dir_name = os.path.dirname(output_path) or os.getcwd()
-        for stale in glob.glob(
-            os.path.join(dir_name, f".{os.path.basename(output_path)}.tmp.*")
-        ):
-            try:
-                os.remove(stale)
-            except OSError:
-                pass
-        with tempfile.NamedTemporaryFile(
-            mode='w', encoding='utf-8', dir=dir_name,
-            prefix=f".{os.path.basename(output_path)}.tmp.",
-            delete=False
-        ) as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-            tmp_path = f.name
-        try:
-            os.replace(tmp_path, output_path)
-        except Exception:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_text(output_path, content)
 
     @staticmethod
     def parse_skills_block(text: str) -> List[Skill]:
