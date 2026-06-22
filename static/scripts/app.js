@@ -1,6 +1,6 @@
 /**
  * 主应用模块
- * 整合所有其他模块，处理用户交互
+ * 整合所有其他模块，处理用户交互（Canvas 编辑器核心）
  */
 import { generateId, distance, isPointOnWire } from './utils.js';
 import { createElement } from './elements.js';
@@ -1285,7 +1285,7 @@ function handleMouseDown(e) {
   }
 
   // 如果正在放置元素（仅用于中键复制后的跟随鼠标，不拦截左键点击）
-  // 注意：这里不 return，让左键点击可以继续执行其他逻辑
+  // 注意：这里不 return，让左键点击可以继续执行其他逻辑（选择、拖拽等）
 
   // 检查是否点击了端口
   for (const element of elements) {
@@ -1368,7 +1368,7 @@ function handleMouseDown(e) {
         // 选择工具：选择并准备拖拽
         // 检查是否点击了已选中的多选元件之一
         if (selectedElements.length > 1 && selectedElements.includes(element)) {
-          // 开始集体拖动
+          // 开始集体拖动（移动多个已选中的元件）
           isGroupDragging = true;
           groupDragStart = { x: worldX, y: worldY };
           groupDragOffsets = selectedElements.map((el) => ({

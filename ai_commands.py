@@ -1,4 +1,4 @@
-"""Circuit state management and simulation backend."""
+"""电路状态管理和仿真后端。"""
 
 from __future__ import annotations
 
@@ -26,13 +26,13 @@ _data_io_lock = threading.Lock()
 
 
 def _locked_write_json(path, data):
-    """Thread-safe wrapper around _atomic_write_json."""
+    """线程安全的 _atomic_write_json 包装。"""
     with _data_io_lock:
         _atomic_write_json(path, data)
 
 
 def _locked_read_json(path):
-    """Thread-safe JSON file read."""
+    """线程安全的 JSON 文件读取。"""
     with _data_io_lock:
         if os.path.exists(path):
             for attempt in range(3):
@@ -80,7 +80,7 @@ class SimulationContext:
 
 
 class CircuitManager:
-    """Manages circuit persistence and boolean simulation."""
+    """管理电路持久化和布尔仿真。"""
 
     def __init__(self, data_file, functions_file=None):
         self.data_file = data_file
@@ -225,7 +225,7 @@ class CircuitManager:
         return normalized
 
     def export_snapshot(self):
-        """Export full circuit snapshot including elements, wires, and module definitions."""
+        """导出完整电路快照，包含元件、导线和模块定义。"""
         data = self._load_data()
         normalized = self._normalize_data(data)
         modules = self._load_modules()

@@ -1,17 +1,15 @@
-"""Unified agent configuration with YAML support.
+"""统一代理配置，支持 YAML。
 
-Provides AgentConfig dataclass that aggregates configuration
-(model, retry, permissions, skills, subagent) into one place
-with YAML config file support, while backward-compatibly
-wrapping the existing ai_config.json system.
+提供 AgentConfig 数据类，将配置（模型、重试、权限、技能、子代理）
+聚合到一处，支持 YAML 配置文件，同时向后兼容现有的 ai_config.json 系统。
 
-Usage:
+用法:
     from agent_config import AgentConfig, get_agent_config
 
     cfg = AgentConfig.load()
     print(cfg.model_name)
 
-    # Global singleton
+    # 全局单例
     config = get_agent_config()
 """
 
@@ -28,61 +26,59 @@ from permissions import Permission
 
 @dataclass
 class AgentConfig:
-    """Unified agent configuration with YAML + JSON fallback.
+    """统一代理配置，YAML + JSON 回退。
 
-    Loads in order:
-    1. agent_config.yaml (highest priority, user-editable)
-    2. Hardcoded defaults (fallback)
+    加载顺序:
+    1. agent_config.yaml（最高优先级，用户可编辑）
+    2. 硬编码默认值（回退）
 
-    API settings (api_key, base_url, model) remain in ai_config.json
-    via the existing get_ai_config() pattern — this class is a
-    SUPPLEMENT for the new mechanisms (retry, permissions, skills,
-    subagent, context limits).
+    API 设置（api_key, base_url, model）保留在 ai_config.json
+    中，通过现有的 get_ai_config() 模式访问——此类是对新机制
+    （重试、权限、技能、子代理、上下文限制）的补充。
     """
 
-    # --- Model ---
+    # --- 模型 ---
     model_name: str = "deepseek-v4-flash"
     temperature: float = 0.7
     max_tokens: int = 4000
 
-    # --- Retry ---
+    # --- 重试 ---
     retry_max_retries: int = 3
     retry_base_delay: float = 1.0
     retry_max_delay: float = 30.0
 
-    # --- Context limits ---
+    # --- 上下文限制 ---
     context_soft_limit_tokens: int = 32000
     context_hard_limit_tokens: int = 48000
 
-    # --- Permissions ---
+    # --- 权限 ---
     permissions_default_level: str = "write"
 
-    # --- Skills ---
+    # --- 技能 ---
     skills_dir: str = "skills"
     skills_auto_discover: bool = True
 
-    # --- Subagent ---
+    # --- 子代理 ---
     subagent_max_concurrent: int = 3
     subagent_default_timeout: int = 120
 
-    # Internal
+    # 内部
     _loaded_yaml: bool = False
 
     @classmethod
     def load(cls, yaml_path: str = "agent_config.yaml") -> "AgentConfig":
-        """Load config from YAML file, falling back to defaults.
+        """从 YAML 文件加载配置，回退到默认值。
 
-        Args:
-            yaml_path: Path to YAML config file. If relative,
-                       resolved relative to this file's directory
-                       (the project root).
+        参数:
+            yaml_path: YAML 配置文件路径。如果是相对路径，
+                       则基于此文件所在目录（项目根目录）解析。
 
-        Returns:
-            Fully populated AgentConfig instance.
+        返回:
+            填充完整的 AgentConfig 实例。
         """
         config = cls()
 
-        # Resolve relative path against the project root
+        # 根据项目根目录解析相对路径
         if not os.path.isabs(yaml_path):
             base_dir = os.path.dirname(os.path.abspath(__file__))
             yaml_path = os.path.join(base_dir, yaml_path)
@@ -97,7 +93,7 @@ class AgentConfig:
         return config
 
     def _apply_yaml(self, data: dict) -> None:
-        """Apply YAML data to this config instance."""
+        """将 YAML 数据应用到当前配置实例。"""
         if not data:
             return
 
@@ -141,7 +137,7 @@ class AgentConfig:
 
     @property
     def permission_enum(self) -> Permission:
-        """Resolve permissions_default_level string to Permission enum."""
+        """将权限默认级别字符串解析为 Permission 枚举。"""
         mapping = {
             "read": Permission.READ,
             "exec": Permission.EXEC,
@@ -152,14 +148,14 @@ class AgentConfig:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton access
+# 模块级单例访问
 # ---------------------------------------------------------------------------
 
 _config_instance: Optional[AgentConfig] = None
 
 
 def get_agent_config() -> AgentConfig:
-    """Return the global AgentConfig singleton (lazy-loaded)."""
+    """返回全局 AgentConfig 单例（懒加载）。"""
     global _config_instance
     if _config_instance is None:
         _config_instance = AgentConfig.load()
@@ -167,6 +163,6 @@ def get_agent_config() -> AgentConfig:
 
 
 def reload_agent_config() -> None:
-    """Reload YAML config at runtime. Call after file changes."""
+    """运行时重新加载 YAML 配置。文件变更后调用。"""
     global _config_instance
     _config_instance = AgentConfig.load()

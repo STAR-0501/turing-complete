@@ -3,11 +3,11 @@ from .circuit_parser import CircuitDAG, CircuitNode
 
 
 def _safe_name(alias: str) -> str:
-    """Convert an alias to a valid Arduino C variable name.
+    """将别名转换为有效的 Arduino C 变量名。
 
-    Replaces non-alphanumeric, non-underscore characters with '_'.
-    Prepends '_' if the name starts with a digit.
-    Lowercases the result per Arduino C++ convention.
+    将非字母数字、非下划线字符替换为 '_'。
+    如果名称以数字开头，则在前面加上 '_'。
+    根据 Arduino C++ 约定将结果转换为小写。
     """
     chars = []
     for c in alias:
@@ -22,14 +22,14 @@ def _safe_name(alias: str) -> str:
 
 
 def _resolve_var(node_id: str, var_map: Dict[str, str]) -> str:
-    """Look up the variable name for a given node ID.
+    """查找给定节点 ID 的变量名。
 
-    Args:
-        node_id: The CircuitNode.id to resolve.
-        var_map: Mapping of node_id -> Arduino variable name.
+    参数:
+        node_id: 要解析的 CircuitNode.id。
+        var_map: node_id 到 Arduino 变量名的映射。
 
-    Returns:
-        The variable name, or a C comment placeholder if unknown.
+    返回:
+        变量名，如果未知则返回 C 注释占位符。
     """
     if node_id in var_map:
         return var_map[node_id]
@@ -37,19 +37,19 @@ def _resolve_var(node_id: str, var_map: Dict[str, str]) -> str:
 
 
 def generate_arduino_sketch(dag: CircuitDAG) -> str:
-    """Convert a CircuitDAG into an Arduino .ino sketch string.
+    """将 CircuitDAG 转换为 Arduino .ino 草图字符串。
 
-    The generated sketch uses the signal-flow variable approach:
-    - INPUT nodes are read via digitalRead into bool variables.
-    - Gates (AND/OR/NOT/FUNCTION) are evaluated in topological order,
-      each into a sequentially-numbered bool (t1, t2, ...).
-    - OUTPUT nodes write their source variable via digitalWrite.
+    生成的草图使用信号流变量方法：
+    - INPUT 节点通过 digitalRead 读入 bool 变量。
+    - 门电路（AND/OR/NOT/FUNCTION）按拓扑顺序求值，
+      每个门输出到顺序编号的 bool 变量（t1, t2, ...）。
+    - OUTPUT 节点通过 digitalWrite 写入源变量。
 
-    Args:
-        dag: A topologically-sorted CircuitDAG from circuit_parser.
+    参数:
+        dag: 来自 circuit_parser 的拓扑排序 CircuitDAG。
 
-    Returns:
-        A complete Arduino .ino file as a single string.
+    返回:
+        一个完整的 Arduino .ino 文件字符串。
     """
     lines: list[str] = []
 
@@ -79,21 +79,21 @@ def generate_arduino_sketch(dag: CircuitDAG) -> str:
     # ── Build variable name map ──────────────────────────────────────
     var_map: Dict[str, str] = {}
 
-    # INPUT nodes: use alias if available, else input_{id}
+    # INPUT 节点：使用别名（如果可用），否则使用 input_{id}
     for node in dag.inputs:
         if node.alias:
             var_map[node.id] = _safe_name(node.alias)
         else:
             var_map[node.id] = f"input_{node.id}"
 
-    # Gates (already topologically sorted): t1, t2, t3, ...
+    # 门（已拓扑排序）: t1, t2, t3, ...
     for idx, gate in enumerate(dag.gates, start=1):
         var_map[gate.id] = f"t{idx}"
 
     # ── loop() ───────────────────────────────────────────────────────
     lines.append("void loop() {")
 
-    # Emit input reads
+    # 生成输入读取代码
     for node in dag.inputs:
         var_name = var_map[node.id]
         if node.alias:
@@ -106,7 +106,7 @@ def generate_arduino_sketch(dag: CircuitDAG) -> str:
                 f"/* PIN for {node.id} */ 0);"
             )
 
-    # Emit gate evaluations in topological order
+    # 按拓扑顺序生成门求值代码
     for idx, gate in enumerate(dag.gates, start=1):
         t_name = f"t{idx}"
         if gate.type == "NOT":
@@ -167,7 +167,7 @@ def generate_arduino_sketch(dag: CircuitDAG) -> str:
                 f"/* unknown gate type: {gate.type} */"
             )
 
-    # Emit output writes
+    # 生成输出写入代码
     for node in dag.outputs:
         if node.inputs:
             src = _resolve_var(node.inputs[0], var_map)

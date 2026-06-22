@@ -1,4 +1,4 @@
-"""arduino-cli CLI wrapper for compile, board detection, and upload operations."""
+"""arduino-cli CLI 的包装器，用于编译、板子检测和上传操作。"""
 
 import json
 import shutil
@@ -20,7 +20,7 @@ ARDUINO_CLI = "arduino-cli"
 
 
 def _get_arduino_cli_install_guide() -> str:
-    """Return platform-specific arduino-cli install instructions."""
+    """返回特定平台的 arduino-cli 安装说明。"""
     if sys.platform == "win32":
         return (
             "  Windows:\n"
@@ -47,7 +47,7 @@ def _get_arduino_cli_install_guide() -> str:
 
 
 def _get_arduino_core_install_guide() -> str:
-    """Return instructions to install Arduino AVR core."""
+    """返回安装 Arduino AVR 核心的说明。"""
     return (
         "  Run:  arduino-cli core install arduino:avr\n"
         "  This installs the toolchain for Arduino Uno.\n"
@@ -55,13 +55,13 @@ def _get_arduino_core_install_guide() -> str:
 
 
 def doctor() -> list[dict[str, Any]]:
-    """Run comprehensive dependency checks.
+    """运行全面的依赖检查。
 
-    Returns:
-        A list of check results, each a dict with keys:
-          - name: check name
+    返回：
+        检查结果列表，每个字典包含键：
+          - name: 检查名称
           - status: \"pass\" / \"fail\" / \"warn\"
-          - message: human-readable description
+          - message: 人类可读的描述
     """
     results: list[dict[str, Any]] = []
 
@@ -166,7 +166,7 @@ def doctor() -> list[dict[str, Any]]:
 
 
 def print_doctor_report(results: list[dict[str, Any]]) -> None:
-    """Print a formatted doctor report to stdout."""
+    """将格式化的诊断报告打印到 stdout。"""
     status_icons = {"pass": "[OK]", "fail": "[FAIL]", "warn": "[WARN]"}
     all_pass = all(r["status"] == "pass" for r in results)
     print()
@@ -192,21 +192,21 @@ def print_doctor_report(results: list[dict[str, Any]]) -> None:
 
 
 def check_arduino_cli() -> bool:
-    """Check if arduino-cli is installed and in PATH."""
+    """检查 arduino-cli 是否已安装且在 PATH 中。"""
     return shutil.which(ARDUINO_CLI) is not None
 
 
 def compile_sketch(
     sketch_dir: str, fqbn: str = "arduino:avr:uno"
 ) -> tuple[bool, str, str]:
-    """Compile an Arduino sketch.
+    """编译 Arduino 草图。
 
-    Args:
-        sketch_dir: Path to the sketch directory.
-        fqbn: Fully qualified board name (default: arduino:avr:uno).
+    参数：
+        sketch_dir: 草图目录路径。
+        fqbn: 完全限定的板名（默认: arduino:avr:uno）。
 
-    Returns:
-        Tuple of (success, stdout, stderr).
+    返回：
+        元组 (是否成功, stdout, stderr)。
     """
     if not check_arduino_cli():
         return (False, "", "arduino-cli not found")
@@ -228,13 +228,13 @@ def compile_sketch(
 
 
 def _normalize_board_list(data: Any) -> list[dict[str, Any]]:
-    """Normalize arduino-cli board list JSON (supports 1.5+ and legacy formats).
+    """规范化 arduino-cli 板列表 JSON（支持 1.5+ 和旧版格式）。
 
     arduino-cli 1.5+:  {"detected_ports": [{"port": {...}, "matching_boards": [...]}]}
-    Legacy format:     [{"port": {...}, "name": "...", "fqbn": "..."}]
+    旧版格式:          [{"port": {...}, "name": "...", "fqbn": "..."}]
 
-    Returns:
-        A list of dicts, each with keys: address, label, name, fqbn.
+    返回：
+        字典列表，每个包含键：address, label, name, fqbn。
     """
     if isinstance(data, list):
         # Legacy format — normalize to same flat structure
@@ -287,7 +287,7 @@ def _normalize_board_list(data: Any) -> list[dict[str, Any]]:
 
 
 def _normalize_platform_list(data: Any) -> list[dict[str, Any]]:
-    """Normalize arduino-cli core list JSON (supports 1.5+ and legacy formats).
+    """规范化 arduino-cli 核心列表 JSON（支持 1.5+ 和旧版格式）。"""
 
     arduino-cli 1.5+:  {"platforms": [...]}
     Legacy format:     [...]
@@ -303,11 +303,11 @@ def _normalize_platform_list(data: Any) -> list[dict[str, Any]]:
 
 
 def detect_boards() -> list[dict[str, Any]]:
-    """Detect connected Arduino boards.
+    """检测连接的 Arduino 板。
 
-    Returns:
-        List of board info dictionaries. Empty list on failure.
-        Each dict has keys: address, label, name, fqbn.
+    返回：
+        板信息字典列表。失败时返回空列表。
+        每个字典包含键：address, label, name, fqbn。
     """
     if not check_arduino_cli():
         return []
@@ -331,15 +331,15 @@ def detect_boards() -> list[dict[str, Any]]:
 def upload_sketch(
     sketch_dir: str, port: str, fqbn: str = "arduino:avr:uno"
 ) -> tuple[bool, str, str]:
-    """Upload a compiled sketch to an Arduino board.
+    """将编译后的草图上载到 Arduino 板。
 
-    Args:
-        sketch_dir: Path to the sketch directory.
-        port: Serial port (e.g., COM3 or /dev/ttyACM0).
-        fqbn: Fully qualified board name (default: arduino:avr:uno).
+    参数：
+        sketch_dir: 草图目录路径。
+        port: 串行端口（例如 COM3 或 /dev/ttyACM0）。
+        fqbn: 完全限定的板名（默认: arduino:avr:uno）。
 
-    Returns:
-        Tuple of (success, stdout, stderr).
+    返回：
+        元组 (是否成功, stdout, stderr)。
     """
     if not check_arduino_cli():
         return (False, "", "arduino-cli not found")

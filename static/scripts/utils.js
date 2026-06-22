@@ -1,11 +1,11 @@
 /**
  * 工具函数模块
- * 包含一些通用的工具函数
+ * 包含通用的工具函数
  */
 
 /**
- * 生成唯一ID
- * @returns {string} 唯一ID
+ * 生成唯一 ID
+ * @returns {string} 唯一 ID
  */
 export function generateId() {
   return Math.random().toString(36).substr(2, 9);
@@ -13,10 +13,10 @@ export function generateId() {
 
 /**
  * 计算两点之间的距离
- * @param {number} x1 - 第一个点的x坐标
- * @param {number} y1 - 第一个点的y坐标
- * @param {number} x2 - 第二个点的x坐标
- * @param {number} y2 - 第二个点的y坐标
+ * @param {number} x1 - 第一个点的 x 坐标
+ * @param {number} y1 - 第一个点的 y 坐标
+ * @param {number} x2 - 第二个点的 x 坐标
+ * @param {number} y2 - 第二个点的 y 坐标
  * @returns {number} 两点之间的距离
  */
 export function distance(x1, y1, x2, y2) {
@@ -25,8 +25,8 @@ export function distance(x1, y1, x2, y2) {
 
 /**
  * 检查点是否在导线上
- * @param {number} x - 点的x坐标
- * @param {number} y - 点的y坐标
+ * @param {number} x - 点的 x 坐标
+ * @param {number} y - 点的 y 坐标
  * @param {object} wire - 导线对象
  * @returns {boolean} 是否在导线上
  */

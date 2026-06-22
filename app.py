@@ -81,16 +81,16 @@ def is_ai_configured():
     return bool(key) and key != "YOUR_API_KEY_HERE"
 
 
-# Unified agent config (YAML-based, for new mechanisms)
+# 统一代理配置（基于 YAML，用于新机制）
 agent_cfg: AgentConfig = get_agent_config()
 
 
 def _build_api_url(endpoint, base_url=None):
     """构建 API URL，防止用户提供的 base_url 已包含路径时重复拼接。
-    
-    Args:
+
+    参数:
         endpoint: API 路径，如 '/chat/completions'
-        base_url: 可选自定义 base_url，默认从保存的 config 中读取
+        base_url: 可选自定义 base_url，默认从保存的配置中读取
     """
     if base_url is None:
         base_url = get_ai_config()['base_url']
@@ -150,6 +150,7 @@ subagent_manager = SubagentManager()
 
 
 def init_circuit_file():
+    """初始化电路数据文件，若不存在则创建空文件。"""
     if not os.path.exists(CIRCUIT_DATA_FILE):
         try:
             with open(CIRCUIT_DATA_FILE, 'w', encoding='utf-8') as f:
@@ -159,10 +160,9 @@ def init_circuit_file():
         except Exception as e:
             logger.error("创建电路数据文件失败: %s", e)
 
-# 初始化：如果文件不存在，创建一个空的模块数据文件
-
 
 def init_modules_file():
+    """初始化模块数据文件，若不存在则创建空文件。"""
     if not os.path.exists(MODULES_DATA_FILE):
         try:
             with open(MODULES_DATA_FILE, 'w', encoding='utf-8') as f:
@@ -170,8 +170,6 @@ def init_modules_file():
             logger.info("已创建空的模块数据文件: %s", MODULES_DATA_FILE)
         except Exception as e:
             logger.error("创建模块数据文件失败: %s", e)
-
-# 初始化 AI 计划文件
 
 
 def init_plan_file():
@@ -184,8 +182,8 @@ def init_plan_file():
         except Exception as e:
             logger.error("创建计划文件失败: %s", e)
 
-
 def init_summary_file():
+    """初始化 AI 摘要文件。"""
     if not os.path.exists(SUMMARY_FILE):
         try:
             with open(SUMMARY_FILE, 'w', encoding='utf-8') as f:
@@ -213,6 +211,7 @@ def init_skills_file():
 
 def _atomic_write_md(path, content):
     """原子写入 Markdown 文件（plan.md / summary.md）。"""
+    # plan.md 和 summary.md 持久化，实现跨会话连续性
     dir_name = os.path.dirname(path) or os.getcwd()
     for stale in glob.glob(f"{path}.tmp.*"):
         try:
@@ -239,6 +238,7 @@ def _atomic_write_md(path, content):
 
 def _load_md_file(path):
     """加载 Markdown 文件，若不存在返回空字符串。"""
+    # 用于持久化 plan.md、summary.md、skills.md
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
@@ -259,8 +259,11 @@ def _init_log_dir():
 def _log_conversation(entry_type, content, session_id=None, round_num=None):
     """将 JSONL 日志条目追加到按对话命名的日志文件中。
 
-    entry_type: 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary' 之一
-    session_id: 对话唯一标识。不传时按日期分文件（向后兼容）。
+    参数:
+        entry_type: 条目类型 - 'user', 'assistant', 'system', 'llm_request', 'llm_response', 'command', 'observe', 'plan', 'summary' 之一
+        content: 日志内容
+        session_id: 对话唯一标识。不传时按日期分文件（向后兼容）
+        round_num: 轮次编号（可选）
     """
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -364,7 +367,7 @@ def api_test_apikey():
     """测试 API Key 是否有效。
     接受与 /api/config 相同的字段，做一次最小 API 调用验证。
     """
-    base_url = 'https://api.deepseek.com'  # default, overridden inside try
+    base_url = 'https://api.deepseek.com'  # 默认值，在 try 内部可被覆盖
     try:
         data = request.get_json() or {}
         api_key = data.get('api_key', '').strip()
@@ -1781,10 +1784,10 @@ def _call_llm_once(system_prompt, request_messages):
             json=request_payload,
             timeout=(connect_timeout, read_timeout)
         )
-        # Retry on rate limiting (429) and server errors (5xx)
+        # 在限流 (429) 和服务器错误 (5xx) 时重试
         if response.status_code == 429 or response.status_code >= 500:
             response.raise_for_status()
-        # Non-retryable errors (4xx except 429) propagate immediately
+        # 不可重试的错误（除 429 外的 4xx）立即传播
         response.raise_for_status()
         payload = response.json()
         if protocol == "anthropic":
@@ -1810,7 +1813,7 @@ def _call_llm_once(system_prompt, request_messages):
 
 
 def _open_sse_stream(system_prompt, request_messages, thinking_mode=False):
-    """Open SSE connection to LLM API. Returns (response, protocol)."""
+    """打开 SSE 连接到 LLM API。返回 (响应, 协议)。"""
     protocol = _get_ai_protocol()
     if protocol == "anthropic":
         request_url = _build_api_url('/v1/messages')
@@ -1854,7 +1857,7 @@ def _open_sse_stream(system_prompt, request_messages, thinking_mode=False):
         stream=True,
         timeout=(connect_timeout, read_timeout)
     )
-    # Retry on rate limiting (429) and server errors (5xx)
+    # 在限流 (429) 和服务器错误 (5xx) 时重试
     if resp.status_code == 429 or resp.status_code >= 500:
         resp.raise_for_status()
     resp.raise_for_status()
@@ -1902,7 +1905,7 @@ def _call_llm_streaming(system_prompt, request_messages, thinking_mode=False):
                 yield text_part, finish_reason
     except (requests.exceptions.ConnectionError,
             requests.exceptions.ChunkedEncodingError) as e:
-        # Mid-stream failure: attempt one reconnection
+        # 流中段失败：尝试一次重连
         logger.warning("SSE stream interrupted mid-response, reconnecting: %s", e)
         try:
             resp2, _ = _open_sse_stream(
@@ -2070,7 +2073,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
         # 加载持久化文件（plan.md、summary.md、skills.md），实现跨会话连续性
         plan_content = _load_md_file(PLAN_FILE)
         summary_content = _load_md_file(SUMMARY_FILE)
-        # Use SkillManager to build skills section; fall back to raw file for backward compat
+        # 使用 SkillManager 构建技能部分；回退到原始文件以保持向后兼容
         skills_content = skill_manager.build_prompt_section()
         if not skills_content:
             skills_content = _load_md_file(SKILLS_FILE)
@@ -2222,7 +2225,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
                                 build_outside_buf = build_outside_buf[-200:]
                             return
                         pos = min(positions)
-                        tag_len = 7 if pos == bpos else 10  # <build>=7个字符，<commands>=10个字符
+                        tag_len = 7 if pos == bpos else 10  # <build> 7个字符，<commands> 10个字符
                         build_outside_buf = build_outside_buf[pos + tag_len:]
                         in_build = True
                         remaining = build_outside_buf
@@ -2240,7 +2243,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
 
                     if cpositions:
                         close_pos = min(cpositions)
-                        close_len = 8 if close_pos == bclose else 11  # </build>=8个字符，</commands>=11个字符
+                        close_len = 8 if close_pos == bclose else 11  # </build> 8个字符，</commands> 11个字符
                         segment = build_commands_buf[:close_pos]
                         remainder = build_commands_buf[close_pos + close_len:]
                         build_commands_buf = ""
@@ -2264,7 +2267,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
                     if "\n" not in build_commands_buf:
                         return
                     lines = build_commands_buf.split("\n")
-                    build_commands_buf = lines[-1]  # keep incomplete line
+                    build_commands_buf = lines[-1]  # 保留不完整的行
                     for raw_line in lines[:-1]:
                         line = raw_line.strip()
                         if not line or line.startswith("```"):
@@ -2368,7 +2371,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
                 existing_skills = _load_md_file(SKILLS_FILE)
                 merged = _merge_skills(raw_skills_text, existing_skills)
                 if merged is not None:
-                    # Regenerate from structured index for consistency
+                    # 为保持一致性，从结构化索引重新生成
                     skill_manager.regenerate_index_md(SKILLS_FILE)
                     skills_content = skill_manager.build_prompt_section()
                     logger.info("已更新技能系统 (结构化+索引)")
@@ -2857,7 +2860,7 @@ def export_arduino():
 
             import tempfile
             sketch_dir = tempfile.mkdtemp(prefix="tc_arduino_")
-            # Arduino CLI requires .ino filename == parent directory name
+            # Arduino CLI 要求 .ino 文件名等于父目录名
             sketch_name = os.path.basename(sketch_dir) + ".ino"
             sketch_path = os.path.join(sketch_dir, sketch_name)
             with open(sketch_path, "w", encoding="utf-8") as f:
@@ -2942,7 +2945,7 @@ def detect_boards_api():
     try:
         from turing_to_arduino.uploader import detect_boards
         boards = detect_boards()
-        # detect_boards() returns normalized format [{address, label, name, fqbn}, ...]
+        # detect_boards() 返回规范化格式：[{address, label, name, fqbn}, ...]
         return jsonify({"boards": boards})
     except Exception as e:
         logger.error("检测 Arduino 板子失败: %s", e)

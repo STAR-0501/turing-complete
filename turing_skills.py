@@ -1,7 +1,7 @@
-"""Structured skill management system for Turing Complete circuit simulator.
+"""Turing Complete 电路模拟器的结构化技能管理系统。
 
-Provides Skill dataclass with frontmatter parsing and a SkillManager
-that manages a directory of structured skill files with index.json registry.
+提供带 frontmatter 解析的 Skill 数据类和 SkillManager，
+管理结构化技能文件目录和 index.json 注册表。
 """
 
 import os
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Skill:
-    """A reusable skill/knowledge entry with structured metadata."""
+    """一个带有结构化元数据的可复用技能/知识条目。"""
 
     id: str
     name: str
@@ -33,11 +33,11 @@ class Skill:
 
     @staticmethod
     def from_markdown(filepath: str) -> 'Skill':
-        """Parse a skill file with YAML-style frontmatter.
+        """解析带有 YAML 风格 frontmatter 的技能文件。
 
-        Frontmatter between --- delimiters, content after.
-        Fields: name, description, tags (comma-separated), author, created.
-        Content is everything after the closing ---.
+        --- 分隔符之间的元数据，之后是内容。
+        字段: name, description, tags（逗号分隔）, author, created。
+        内容是结束 --- 之后的所有内容。
         """
         with open(filepath, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -45,7 +45,7 @@ class Skill:
 
     @staticmethod
     def _parse_text(text: str, source: str = "") -> 'Skill':
-        """Parse skill text with optional frontmatter."""
+        """解析带可选 frontmatter 的技能文本。"""
         frontmatter = {}
         body = text
 
@@ -79,8 +79,7 @@ class Skill:
             if id_match:
                 skill_id = id_match.group(1).lower()
 
-        # Strip the leading ### header line from content since it's redundant
-        # with the frontmatter-derived name/id
+        # 从内容中移除前导的 ### 标题行，因为它与 frontmatter 派生的名称/ID 重复
         content = body
         content_lines = content.split('\n', 1)
         if content_lines and re.match(r'^###\s+(Skill-[\w-]+|CP-[\w-]+)', content_lines[0]):
@@ -98,7 +97,7 @@ class Skill:
 
     def to_markdown(self) -> str:
         """Serialize back to frontmatter + content format."""
-        tags_str = ", ".join(self.tags)
+        tag序列化回 frontmatter + 内容格式。
         lines = ['---']
         if self.id:
             lines.append(f'id: {self.id}')
@@ -115,7 +114,7 @@ class Skill:
 
     def compute_checksum(self) -> str:
         """SHA-256 of normalized content."""
-        return Skill._compute_checksum(self.content)
+        ret返回规范化内容的 SHA-256。lf.content)
 
     @staticmethod
     def _compute_checksum(content: str) -> str:
@@ -123,10 +122,10 @@ class Skill:
 
 
 class SkillManager:
-    """Manages structured skill files in a skills/ directory.
+    """管理 skills/ 目录中的结构化技能文件。
 
-    Provides discovery, indexing, merging, and prompt section building.
-    Thread-safe via threading.Lock.
+    提供发现、索引、合并和提示词段落构建功能。
+    通过 threading.Lock 保证线程安全。
     """
 
     def __init__(self, skills_dir: str = "skills", base_dir: Optional[str] = None):
@@ -144,14 +143,14 @@ class SkillManager:
         self._save_index()
 
     def _ensure_dir(self):
-        """Create skills/ directory if not exists."""
+        """如果 skills/ 目录不存在则创建。"""
         os.makedirs(self._skills_abs_dir, exist_ok=True)
 
     def _index_path(self) -> str:
         return os.path.join(self._skills_abs_dir, "index.json")
 
     def _load_index(self):
-        """Load index.json if it exists."""
+        """如果存在则加载 index.json。"""
         idx_path = self._index_path()
         if os.path.exists(idx_path):
             try:
@@ -173,7 +172,7 @@ class SkillManager:
                 logger.warning("Failed to load skill index: %s", e)
 
     def _save_index(self):
-        """Write index.json with current skill metadata."""
+        """用当前技能元数据写入 index.json。"""
         idx_path = self._index_path()
         data = {}
         for skill_id, skill in self._skills.items():
@@ -200,7 +199,7 @@ class SkillManager:
             raise
 
     def _discover(self):
-        """Scan skills/*.md for new/updated files, parse them, update _skills."""
+        """扫描 skills/*.md 查找新/更新的文件，解析并更新 _skills。"""
         pattern = os.path.join(self._skills_abs_dir, "*.md")
         for filepath in glob.glob(pattern):
             basename = os.path.basename(filepath)
@@ -221,17 +220,17 @@ class SkillManager:
                     "Failed to parse skill file %s: %s", filepath, e)
 
     def get(self, skill_id: str) -> Optional[Skill]:
-        """Get a skill by id (case-insensitive)."""
+        """按 id 获取技能（不区分大小写）。"""
         with self._lock:
             return self._skills.get(skill_id.lower())
 
     def list_all(self) -> List[Skill]:
-        """Return all managed skills."""
+        """返回所有管理的技能。"""
         with self._lock:
             return list(self._skills.values())
 
     def get_by_tags(self, tags: Optional[List[str]] = None) -> List[Skill]:
-        """Filter skills by tags. If tags is None/empty, returns all."""
+        """按标签过滤技能。如果 tags 为 None/空，返回全部。"""
         if not tags:
             return self.list_all()
         tags_lower = [t.lower().strip() for t in tags if t.strip()]
@@ -244,11 +243,11 @@ class SkillManager:
             ]
 
     def merge(self, skill: Skill) -> bool:
-        """Add or update a skill by checksum. Returns True if changed.
+        """按校验和添加或更新技能。如果变化返回 True。
 
-        If id matches existing and checksum matches, skip (no change).
-        If id matches but checksum differs, update file and index.
-        If new id, create new file and add to index.
+        如果同一 id 的技能已存在且校验和匹配：跳过（无变化）。
+        如果同一 id 但校验和不同：更新文件和索引。
+        如果是新 id：创建新文件并添加到索引。
         """
         with self._lock:
             existing = self._skills.get(skill.id)
@@ -270,7 +269,7 @@ class SkillManager:
             return True
 
     def remove(self, skill_id: str) -> bool:
-        """Remove a skill by id. Returns True if removed."""
+        """按 id 移除技能。如果移除成功返回 True。"""
         with self._lock:
             if skill_id not in self._skills:
                 return False
@@ -285,13 +284,13 @@ class SkillManager:
             return True
 
     def discover(self):
-        """Re-scan skills/ directory. Public wrapper."""
+        """重新扫描 skills/ 目录。公共包装方法。"""
         self._discover()
         self._save_index()
 
     @staticmethod
     def _infer_category(skill: Skill) -> str:
-        """Infer category from skill id or tags."""
+        """从技能 id 或标签推断分类。"""
         id_lower = skill.id.lower()
         for prefix, cat in [
             ('skill-dbg', 'Debugging'),
@@ -326,8 +325,8 @@ class SkillManager:
 
     @staticmethod
     def _format_skill_id(skill_id: str) -> str:
-        """Format a skill id for display, e.g. 'skill-dbg-1' -> 'Skill-DBG-1',
-        'cp-halfadder' -> 'CP-HalfAdder'."""
+        """格式化技能 id 用于显示，例如 'skill-dbg-1' -> 'Skill-DBG-1',
+        'cp-halfadder' -> 'CP-HalfAdder'。"""
         parts = skill_id.split('-')
         if not parts:
             return skill_id
@@ -344,16 +343,16 @@ class SkillManager:
         elif prefix == 'cp':
             # cp-halfadder -> CP-HalfAdder
             rest = '-'.join(parts[1:])
-            # title-case join: half-adder -> Half-Adder, halfadder -> HalfAdder
+            # 标题大小写连接: half-adder -> Half-Adder, halfadder -> HalfAdder
             rest = rest.replace('-', ' ').title().replace(' ', '')
             return 'CP-' + rest
         return skill_id
 
     def build_prompt_section(self, tags: Optional[List[str]] = None) -> str:
-        """Build a markdown section for injection into system prompt.
+        """构建用于注入系统提示词的 markdown 段落。
 
-        If tags provided, filter to matching skills. Otherwise include all.
-        Returns empty string if no skills match.
+        如果提供了标签，过滤出匹配的技能。否则包含所有技能。
+        如果没有匹配的技能则返回空字符串。
         """
         skills = self.get_by_tags(tags)
         if not skills:
@@ -375,9 +374,9 @@ class SkillManager:
         return "\n".join(lines).strip()
 
     def regenerate_index_md(self, output_path: str):
-        """Regenerate the skills.md flat file as an auto-generated index.
+        """重新生成 skills.md 平面文件作为自动生成的索引。
 
-        Preserves the file as backward-compatible reference for agents.
+        保持文件作为代理的向后兼容参考。
         """
         with self._lock:
             skills = list(self._skills.values())
@@ -394,9 +393,9 @@ class SkillManager:
             f"_Last updated: {today}_",
             f"_Total skills: {len(skills)}_",
             "",
-            "> Skills are distilled, general-purpose knowledge extracted from agent work sessions.",
-            "> Each skill should be concise, abstract, and broadly applicable.",
-            "> When you discover universal insight, add it here for future sessions.",
+            "> 技能是从代理工作会话中提取的提炼后的通用知识。",
+            "> 每个技能应简洁、抽象且广泛适用。",
+            "> 当你发现通用洞见时，将其添加至此以供未来会话使用。",
             "",
         ]
 
@@ -428,8 +427,8 @@ class SkillManager:
 
         lines.append("---")
         lines.append("")
-        lines.append("*To add a new skill: when you discover general-purpose knowledge during your work, append it above in this format and increment the total count.*")
-        lines.append("*To add a new circuit pattern: document the build commands, verify cases, and reusable MODULE name.*")
+        lines.append("*添加新技能：当你在工作中发现通用知识时，按此格式追加到上方并增加总数。*")
+        lines.append("*添加新电路模式：记录构建命令、验证用例和可复用的模块名称。*")
         lines.append("")
 
         content = '\n'.join(lines)
@@ -462,12 +461,12 @@ class SkillManager:
 
     @staticmethod
     def parse_skills_block(text: str) -> List[Skill]:
-        """Parse a <skills> block from agent response into Skill objects.
+        """将代理响应中的 <skills> 块解析为 Skill 对象。
 
-        Format expected:
-            ## [Category]
+        预期格式:
+            ## [类别]
 
-            ### Skill-XXX-N: Title
+            ### Skill-XXX-N: 标题
             - **Context**: ...
             - **What**: ...
             - **Why**: ...
@@ -483,7 +482,7 @@ class SkillManager:
             category = cat_lines[0].strip()
             body = cat_lines[1] if len(cat_lines) > 1 else ''
 
-            # Split by ### Skill- headers
+            # 按 ### Skill- 标题分割
             skill_blocks = re.split(
                 r'^###\s+(?=Skill-[\w-]+:)', body, flags=re.MULTILINE)
             for block in skill_blocks:
@@ -499,7 +498,7 @@ class SkillManager:
                 skill_id = h_match.group(1).lower()
                 skill_name = h_match.group(2).strip()
 
-                # Reconstruct full content with ### header prefix
+                # 使用 ### 标题前缀重建完整内容
                 content = '### ' + header_line
                 rest_lines = block.split('\n')[1:]
                 if rest_lines:
@@ -527,7 +526,7 @@ class SkillManager:
 
     @staticmethod
     def _category_to_tags(category: str) -> List[str]:
-        """Convert a category name to a list of tags."""
+        """将分类名称转换为标签列表。"""
         cat_lower = category.lower().strip()
         if 'debug' in cat_lower:
             return ['debugging', 'windows']

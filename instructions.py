@@ -1,6 +1,6 @@
 """
-Dynamic instruction injection system for Turing Complete.
-Organizes AI instructions by task scenario for focused system prompts.
+Turing Complete 动态指令注入系统。
+按任务场景组织 AI 指令，实现聚焦的系统提示词。
 """
 
 import re
@@ -11,7 +11,7 @@ from typing import Optional, List
 
 @dataclass
 class InstructionGroup:
-    """A group of instructions belonging to one scenario."""
+    """属于一个场景的一组指令。"""
     id: str
     name: str
     content: str
@@ -20,11 +20,11 @@ class InstructionGroup:
 
 
 class InstructionManager:
-    """Loads AI_INSTRUCTIONS.md and builds scenario-focused prompt sections.
+    """加载 AI_INSTRUCTIONS.md 并构建按场景聚焦的提示词段落。
 
-    Parses %%SCENARIO:xxx%% markers in the markdown file to group instructions
-    by scenario. The same scenario can appear multiple times (content accumulates).
-    Content before the first marker defaults to "always".
+    解析 markdown 文件中的 %%SCENARIO:xxx%% 标记，按场景分组指令。
+    同一场景可以出现多次（内容会累积）。
+    第一个标记之前的内容默认为 "always"。
     """
 
     def __init__(self, base_file: str = "AI_INSTRUCTIONS.md"):
@@ -34,7 +34,7 @@ class InstructionManager:
         self._load()
 
     def _load(self):
-        """Parse %%SCENARIO:xxx%% markers from the markdown file."""
+        """从 markdown 文件中解析 %%SCENARIO:xxx%% 标记。"""
         content = ""
         try:
             with open(self.base_file, 'r', encoding='utf-8') as f:
@@ -48,17 +48,17 @@ class InstructionManager:
         accumulated: dict[str, str] = {}
 
         if len(parts) == 1:
-            # No markers at all — everything belongs to "always"
+            # 没有标记——所有内容属于 "always"
             text = parts[0].strip()
             if text:
                 accumulated["always"] = text
         else:
-            # First element is content before first marker
+            # 第一个元素是第一个标记之前的内容
             first = parts[0].strip()
             if first:
                 accumulated["always"] = first
 
-            # Remaining: alternating [scenario_name, content, ...]
+            # 剩余部分：交替 [场景名称, 内容, ...]
             for i in range(1, len(parts) - 1, 2):
                 scenario = parts[i]
                 scenario_content = parts[i + 1] if i + 1 < len(parts) else ""
@@ -66,7 +66,7 @@ class InstructionManager:
                     accumulated[scenario] = ""
                 accumulated[scenario] += '\n' + scenario_content.strip()
 
-        # Build InstructionGroup objects
+        # 构建 InstructionGroup 对象
         priority_map = {
             "always": 100,
             "test": 80,
@@ -86,32 +86,32 @@ class InstructionManager:
                 )
 
     def build_prompt_section(self, scenarios: Optional[List[str]] = None) -> str:
-        """Build a scenario-focused instruction highlight section.
+        """构建按场景聚焦的指令突出显示段落。
 
-        1. Always-group instructions (always injected first)
-        2. Active scenario instructions (highlighted with section header)
-        3. Other scenario instructions (brief reference appendix)
+        1. Always 组指令（总是首先注入）
+        2. 当前活跃场景指令（用段落标题突出显示）
+        3. 其他场景指令（简短的参考附录）
 
-        Args:
-            scenarios: List of active scenario names (e.g. ["test", "debug"]).
-                       None or empty list means only "always" group is shown.
+        参数:
+            scenarios: 活跃场景名称列表（例如 ["test", "debug"]）。
+                       None 或空列表表示只显示 "always" 组。
         """
         if scenarios is None:
             scenarios = []
 
         sections = []
 
-        # 1. Always group (base commands — always present)
+        # 1. Always 组（基础指令——始终存在）
         if "always" in self._groups:
             sections.append(self._groups["always"].content)
 
-        # 2. Active scenario groups sorted by priority DESC
+        # 2. 活跃场景组，按优先级降序排列
         active = [
             g for s in scenarios
             for g in [self._groups.get(s)]
             if g is not None and g.scenario != "always"
         ]
-        # Deduplicate by id while preserving order
+        # 按 id 去重，同时保持顺序
         seen = set()
         unique_active = []
         for g in active:
@@ -124,7 +124,7 @@ class InstructionManager:
             header = f"\n=== 当前场景：{g.name.replace('Scenario: ', '')} ===\n"
             sections.append(header + g.content)
 
-        # 3. Other scenario groups as brief reference
+        # 3. 其他场景组作为简要参考
         remaining = [
             g for g in self._groups.values()
             if g.scenario != "always" and g.scenario not in scenarios
@@ -140,14 +140,14 @@ class InstructionManager:
         return "\n\n".join(s for s in sections if s)
 
     def resolve_scenario_from_mode(self, mode: str, message: str = "") -> List[str]:
-        """Map circuit mode + user message keywords to active scenario list.
+        """将电路模式 + 用户消息关键词映射到活跃场景列表。
 
-        Args:
-            mode: "circuit" or "chat" (from _quick_classify).
-            message: The current user message for keyword matching.
+        参数:
+            mode: "circuit" 或 "chat"（来自 _quick_classify）。
+            message: 用于关键词匹配的当前用户消息。
 
-        Returns:
-            List of scenario names matching the current task context.
+        返回:
+            匹配当前任务上下文的场景名称列表。
         """
         if mode != "circuit":
             return []
@@ -185,12 +185,12 @@ class InstructionManager:
         return list(found)
 
     def list_scenarios(self) -> List[str]:
-        """Return all scenario names except 'always'."""
+        """返回除 'always' 之外的所有场景名称。"""
         return list(set(
             g.scenario for g in self._groups.values() if g.scenario != "always"
         ))
 
     @property
     def error(self) -> Optional[str]:
-        """Return load error message, if any."""
+        """返回加载错误信息（如果有）。"""
         return self._error

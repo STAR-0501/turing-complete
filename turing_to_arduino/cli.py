@@ -1,10 +1,10 @@
-"""CLI entry point for the turing_to_arduino package.
+"""turing_to_arduino 包的 CLI 入口点。
 
-Supports two modes:
-  1. Code generation only (default)
-  2. Full pipeline: generate + compile + upload (--upload)
+支持两种模式：
+  1. 仅生成代码（默认）
+  2. 完整流水线：生成 + 编译 + 上传（--upload）
 
-Usage:
+用法：
     python -m turing_to_arduino --circuit circuit_data.json
     python -m turing_to_arduino --circuit circuit_data.json --upload --port COM3
     python -m turing_to_arduino --list-ports
@@ -29,53 +29,53 @@ from .uploader import (
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert Turing Complete circuit to Arduino sketch"
+        description="将 Turing Complete 电路转换为 Arduino 草图"
     )
     parser.add_argument(
         "--circuit",
         type=str,
         default="circuit_data.json",
-        help="Path to circuit JSON file (default: circuit_data.json)",
+        help="电路 JSON 文件路径（默认: circuit_data.json）",
     )
     parser.add_argument(
         "--modules",
         type=str,
         default=None,
-        help="Path to modules JSON file (optional, default: modules_data.json)",
+        help="模块 JSON 文件路径（可选，默认: modules_data.json）",
     )
     parser.add_argument(
         "--output",
         type=str,
         default="./output/sketch",
-        help="Output sketch directory (default: ./output/sketch)",
+        help="输出草图目录（默认: ./output/sketch）",
     )
     parser.add_argument(
         "--upload",
         action="store_true",
-        help="Compile and upload after code generation",
+        help="生成代码后编译并上传",
     )
     parser.add_argument(
         "--port",
         type=str,
         default=None,
-        help="Upload target port (e.g., COM3, /dev/ttyACM0)",
+        help="上传目标端口（例如 COM3, /dev/ttyACM0）",
     )
     parser.add_argument(
         "--fqbn",
         type=str,
         default="arduino:avr:uno",
-        help="Target board FQBN (default: arduino:avr:uno)",
+        help="目标板的 FQBN（默认: arduino:avr:uno）",
     )
     parser.add_argument(
         "--doctor",
         action="store_true",
-        help="Run dependency checks and print install guide",
+        help="运行依赖检查并打印安装指南",
     )
     parser.add_argument(
         "--list-ports",
         action="store_true",
         dest="list_ports",
-        help="List connected Arduino boards and exit",
+        help="列出连接的 Arduino 板并退出",
     )
 
     args = parser.parse_args()
@@ -127,7 +127,7 @@ def main() -> None:
     if args.modules is not None:
         modules_path = Path(args.modules)
     else:
-        # Default modules path, sibling to circuit
+        # 默认模块路径，与电路文件同级
         modules_path = Path("modules_data.json")
 
     if modules_path and modules_path.is_file():

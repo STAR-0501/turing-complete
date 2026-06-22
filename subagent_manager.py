@@ -1,7 +1,7 @@
-"""Subagent lifecycle management for TC circuit simulator.
+"""TC 电路模拟器的子代理生命周期管理。
 
-Provides threaded subagent execution with concurrent task limiting.
-Subagents are lightweight one-shot LLM calls for parallel circuit tasks.
+提供带并发任务限制的线程化子代理执行。
+子代理是轻量级一次性 LLM 调用，用于并行电路任务。
 """
 
 import json
@@ -17,12 +17,12 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# Max concurrent subagent tasks
+# 最大并发子代理任务数
 MAX_CONCURRENT = 3
-# Per-task execution timeout in seconds
+# 每个任务的执行超时（秒）
 TASK_TIMEOUT = 120
 
-# AI config file path (same convention as app.py)
+# AI 配置文件路径（与 app.py 相同约定）
 CONFIG_FILE = "ai_config.json"
 
 _AI_CONFIG_DEFAULTS = {
@@ -38,7 +38,7 @@ _AI_CONFIG_DEFAULTS = {
 
 
 def _load_config():
-    """Load AI config from ai_config.json (mirrors app.py helpers)."""
+    """从 ai_config.json 加载 AI 配置（镜像 app.py 辅助函数）。"""
     config = dict(_AI_CONFIG_DEFAULTS)
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -50,7 +50,7 @@ def _load_config():
 
 
 def _build_api_url(endpoint, base_url=None):
-    """Build API URL (mirrors app.py helper)."""
+    """构建 API URL（镜像 app.py 辅助函数）。"""
     if base_url is None:
         base_url = _load_config()['base_url']
     base = str(base_url).rstrip('/')
@@ -60,9 +60,9 @@ def _build_api_url(endpoint, base_url=None):
 
 
 def _call_llm(system_prompt, user_message):
-    """Simplified non-streaming LLM call for subagent tasks.
+    """子代理任务的简化非流式 LLM 调用。
 
-    Mirrors app.py _call_llm_once but returns only text content.
+    镜像 app.py 的 _call_llm_once，但只返回文本内容。
     """
     config = _load_config()
     api_key = config.get("api_key", "")
@@ -130,7 +130,7 @@ def _call_llm(system_prompt, user_message):
 
 @dataclass
 class SubagentTask:
-    """Represents a single subagent execution task."""
+    """表示单个子代理执行任务。"""
     id: str
     goal: str
     circuit_snapshot: dict
@@ -141,10 +141,10 @@ class SubagentTask:
 
 
 class SubagentManager:
-    """Manages subagent lifecycle with concurrent task limiting.
+    """管理子代理生命周期，带有并发任务限制。
 
-    Allows the main agent to spawn up to MAX_CONCURRENT subagent tasks
-    running in background threads. Excess tasks are queued via semaphore.
+    允许主代理最多生成 MAX_CONCURRENT 个子代理任务，
+    在后台线程中运行。超出部分通过信号量排队。
     """
 
     def __init__(self):
@@ -152,14 +152,14 @@ class SubagentManager:
         self._semaphore = threading.Semaphore(MAX_CONCURRENT)
 
     def create(self, goal, snapshot):
-        """Create and start a subagent task.
+        """创建并启动一个子代理任务。
 
-        Args:
-            goal: Natural language goal for the subagent.
-            snapshot: Circuit snapshot dict (from CircuitManager.export_snapshot).
+        参数:
+            goal: 给子代理的自然语言目标。
+            snapshot: 电路快照字典（来自 CircuitManager.export_snapshot）。
 
-        Returns:
-            task_id string (e.g. "sa_abc123def456").
+        返回:
+            task_id 字符串（例如 "sa_abc123def456"）。
         """
         task_id = f"sa_{uuid.uuid4().hex[:12]}"
         task = SubagentTask(
@@ -177,9 +177,9 @@ class SubagentManager:
         return task_id
 
     def get_status(self, task_id):
-        """Get task status dict, or None if not found.
+        """获取任务状态字典，如果未找到返回 None。
 
-        Returns:
+        返回:
             {"id": str, "status": str, "result": str|None, "error": str|None}
         """
         task = self._tasks.get(task_id)
@@ -193,15 +193,15 @@ class SubagentManager:
         }
 
     def _execute(self, task_id):
-        """Execute subagent task in background thread.
+        """在后台线程中执行子代理任务。
 
-        Acquires semaphore slot, calls LLM, saves result or error.
+        获取信号量槽位，调用 LLM，保存结果或错误。
         """
         task = self._tasks.get(task_id)
         if not task:
             return
 
-        # Acquire concurrent slot (with timeout)
+        # 获取并发槽位（带超时）
         acquired = self._semaphore.acquire(blocking=True, timeout=TASK_TIMEOUT)
         if not acquired:
             task.status = "failed"

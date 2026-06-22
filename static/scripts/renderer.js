@@ -4,7 +4,7 @@
  */
 
 /**
- * 渲染模块
+ * 渲染画布
  * @param {CanvasRenderingContext2D} ctx - 画布上下文
  * @param {Array} elements - 元件数组
  * @param {Array} wires - 导线数组
@@ -204,7 +204,7 @@ export function render(
       ctx.fill();
     }
 
-    // 绘制元件注释
+    // 绘制元件注释（黄色文字，绘制在元件右侧）
     if (element.comment && element.comment.trim()) {
       ctx.save();
       ctx.font = 12 / zoom + 'px Arial';

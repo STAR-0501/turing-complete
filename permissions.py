@@ -1,7 +1,7 @@
-"""Permission system for TC's AI Agent.
+"""TC AI Agent 的权限系统。
 
-Defines tool-level permission levels and a permission checker
-that gates every command dispatched through execute_circuit_command.
+定义工具级别的权限等级和权限检查器，
+对通过 execute_circuit_command 分发的每条命令进行权限门控。
 """
 
 from __future__ import annotations
@@ -10,31 +10,31 @@ from enum import IntEnum
 
 
 class Permission(IntEnum):
-    """Permission levels (higher = more authority)."""
-    READ = 0    # Read circuit state, sample outputs
-    EXEC = 1    # Simulate, toggle/set inputs (no modification)
-    WRITE = 2   # Add/wire/move/comment elements
-    ADMIN = 3   # Delete/clear circuit, define modules
+    """权限级别（值越大权限越高）。"""
+    READ = 0    # 读取电路状态、采样输出
+    EXEC = 1    # 仿真、切换/设置输入（不修改电路）
+    WRITE = 2   # 添加/连线/移动/注释元件
+    ADMIN = 3   # 删除/清空电路、定义模块
 
 
-# Minimum permission required for each tool
+# 每个工具所需的最低权限
 TOOL_PERMISSIONS: dict[str, Permission] = {
-    # READ
+    # 读取
     "get_state": Permission.READ,
     "sample_outputs": Permission.READ,
 
-    # EXEC
+    # 执行
     "simulate": Permission.EXEC,
     "toggle_input": Permission.EXEC,
     "set_input": Permission.EXEC,
 
-    # WRITE
+    # 写入
     "add_element": Permission.WRITE,
     "add_wire": Permission.WRITE,
     "move_element": Permission.WRITE,
     "set_element_comment": Permission.WRITE,
 
-    # ADMIN
+    # 管理
     "remove_element": Permission.ADMIN,
     "remove_wire": Permission.ADMIN,
     "clear_circuit": Permission.ADMIN,
@@ -43,25 +43,25 @@ TOOL_PERMISSIONS: dict[str, Permission] = {
 
 
 class PermissionChecker:
-    """Gates tool execution against the current permission level.
+    """根据当前权限等级门控工具执行。
 
-    Usage:
+    用法:
         checker = PermissionChecker(level=Permission.WRITE)
-        checker.check("remove_element")  # → False (needs ADMIN)
+        checker.check("remove_element")  # → False (需要 ADMIN)
     """
 
     def __init__(self, level: Permission = Permission.WRITE):
         self.level = level
 
     def check(self, tool_name: str) -> tuple[bool, str | None]:
-        """Return (allowed, error_message).
+        """返回 (是否允许, 错误信息)。
 
-        If allowed is True, error_message is None.
-        If allowed is False, error_message describes what level is needed.
+        如果 allowed 为 True，error_message 为 None。
+        如果 allowed 为 False，error_message 描述需要什么级别。
         """
         required = TOOL_PERMISSIONS.get(tool_name)
         if required is None:
-            # Unknown tool → ADMIN required (safe default)
+            # 未知工具 → 需要 ADMIN（安全默认）
             if self.level >= Permission.ADMIN:
                 return True, None
             return False, (

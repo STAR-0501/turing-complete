@@ -32,8 +32,8 @@ export function createANDGate(x, y) {
 
 /**
  * 创建或门元件
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @returns {object} 或门元件对象
  */
 export function createORGate(x, y) {
@@ -58,8 +58,8 @@ export function createORGate(x, y) {
 
 /**
  * 创建非门元件
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @returns {object} 非门元件对象
  */
 export function createNOTGate(x, y) {
@@ -81,8 +81,8 @@ export function createNOTGate(x, y) {
 
 /**
  * 创建输入元件
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @returns {object} 输入元件对象
  */
 export function createInputBlock(x, y) {
@@ -104,8 +104,8 @@ export function createInputBlock(x, y) {
 
 /**
  * 创建输出元件
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @returns {object} 输出元件对象
  */
 export function createOutputBlock(x, y) {
@@ -127,13 +127,13 @@ export function createOutputBlock(x, y) {
 
 /**
  * 创建模块元件
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @param {string} name - 模块名称
  * @param {Array} functionElements - 模块内部的元件
  * @param {Array} functionWires - 模块内部的导线
- * @param {Array} inputElements - 模块的输入元件ID列表
- * @param {Array} outputElements - 模块的输出元件ID列表
+ * @param {Array} inputElements - 模块的输入元件 ID 列表
+ * @param {Array} outputElements - 模块的输出元件 ID 列表
  * @returns {object} 模块元件对象
  */
 export function createFunctionElement(x, y, name, functionElements, functionWires, inputElements, outputElements) {
@@ -189,8 +189,8 @@ export function createFunctionElement(x, y, name, functionElements, functionWire
 /**
  * 根据类型创建元件
  * @param {string} type - 元件类型
- * @param {number} x - x坐标
- * @param {number} y - y坐标
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
  * @param {object} options - 额外选项（用于模块元件）
  * @returns {object} 元件对象
  */

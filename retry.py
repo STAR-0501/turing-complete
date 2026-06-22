@@ -14,7 +14,7 @@ def exponential_backoff(
     max_delay=DEFAULT_MAX_DELAY,
     jitter=DEFAULT_JITTER
 ):
-    """Calculate delay with exponential backoff + random jitter."""
+    """计算带指数退避和随机抖动的延迟。"""
     delay = min(base_delay * (2 ** attempt), max_delay)
     if jitter:
         delay *= 1 + random.uniform(-jitter, jitter)
@@ -24,21 +24,21 @@ def exponential_backoff(
 def retry_call(func, args=None, kwargs=None, max_retries=DEFAULT_MAX_RETRIES,
                base_delay=DEFAULT_BASE_DELAY,
                retryable_exceptions=None):
-    """Call func with retry on specified exceptions.
+    """调用函数并在指定异常时重试。
 
-    Args:
-        func: Callable to invoke
-        args: Positional args tuple (default: ())
-        kwargs: Keyword args dict (default: {})
-        max_retries: Max retry attempts before re-raising
-        base_delay: Initial delay in seconds
-        retryable_exceptions: Tuple of exception types to catch and retry
+    参数:
+        func: 要调用的可调用对象
+        args: 位置参数元组（默认: ()）
+        kwargs: 关键字参数字典（默认: {}）
+        max_retries: 抛出异常前的最大重试次数
+        base_delay: 初始延迟秒数
+        retryable_exceptions: 要捕获并重试的异常类型元组
 
-    Returns:
-        Whatever func returns
+    返回:
+        func 的返回值
 
-    Raises:
-        The last exception caught, if all retries exhausted
+    抛出:
+        如果所有重试耗尽，抛出最后捕获的异常
     """
     if args is None:
         args = ()
@@ -62,7 +62,7 @@ def retry_call(func, args=None, kwargs=None, max_retries=DEFAULT_MAX_RETRIES,
 
 def retry(max_retries=DEFAULT_MAX_RETRIES, base_delay=DEFAULT_BASE_DELAY,
           retryable_exceptions=None):
-    """Decorator: retry wrapped function on failure with exponential backoff."""
+    """装饰器：失败时使用指数退避重试被包装的函数。"""
     if retryable_exceptions is None:
         retryable_exceptions = (ConnectionError, TimeoutError, OSError)
 

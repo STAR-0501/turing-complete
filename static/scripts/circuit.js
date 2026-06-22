@@ -7,9 +7,9 @@
  * 获取连接到元件输入端口的源元件状态
  * @param {Array} elements - 元件数组
  * @param {Array} wires - 导线数组
- * @param {string} targetElementId - 目标元件ID
- * @param {string} targetPortId - 目标输入端口ID
- * @returns {boolean|null} 源元件的状态，如果没有连接则返回null
+ * @param {string} targetElementId - 目标元件 ID
+ * @param {string} targetPortId - 目标输入端口 ID
+ * @returns {boolean|null} 源元件的状态，如果没有连接则返回 null
  */
 function getInputSourceState(elements, wires, targetElementId, targetPortId) {
   // 查找连接到该输入端口的导线
@@ -58,8 +58,8 @@ function getInputSourceState(elements, wires, targetElementId, targetPortId) {
 /**
  * 检查是否有导线连接到指定的输入端口
  * @param {Array} wires - 导线数组
- * @param {string} targetElementId - 目标元件ID
- * @param {string} targetPortId - 目标输入端口ID
+ * @param {string} targetElementId - 目标元件 ID
+ * @param {string} targetPortId - 目标输入端口 ID
  * @returns {boolean} 是否有连接
  */
 function hasInputConnection(wires, targetElementId, targetPortId) {
@@ -84,6 +84,7 @@ function hasInputConnection(wires, targetElementId, targetPortId) {
  * @param {Map} functionCache - 模块计算缓存，避免重复计算
  * @returns {Array} 模块元件各输出端口的状态数组
  */
+// 将模块元件的输入端口值赋给内部的 INPUT 元件
 function calculateModuleElement(moduleElement, elements, wires, functionCache = new Map(), depth = 0) {
   if (!moduleElement.moduleData) {
     return [];
