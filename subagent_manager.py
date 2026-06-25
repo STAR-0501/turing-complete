@@ -15,7 +15,7 @@ from typing import Optional
 
 import requests
 
-from _common import get_ai_config, build_api_url as _build_api_url
+from _common import load_ai_config, build_api_url
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def _call_llm(system_prompt, user_message):
 
     镜像 app.py 的 _call_llm_once，但只返回文本内容。
     """
-    config = get_ai_config()
+    config = load_ai_config()
     api_key = config.get("api_key", "")
     if not api_key:
         raise RuntimeError("AI API key not configured")
@@ -38,7 +38,7 @@ def _call_llm(system_prompt, user_message):
     protocol = config.get("protocol", "")
 
     if protocol == "anthropic":
-        request_url = _build_api_url('/v1/messages')
+        request_url = build_api_url('/v1/messages')
         request_headers = {
             "x-api-key": api_key,
             "anthropic-version": config.get("anthropic_version", "2023-06-01"),
@@ -53,7 +53,7 @@ def _call_llm(system_prompt, user_message):
             "stream": False
         }
     else:
-        request_url = _build_api_url('/chat/completions')
+        request_url = build_api_url('/chat/completions')
         request_headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"

@@ -1,12 +1,13 @@
 from flask import Flask, request, jsonify, render_template, Response
 import json
-import logging
 import os
+import logging
 import sys
 from ai_commands import CircuitManager
 from subagent_manager import SubagentManager
 import re
 import requests
+import tempfile
 import time
 import threading
 import copy
@@ -19,23 +20,15 @@ from instructions import InstructionManager
 from agent_config import get_agent_config, AgentConfig
 from _common import (
     atomic_write_json as _atomic_write_json,
-    atomic_write_text,
-    build_api_url as _build_api_url,
-    get_ai_config,
-    is_ai_configured,
-    save_ai_config,
+    atomic_write_text as _atomic_write_md,
     load_ai_config,
+    get_ai_config,
+    save_ai_config,
+    is_ai_configured,
+    build_api_url as _build_api_url,
 )
 
-# AI 配置 (请在此填入您的 API Key)
-# 可选的 agent 参数:
-#   agent_max_rounds: 自治循环最大轮数 (默认 100，无硬上限，最小 1)
-#   agent_max_cmds_per_round: 每轮最多执行命令数 (默认 200，无硬上限，最小 10)
-#   agent_no_progress_stop_rounds: 连续无变化多少轮后停止 (默认 30，无硬上限，最小 3)
-#   max_tokens: 每次 LLM 调用的输出长度上限 (默认 4000)
-#   connect_timeout: 连接超时秒数 (默认 10)
-#   read_timeout: 读取超时秒数 (默认 180)
-# AI 配置管理 - 从 _common.py 统一管理
+# 统一代理配置（基于 YAML，用于新机制）
 agent_cfg: AgentConfig = get_agent_config()
 
 
@@ -146,11 +139,6 @@ def init_skills_file():
             logger.info("已创建技能索引: skills/index.json")
     except Exception as e:
         logger.error("初始化技能系统失败: %s", e)
-
-
-def _atomic_write_md(path, content):
-    """原子写入 Markdown 文件（plan.md / summary.md），委托给共享函数。"""
-    atomic_write_text(path, content)
 
 
 def _load_md_file(path):
@@ -1232,6 +1220,83 @@ def _extract_answer_text(text):
     return stripped
 
 
+def _merge_skills(new_skills_text, existing_skills_text):
+    """将新技能合并到现有 skills.md 内容中，按标题去重。
+
+    返回更新后的 skills.md 内容，若无新技能返回空字符串。
+    若合并失败（无变化）返回 None。
+    """
+    if not new_skills_text or not new_skills_text.strip():
+        return None
+
+    # 从新内容中提取技能标题（### Skill-*）
+    new_headers = set(re.findall(
+        r'^###\s+(Skill-[\w-]+)', new_skills_text, re.MULTILINE))
+    if not new_headers:
+        # 新文本中未找到有效技能
+        return None
+
+    # 清理新技能文本 - 移除 <skills> 包装结构
+    # 可能包含分类标题和技能条目
+    new_skills_clean = new_skills_text.strip()
+
+    if not existing_skills_text or not existing_skills_text.strip():
+        # 无现有技能 - 直接返回带标题的新技能
+        today = time.strftime('%Y-%m-%d')
+        new_count = len(new_headers)
+        return f"# Agent Skills (Self-Evolving Knowledge Base)\n\n_Last updated: {today}_\n_Total skills: {new_count}_\n\n{new_skills_clean}\n"
+
+    # 检查哪些标题已存在于现有文本中
+    existing_headers = set(re.findall(
+        r'^###\s+(Skill-[\w-]+)', existing_skills_text, re.MULTILINE))
+    truly_new_headers = new_headers - existing_headers
+
+    if not truly_new_headers:
+        # 所有新技能已存在于现有技能中
+        return None
+
+    # 查找需要追加的新技能（按标题提取完整块）
+    appended_blocks = []
+    for header in truly_new_headers:
+        # 在 new_skills_clean 中查找块（从标题到下一个标题或末尾）
+        pattern = rf'(^###\s+{re.escape(header)}.*?)(?=\n###\s+Skill-|\Z)'
+        match = re.search(pattern, new_skills_clean, re.DOTALL | re.MULTILINE)
+        if match:
+            block = match.group(1).strip()
+            appended_blocks.append(block)
+
+    if not appended_blocks:
+        return None
+
+    # 在页脚前追加新块（最后一行或"To add a new skill"部分之前）
+    footer_marker = "\n---\n*To add a new skill"
+    footer_idx = existing_skills_text.find(footer_marker)
+
+    new_content = "\n\n".join(appended_blocks)
+
+    if footer_idx >= 0:
+        merged = existing_skills_text[:footer_idx] + "\n\n" + \
+            new_content + "\n\n" + existing_skills_text[footer_idx:]
+    else:
+        merged = existing_skills_text.rstrip() + "\n\n" + new_content + "\n"
+
+    # 更新总计数
+    all_headers = existing_headers | truly_new_headers
+    today = time.strftime('%Y-%m-%d')
+    merged = re.sub(
+        r'_Last updated:.*',
+        f'_Last updated: {today}_',
+        merged
+    )
+    merged = re.sub(
+        r'_Total skills:\s*\d+',
+        f'_Total skills: {len(all_headers)}',
+        merged
+    )
+
+    return merged
+
+
 TOOL_SCHEMAS = {
     "add_element": {
         "description": "添加元件到电路",
@@ -2182,11 +2247,18 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
                         any_changed = True
                         logger.info(
                             "  新增/更新技能: %s", new_skill.id)
-                # 2. 重新生成 skills.md 索引（SkillManager 统一管理）
-                if any_changed:
+                # 2. 同时更新 flat skills.md（向后兼容）
+                existing_skills = _load_md_file(SKILLS_FILE)
+                merged = _merge_skills(raw_skills_text, existing_skills)
+                if merged is not None:
+                    # 为保持一致性，从结构化索引重新生成
                     skill_manager.regenerate_index_md(SKILLS_FILE)
                     skills_content = skill_manager.build_prompt_section()
-                    logger.info("已更新技能系统并重新生成索引")
+                    logger.info("已更新技能系统 (结构化+索引)")
+                elif any_changed:
+                    skill_manager.regenerate_index_md(SKILLS_FILE)
+                    skills_content = skill_manager.build_prompt_section()
+                    logger.info("已更新结构化技能文件并重新生成索引")
                 else:
                     logger.info("技能无变化（已存在或格式无效）")
 
@@ -2371,6 +2443,7 @@ def call_llm_stream(user_message, max_rounds_override=None, thinking_mode=False,
 @app.route('/api/conversations', methods=['GET'])
 def list_conversations():
     """列出所有历史对话"""
+    import os
     try:
         files = []
         for fname in os.listdir(LOG_DIR):
@@ -2389,6 +2462,7 @@ def list_conversations():
                     for line in f:
                         msg_count += 1
                         if not preview and line.strip():
+                            import json
                             try:
                                 entry = json.loads(line)
                                 content = entry.get('content', '')
@@ -2415,6 +2489,7 @@ def list_conversations():
 @app.route('/api/conversations/<session_id>', methods=['GET'])
 def get_conversation(session_id):
     """读取指定对话的消息"""
+    import os
     try:
         for fname in os.listdir(LOG_DIR):
             if session_id in fname and fname.endswith('.jsonl'):
@@ -2423,6 +2498,7 @@ def get_conversation(session_id):
                 with open(fpath, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
+                            import json
                             messages.append(json.loads(line))
                 return jsonify({'messages': messages, 'filename': fname})
         return jsonify({'status': 'error', 'message': '对话未找到'}), 404

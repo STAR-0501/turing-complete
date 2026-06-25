@@ -110,6 +110,55 @@ _ai_config_cache: dict[str, Any] | None = None
 
 
 def load_ai_config() -> dict[str, Any]:
+    """从 ai_config.json 加载 AI 配置。"""
+    global _ai_config_cache
+    config = dict(_AI_CONFIG_DEFAULTS)
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            file_config = json.load(f)
+        config.update(file_config)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    _ai_config_cache = config
+    return config
+
+
+def get_ai_config() -> dict[str, Any]:
+    """获取 AI 配置（含缓存）。"""
+    global _ai_config_cache
+    if _ai_config_cache is None:
+        return load_ai_config()
+    return _ai_config_cache
+
+
+def save_ai_config(data: dict[str, Any]) -> dict[str, Any]:
+    """更新并持久化 AI 配置。"""
+    global _ai_config_cache
+    config = get_ai_config()
+    config.update(data)
+    atomic_write_json(CONFIG_FILE, config)
+    _ai_config_cache = config
+    return config
+
+
+def is_ai_configured() -> bool:
+    """检查 AI 是否已配置有效的 API Key。"""
+    cfg = get_ai_config()
+    key = cfg.get("api_key", "")
+    return bool(key) and key != "YOUR_API_KEY_HERE"
+
+
+def build_api_url(endpoint: str, base_url: str | None = None) -> str:
+    """构建 API URL，防止重复拼接路径。"""
+    if base_url is None:
+        base_url = get_ai_config()['base_url']
+    base = str(base_url).rstrip('/')
+    if base.endswith(endpoint):
+        return base
+    return f"{base}{endpoint}"
+
+
+def load_ai_config() -> dict[str, Any]:
     """Load AI config from ai_config.json, falling back to defaults."""
     global _ai_config_cache
     config = dict(_AI_CONFIG_DEFAULTS)

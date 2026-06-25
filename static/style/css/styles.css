@@ -1,11 +1,11 @@
-/* 鍏ㄥ眬鏍峰紡閲嶇疆 */
+/* 全局样式重置 */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-/* 涓诲鍣ㄦ牱寮?*/
+/* 主容器样式 */
 body {
   font-family: 'Arial', sans-serif;
   background-color: #0a0a0a;
@@ -20,7 +20,7 @@ body {
   position: relative;
 }
 
-/* 鐢诲竷鏍峰紡 */
+/* 画布样式 */
 #canvas {
   position: absolute;
   top: 0;
@@ -30,7 +30,7 @@ body {
   cursor: crosshair;
 }
 
-/* 宸ュ叿鏍忔牱寮?*/
+/* 工具栏样式 */
 .toolbar {
   position: absolute;
   top: 10px;
@@ -84,7 +84,7 @@ body {
   background-color: rgba(0, 255, 255, 0.6);
 }
 
-/* 鍏冧欢鏍峰紡 */
+/* 元件样式 */
 .element {
   position: absolute;
   cursor: move;
@@ -113,7 +113,7 @@ body {
   height: 60px;
 }
 
-/* 绔彛鏍峰紡 */
+/* 端口样式 */
 .port {
   position: absolute;
   width: 10px;
@@ -133,7 +133,7 @@ body {
     0 0 20px #00ffff;
 }
 
-/* 瀵肩嚎鏍峰紡 */
+/* 导线样式 */
 .wire {
   stroke: #00ffff;
   stroke-width: 2;
@@ -145,7 +145,7 @@ body {
   stroke-width: 3;
 }
 
-/* 缃戞牸鏍峰紡 - 鏃犻檺寤朵几 */
+/* 网格样式 - 无限延伸 */
 .grid {
   position: absolute;
   top: -50%;
@@ -161,7 +161,7 @@ body {
   transform: translate(0, 0);
 }
 
-/* 鐘舵€佹爮鏍峰紡 */
+/* 状态栏样式 */
 .status-bar {
   position: absolute;
   bottom: 20px;
@@ -174,7 +174,7 @@ body {
   font-size: 12px;
 }
 
-/* Agent 蹇嵎鎻愮ず鎸夐挳 */
+/* Agent 快捷提示按钮 */
 .agent-prompt-suggestions {
   display: none;
   flex-wrap: wrap;
@@ -205,9 +205,9 @@ body {
   color: #00ffff;
 }
 
-/* ===== Agent 渚ц竟鏍?===== */
+/* ===== Agent 侧边栏 ===== */
 
-/* 渚ц竟鏍忓垏鎹㈡寜閽?鈥?濮嬬粓鍥哄畾鍦ㄥ彸渚ц竟缂?*/
+/* 侧边栏切换按钮 - 始终固定在右侧边缘 */
 .agent-toggle {
   position: fixed;
   right: 0;
@@ -247,7 +247,7 @@ body {
   pointer-events: none;
 }
 
-/* Agent 渚ц竟鏍忓鍣?*/
+/* Agent 侧边栏容器 */
 .agent-sidebar {
   position: fixed;
   right: 0;
@@ -272,7 +272,7 @@ body {
   transform: translateX(0);
 }
 
-/* 渚ц竟鏍忔嫋鎷芥媺浼告墜鏌?*/
+/* 侧边栏拖拽拉伸手柄 */
 .agent-sidebar-resize-handle {
   position: absolute;
   left: 0;
@@ -285,7 +285,7 @@ body {
   transition: background 0.2s ease;
 }
 
-/* 濮嬬粓鍙鐨勭粏绾挎寚绀哄櫒 */
+/* 始终可见的细线指示器 */
 .agent-sidebar-resize-handle::after {
   content: '';
   position: absolute;
@@ -310,7 +310,7 @@ body {
   background: rgba(0, 255, 255, 0.06);
 }
 
-/* 渚ц竟鏍忓ご閮?*/
+/* 侧边栏头部 */
 .agent-header {
   padding: 10px 14px;
   background: linear-gradient(135deg, rgba(0, 255, 255, 0.08), rgba(0, 200, 255, 0.04));
@@ -341,14 +341,6 @@ body {
 
 .agent-header-icon {
   font-size: 12px;
-}
-
-.agent-header h3 {
-  font-size: 14px;
-  color: #00ffff;
-  margin: 0;
-  font-weight: 600;
-  letter-spacing: 0.5px;
 }
 
 .agent-header h3 {
@@ -386,7 +378,7 @@ body {
   border-color: rgba(0, 255, 255, 0.4);
 }
 
-/* 瀵硅瘽閫夋嫨鍣?*/
+/* 对话选择器 */
 .agent-header-center {
   flex: 1;
   display: flex;
@@ -419,7 +411,7 @@ body {
   color: #00ffff;
 }
 
-/* 娑堟伅鍖哄煙 */
+/* 消息区域 */
 .agent-messages {
   flex: 1;
   overflow-y: auto;
@@ -429,7 +421,7 @@ body {
   gap: 12px;
 }
 
-/* 鑷畾涔夋粴鍔ㄦ潯 */
+/* 自定义滚动条 */
 .agent-messages::-webkit-scrollbar {
   width: 4px;
 }
@@ -447,7 +439,7 @@ body {
   background: rgba(0, 255, 255, 0.4);
 }
 
-/* 娑堟伅姘旀场 */
+/* 消息气泡 */
 .agent-message {
   max-width: 88%;
   padding: 10px 14px;
@@ -634,7 +626,7 @@ body {
   white-space: nowrap;
 }
 
-/* 娑堟伅涓殑鎬濊€?杈撳嚭鍒嗛殧 */
+/* 消息中的思考/输出分隔 */
 .agent-message .msg-thinking-label {
   font-size: 11px;
   opacity: 0.6;
@@ -659,7 +651,7 @@ body {
   white-space: pre-wrap;
 }
 
-/* 杈撳叆鍖哄煙 鈥?绀句氦娑堟伅椋庢牸 */
+/* 输入区域 - 社交消息风格 */
 .agent-input-area {
   padding: 6px 16px 12px;
   border-top: 1px solid rgba(0, 255, 255, 0.12);
@@ -698,7 +690,7 @@ body {
   box-shadow: 0 0 12px rgba(0, 255, 255, 0.08);
 }
 
-/* 搴曢儴鎸夐挳鏍?*/
+/* 底部按钮样式 */
 .agent-input-footer {
   display: flex;
   justify-content: space-between;
@@ -750,17 +742,6 @@ body {
   border-color: rgba(255, 200, 0, 0.4);
   box-shadow: 0 0 12px rgba(255, 200, 0, 0.1);
 }
-
-.agent-input-area textarea::placeholder {
-  color: rgba(0, 255, 255, 0.3);
-}
-
-.agent-input-area textarea:focus {
-  border-color: rgba(0, 255, 255, 0.5);
-  box-shadow: 0 0 12px rgba(0, 255, 255, 0.08);
-}
-
-
 
 .agent-input-area input:focus {
   border-color: rgba(0, 255, 255, 0.5);

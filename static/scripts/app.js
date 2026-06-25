@@ -2420,7 +2420,13 @@ function saveState() {
     elements: JSON.stringify(elements),
     wires: JSON.stringify(wires),
   });
-  // 取消历史记录长度限制
+  // 限制历史记录长度，防止内存增长
+  const MAX_HISTORY = 100;
+  if (history.length > MAX_HISTORY) {
+    const excess = history.length - MAX_HISTORY;
+    history.splice(0, excess);
+    historyIndex -= excess;
+  }
   historyIndex++;
 
   // 保存到本地存储
@@ -2548,7 +2554,7 @@ async function saveToServer() {
       }
     }
 
-    const response = await fetch('http://localhost:5000/api/save-circuit', {
+    const response = await fetch('/api/save-circuit', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2574,7 +2580,7 @@ export async function loadFromServer() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
-    const response = await fetch('http://localhost:5000/api/load-circuit', {
+    const response = await fetch('/api/load-circuit', {
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -2953,7 +2959,7 @@ async function deleteFunction(index) {
  */
 async function saveModulesToServer() {
   try {
-    const response = await fetch('http://localhost:5000/api/save-modules', {
+    const response = await fetch('/api/save-modules', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3009,7 +3015,7 @@ function startPlaceFunction(modData) {
  */
 async function saveModuleToServer(modData) {
   try {
-    const response = await fetch('http://localhost:5000/api/save-module', {
+    const response = await fetch('/api/save-module', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3030,7 +3036,7 @@ async function loadModulesFromServer() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
-    const response = await fetch('http://localhost:5000/api/load-modules', {
+    const response = await fetch('/api/load-modules', {
       signal: controller.signal,
     });
     clearTimeout(timeout);

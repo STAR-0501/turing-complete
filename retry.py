@@ -1,6 +1,5 @@
 import time
 import random
-import functools
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0
@@ -60,14 +59,6 @@ def retry_call(func, args=None, kwargs=None, max_retries=DEFAULT_MAX_RETRIES,
         raise last_exception
 
 
-def retry(max_retries=DEFAULT_MAX_RETRIES, base_delay=DEFAULT_BASE_DELAY,
-          retryable_exceptions=None):
-    """装饰器：失败时使用指数退避重试被包装的函数。"""
-    if retryable_exceptions is None:
-        retryable_exceptions = (ConnectionError, TimeoutError, OSError)
-
-    def decorator(func):
-        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
             for attempt in range(max_retries + 1):
