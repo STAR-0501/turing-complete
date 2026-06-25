@@ -1,6 +1,11 @@
 import time
 import random
 
+__all__ = [
+    "exponential_backoff",
+    "retry_call",
+]
+
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
@@ -57,19 +62,3 @@ def retry_call(func, args=None, kwargs=None, max_retries=DEFAULT_MAX_RETRIES,
                 time.sleep(delay)
     if last_exception is not None:
         raise last_exception
-
-
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except retryable_exceptions as e:
-                    last_exception = e
-                    if attempt < max_retries:
-                        delay = exponential_backoff(attempt, base_delay)
-                        time.sleep(delay)
-            if last_exception is not None:
-                raise last_exception
-        return wrapper
-    return decorator

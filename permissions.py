@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from enum import IntEnum
 
+__all__ = [
+    "Permission",
+    "TOOL_PERMISSIONS",
+    "PermissionChecker",
+]
+
 
 class Permission(IntEnum):
     """权限级别（值越大权限越高）。"""

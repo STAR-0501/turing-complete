@@ -8,6 +8,11 @@ import os
 from dataclasses import dataclass
 from typing import Optional, List
 
+__all__ = [
+    "InstructionGroup",
+    "InstructionManager",
+]
+
 
 @dataclass
 class InstructionGroup:

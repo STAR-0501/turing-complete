@@ -16,12 +16,17 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import yaml
 
 from permissions import Permission
+
+__all__ = [
+    "AgentConfig",
+    "get_agent_config",
+]
 
 
 @dataclass
@@ -160,9 +165,3 @@ def get_agent_config() -> AgentConfig:
     if _config_instance is None:
         _config_instance = AgentConfig.load()
     return _config_instance
-
-
-def reload_agent_config() -> None:
-    """运行时重新加载 YAML 配置。文件变更后调用。"""
-    global _config_instance
-    _config_instance = AgentConfig.load()

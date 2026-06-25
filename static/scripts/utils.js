@@ -40,3 +40,74 @@ export function isPointOnWire(x, y, wire) {
   const closestY = wire.start.y + t * dy;
   return distance(x, y, closestX, closestY) < threshold && t >= 0 && t <= 1;
 }
+
+/**
+ * 将数值钳制在指定范围内
+ * @param {number} v - 要钳制的值
+ * @param {number} min - 最小值
+ * @param {number} max - 最大值
+ * @returns {number} 钳制后的值
+ */
+export function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * 将屏幕坐标转换为画布世界坐标
+ * @param {number} mx - 鼠标屏幕 x 坐标
+ * @param {number} my - 鼠标屏幕 y 坐标
+ * @param {HTMLCanvasElement} canvas - Canvas 元素
+ * @param {number} zoom - 当前缩放级别
+ * @param {{x:number, y:number}} camera - 相机偏移
+ * @returns {{x:number, y:number}} 世界坐标
+ */
+export function screenToWorld(mx, my, canvas, zoom, camera) {
+  return {
+    x: (mx - canvas.width / 2) / zoom + camera.x,
+    y: (my - canvas.height / 2) / zoom + camera.y,
+  };
+}
+
+/**
+ * 计算框选矩形
+ * @param {{x:number, y:number}} p1 - 起点
+ * @param {{x:number, y:number}} p2 - 终点
+ * @returns {{x:number, y:number, width:number, height:number}} 标准化矩形
+ */
+export function getSelectionRect(p1, p2) {
+  return {
+    x: Math.min(p1.x, p2.x),
+    y: Math.min(p1.y, p2.y),
+    width: Math.abs(p2.x - p1.x),
+    height: Math.abs(p2.y - p1.y),
+  };
+}
+
+/**
+ * 复制元件的端口位置
+ * @param {object} dest - 目标元件
+ * @param {object} src - 源元件
+ */
+export function copyPortPositions(dest, src) {
+  for (let i = 0; i < dest.inputs.length; i++) {
+    if (src.inputs[i]) {
+      dest.inputs[i].x = src.inputs[i].x;
+      dest.inputs[i].y = src.inputs[i].y;
+    }
+  }
+  for (let i = 0; i < dest.outputs.length; i++) {
+    if (src.outputs[i]) {
+      dest.outputs[i].x = src.outputs[i].x;
+      dest.outputs[i].y = src.outputs[i].y;
+    }
+  }
+}
+
+/**
+ * DOM 快捷获取
+ * @param {string} id - 元素 ID
+ * @returns {HTMLElement|null}
+ */
+export function $(id) {
+  return document.getElementById(id);
+}

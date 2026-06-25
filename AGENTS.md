@@ -1,14 +1,22 @@
 # Turing Complete — Knowledge Base
 
-**Stack:** Python Flask 3.1 + Vanilla JS (Canvas-based SPA)  
+**Stack:** Python Flask 3.1 + Vanilla JS (Canvas SPA, ES modules)  
 **Purpose:** Digital logic circuit simulator (manual + AI-powered building)  
-**No tests, no CI/CD, no Makefile.** PyInstaller spec for distribution.
+**No tests, no CI/CD, no Makefile.** PyInstaller spec for distribution.  
+**Dependencies:** flask, requests, pyyaml (only 3 packages)
+
+> 📖 **Quick Start** → [README.md](README.md) for running locally  
+> 🎯 **AI Protocol** → [AI_INSTRUCTIONS.md](AI_INSTRUCTIONS.md) for command format  
+> 🧩 **Frontend** → [static/scripts/AGENTS.md](static/scripts/AGENTS.md) for Canvas SPA details  
+> 🔌 **Arduino** → [turing_to_arduino/AGENTS.md](turing_to_arduino/AGENTS.md) for circuit→.ino converter  
+> 📐 **Design Docs** → [docs/superpowers/plans/](docs/superpowers/plans/) for implementation plans  
+> 📋 **Specs** → [docs/superpowers/specs/](docs/superpowers/specs/) for design specs
 
 ## Structure
 
 ```
 ./
-├── app.py                  # (2480L) Flask server: routes, SSE streaming, LLM agent loop (5-mode)
+├── app.py                  # (~2870L) Flask server: 21 routes, SSE streaming, LLM 5-mode agent loop
 ├── _common.py              # (110L)  Shared utilities: atomic_write_json/text, AI config, build_api_url
 ├── ai_commands.py          # (580L)  CircuitManager, simulation engine, command execution
 ├── agent_config.py         # (132L)  AgentConfig dataclass, YAML config loading
@@ -18,109 +26,111 @@
 ├── subagent_manager.py     # (190L)  SubagentManager, semaphore-limited concurrent subagent execution
 ├── turing_compactor.py     # (105L)  OverflowDetector + ContextCompactor for context management
 ├── turing_skills.py        # (450L)  Skill + SkillManager, skills/ directory management
+├── code_stats.py           # (~40L)  Line count statistics utility
 ├── templates/
 │   └── index.html          # (121L)  Single-page app shell
 ├── static/
 │   ├── scripts/            # (see static/scripts/AGENTS.md)
-│   │   ├── app.js          # (2781L) Canvas editor: events, tools, drag-drop, state, grid snap
-│   │   ├── circuit.js      # (334L)  Element evaluation / propagation
-│   │   ├── renderer.js     # (283L)  Canvas draw: elements (text labels), wires, overlays
-│   │   ├── chat.js         # (488L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
-│   │   ├── elements.js     # (212L)  Element type defs & DOM creation
-│   │   └── utils.js        # (39L)   generateId, distance, isPointOnWire
+│   │   ├── app.js          # (~3128L) Canvas editor: events, tools, drag-drop, state, grid snap
+│   │   ├── circuit.js      # (~376L)  Element evaluation / propagation
+│   │   ├── renderer.js     # (~329L)  Canvas draw: elements (text labels), wires, overlays
+│   │   ├── chat.js         # (~420L)  Agent sidebar UI + SSE streaming + textarea input + multi-conversation
+│   │   ├── elements.js     # (~226L)  Element type defs & DOM creation
+│   │   └── utils.js        # (~42L)   generateId, distance, isPointOnWire
 │   └── style/css/
-│       └── styles.css      # (779L)
-├── skills/                 # Structured skill .md files (loaded by SkillManager)
+│       └── styles.css      # (~779L)  Cyberpunk-style global stylesheet
+├── skills/                 # (13 files) Structured skill .md files (loaded by SkillManager)
 ├── turing_to_arduino/      # (see turing_to_arduino/AGENTS.md) — standalone Python module
 ├── docs/
-│   └── superpowers/        # Design docs (plans + specs)
-│       └── plans/           # Implementation plan files per mechanism
+│   └── superpowers/
+│       ├── plans/          # Implementation plans (7 files: context, instruction, permission, etc.)
+│       └── specs/          # Design specs (2 files: arduino, AI config)
 ├── agent_config.yaml       # YAML AgentConfig (loaded at startup)
 ├── ai_config.json          # AI provider config (API key, model, etc.)
-├── circuit_data.json       # Persisted circuit state
-├── modules_data.json       # Persisted custom module blocks
+├── circuit_data.json       # Persisted circuit state (gitignored)
+├── modules_data.json       # Persisted custom module blocks (gitignored)
 ├── skills.md               # Auto-generated flat index of skills/ directory (read into Agent prompts)
 ├── plan.md                 # AI plan persistence (5-mode: Think→Plan→Build→Observe→Sum)
 ├── summary.md              # AI session summary persistence
-├── requirements.txt        # flask, requests, pyyaml
+├── requirements.txt        # flask==3.1.3, requests==2.32.5, pyyaml>=6.0
 ├── app.spec                # PyInstaller config
 ├── AI_INSTRUCTIONS.md      # Command protocol for AI agents (text + JSON format)
 ├── CLAUDE.md               # Behavioral guidelines for coding LLMs
-├── README.md               # Project readme (150L)
-├── ROADMAP.md              # Project roadmap (25L)
+├── README.md               # Project readme
+├── ROADMAP.md              # Project roadmap
 └── log/                    # AI conversation logs (JSONL, gitignored)
 ```
 
-> **Note:** `src/` and `tests/` directories exist but contain only `__pycache__` (no source files).
-> Committed source is what matters — see files above.
-> `circuit_data copy.json` (stale), `agenda.md` (doesn't exist), `重构计划.md` (deleted) — no longer present.
-
 ## Where To Look
 
+### Backend Core
 | Task | File | Notes |
 |------|------|-------|
-| Add a new element type | `static/scripts/elements.js` | Define ports, labels, draw geometry |
-| Change rendering | `static/scripts/renderer.js` | Canvas draw logic |
-| Modify circuit simulation | `static/scripts/circuit.js` | Gate evaluation, state propagation |
-| Add backend route | `app.py` | Flask routes in `@app.route` blocks |
-| Change AI agent loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Multi-round Plan→Execute→Check |
-| Circuit state management | `ai_commands.py`: `CircuitManager` | Simulation context, commands |
-| Shared utilities | `_common.py` | `atomic_write_json`/`atomic_write_text`, `get_ai_config`, `build_api_url` — extracted to eliminate duplication |
-| Command protocol | `AI_INSTRUCTIONS.md` | Text & JSON formats for AI tools |
-| Add/change module blocks | `ai_commands.py` + frontend `elements.js` | Both sides need updates |
-| Change AI 5-mode loop | `app.py`: `call_llm_stream` / `_build_autonomous_system_prompt` | Think→Plan→Build→Observe→Sum |
-| AI plan/summary persistence | `app.py`: `PLAN_FILE` / `SUMMARY_FILE` | Atomic markdown writes to plan.md/summary.md |
-| AI self-evolution / skills system | `turing_skills.py` + `skills/` + `skills.md` | SkillManager reads skills/ dir; skills.md auto-generated index read into prompts |
-| Agent config (provider, model) | `agent_config.py` + `agent_config.yaml` + `ai_config.json` | YAML schema config + JSON provider config loaded at startup |
-| Context compaction | `turing_compactor.py` + `app.py` agent loop | OverflowDetector → ContextCompactor replaces MAX_CONTEXT_LEN=30 truncation |
-| Permission checks | `permissions.py` + `app.py` `execute_circuit_command` | Permission enum, TOOL_PERMISSIONS map, gate on agent tool calls |
-| Subagent system | `subagent_manager.py` + `app.py` `/api/subagent` routes | SPAWN_SUBAGENT/CHECK_SUBAGENT/WAIT_SUBAGENT commands |
-| Retry & backoff | `retry.py` + `app.py` `_call_llm_once`/`_call_llm_streaming` | exponential_backoff wrapping for 429/5xx errors |
-| Instruction scenarios | `instructions.py` + `AI_INSTRUCTIONS.md` | %%SCENARIO:always/test/debug/module/optimize%% markers |
-| Circuit pattern auto-detection | `app.py`: `_detect_circuit_pattern()` / `KNOWN_CIRCUIT_PATTERNS` | AI declares done=true → match topology → auto DEFINE_MODULE |
-| Streaming command execution | `app.py`: `_feed_stream_commands` | Real-time build execution during LLM streaming |
-| Conversation logging | `app.py`: `_log_conversation` | JSONL logs in `log/` (gitignored) |
-| Frontend round markers | `chat.js`: `ROUND_MARKER` | `__TC_ROUND__` markers create per-round message divs |
-| Agent sidebar / chat | `chat.js` + `static/style/css/styles.css` | Collapsible right sidebar, SSE streaming, thinking split, prompt suggestions |
-| Wire animation toggle | `app.js`: `wireAnimationEnabled` / `btn-wire-anim` | Toolbar button to toggle signal propagation animation |
-| Grid snapping | `app.js`: `snapToGrid()` / `syncGridToCamera()` | 20px snap aligned to background grid; `GRID_SIZE` constant |
-| Element labels | `renderer.js`: switch cases | AND/OR/NOT/IN/OUT text labels (no graphic symbols) |
-| Agent prompt suggestions | `chat.js`: `agentPromptSuggestions` / `index.html` | "AI注释"/"AI整理" buttons above textarea when empty |
-| Agent textarea input | `chat.js`: `keydown` handler | Multi-line textarea, Ctrl+Enter to send, Enter for newline |
-| Agent sidebar resize | `chat.js`: resize handle + `styles.css` | Left-edge drag handle to adjust width (280–600px) |
-| Conversation history API | `app.py`: `list_conversations()` / `get_conversation()` | `GET /api/conversations` list + `GET /api/conversations/<id>` messages |
-| Conversation selector UI | `chat.js`: `loadConversationList()` / `loadConversationMessages()` + `index.html` | Agent header dropdown switching log/ conversation history |
-| SSE session marker | `app.py`: `/api/chat` `generate()` | First SSE line `__TC_SESSION__:{id}` marker; frontend tracks current session |
+| Add/change backend route | `app.py` | 21 routes: circuit CRUD, AI chat (SSE), config, subagent, Arduino export |
+| Change AI agent loop | `app.py`: `call_llm_stream()` / `_build_autonomous_system_prompt()` | 5-mode loop: Think→Plan→Build→Observe→Sum |
+| Circuit state management | `ai_commands.py`: `CircuitManager` | Simulation context, command execution, module management |
+| Shared utilities | `_common.py` | `atomic_write_json`/`atomic_write_text`, `get_ai_config`, `build_api_url` |
+| Command protocol | `AI_INSTRUCTIONS.md` | Text & JSON dual-format command specs |
+| Schema config | `agent_config.py` + `agent_config.yaml` | `AgentConfig` dataclass, YAML loading at startup |
+| AI provider config | `_common.py` + `ai_config.json` | JSON config with DeepSeek defaults; unified via `get_ai_config()` |
+| Context compaction | `turing_compactor.py` + `app.py` | OverflowDetector → ContextCompactor; keeps last 2 rounds |
+| Permission system | `permissions.py` + `app.py` `execute_circuit_command()` | READ/EXEC/WRITE/ADMIN levels, `PermissionChecker.check_tool()` gate |
+| Subagent system | `subagent_manager.py` + `app.py` `/api/subagent` | Semaphore-limited (max 3) concurrent LLM calls; SPAWN/CHECK/WAIT commands |
+| Skill system | `turing_skills.py` + `skills/` + `skills.md` | SkillManager scans `skills/*.md`; auto-generates `skills.md` index |
+| Instruction scenarios | `instructions.py` + `AI_INSTRUCTIONS.md` | `%%SCENARIO:always/test/debug/module/optimize%%` markers; priority 100→50 |
+| Retry & backoff | `retry.py` + `app.py` `_call_llm_once/streaming` | 3 retries, exponential backoff (1s→30s), jitter, on 429/5xx |
+| Circuit pattern detection | `app.py`: `_detect_circuit_pattern()` / `KNOWN_CIRCUIT_PATTERNS` | AI done=true → topology match → auto DEFINE_MODULE |
+| AI plan/summary | `app.py`: `PLAN_FILE` / `SUMMARY_FILE` | Atomic writes to `plan.md` / `summary.md` for session continuity |
+| Conversation logging | `app.py`: `_log_conversation()` | JSONL logs in `log/` (gitignored) |
+| Arduino export | `turing_to_arduino/` (standalone) + `app.py` `/api/export-arduino` | Circuit→Arduino `.ino` conversion + optional `arduino-cli` upload |
+| Design docs | `docs/superpowers/plans/` + `docs/superpowers/specs/` | Implementation plans (7) and design specs (2) for all mechanisms |
+
+### Frontend
+| Task | File | Notes |
+|------|------|-------|
+| Add new element type | `static/scripts/elements.js` + `ai_commands.py` | Frontend factory + backend template — MUST update both (known duplication) |
+| Change rendering | `static/scripts/renderer.js` | Canvas draw: boxes with text labels, signal-colored wires |
+| Modify simulation | `static/scripts/circuit.js` | Gate evaluation, state propagation (mirrored in `ai_commands.py`) |
+| Canvas editor behavior | `static/scripts/app.js` | Events, tools, drag-drop, undo history, grid snap (20px), camera/zoom, keyboard shortcuts |
+| Agent sidebar / chat UI | `static/scripts/chat.js` | SSE streaming, textarea (Ctrl+Enter send), conversation selector, resize handle, prompt suggestions |
+| CSS / styling | `static/style/css/styles.css` | Cyberpunk theme, Chinese comments |
+| Wire animation | `app.js`: `wireAnimationEnabled` / `btn-wire-anim` | Toolbar toggle for signal propagation animation |
+| Grid snapping | `app.js`: `snapToGrid()` / `syncGridToCamera()` | 20px snap, always active, syncs with camera |
+| Element labels | `renderer.js`: switch cases | AND/OR/NOT/IN/OUT text labels centered in element box |
+| Agent textarea | `chat.js`: `keydown` handler | Multi-line, Enter=newline, Ctrl+Enter=send, auto-height |
+| Sidebar resize | `chat.js`: resize handle + `styles.css` | Left-edge drag handle, 280–600px range |
+| Round markers | `chat.js`: `ROUND_MARKER` | `__TC_ROUND__` creates per-round message divs |
+| SSE session tracking | `chat.js` + `app.py` `generate()` | `__TC_SESSION__:{id}` first SSE line; `__TC_STATE_CHANGED__` triggers canvas reload |
 
 ## Conventions
 
 - **Language:** Python 3 + Vanilla JS (no frameworks, no bundler)
 - **Naming — Python:** `snake_case` functions, `PascalCase` classes
-- **Naming — JS:** `camelCase` for everything
+- **Naming — JS:** `camelCase` for everything; `UPPER_SNAKE_CASE` for constants
 - **Terminology:** 模块 (module) not 函数 (function) — consistent with hardware standard
-- **Dual-format commands:** text (`ADD AND 240 200`) AND JSON (`{"cmd":"ADD","type":"AND"}`) both supported
-- **HTML loaded as `<script>` tags** (no ES modules, no bundler)
-- **Frontend global state:** module-level `let` vars in `app.js`
-- **No type hints in JS;** Python uses minimal type hints
+- **Dual-format commands:** text (`ADD AND 240 200`) AND JSON (`{"tool":"add_element","params":{...}}`) both supported
+- **HTML loaded as `<script type="module">` tags** (ES modules, no bundler)
+- **Frontend global state:** module-level `let` vars in `app.js` (no reactive framework)
+- **No type hints in JS;** JSDoc `@param`/`@returns` in Chinese for documentation
 - **Flask routes** return `jsonify()` for API, `render_template()` for page
-- **AI config** loaded from `ai_config.json` (JSON, `_AI_CONFIG_DEFAULTS` fallback) + `agent_config.yaml` (YAML, `AgentConfig` dataclass); unified access via `_common.get_ai_config()`
+- **AI config** dual-source: `ai_config.json` (JSON, `_AI_CONFIG_DEFAULTS` fallback) + `agent_config.yaml` (YAML, `AgentConfig`); unified via `_common.get_ai_config()`
 - **Data persistence** via atomic JSON writes (`atomic_write_json` in `_common.py`)
 - **SSE streaming** for AI responses (`text/event-stream`)
-- **CSS** in Chinese comments; single stylesheet
+- **CSS** in Chinese comments; single stylesheet (`styles.css`, ~779L)
 - **No ORM, no database** — flat JSON file storage
-- **UTF-8 policy:** All source files without BOM; PowerShell write via `[System.IO.File]::WriteAllText` with explicit UTF8 encoding
+- **UTF-8 policy:** All source files without BOM; PowerShell write via `[System.IO.File]::WriteAllText` with explicit UTF8
 
 ## Anti-Patterns (This Project)
 
-- **AI config redundancy** — `ai_config.json` + `agent_config.yaml` coexist; `_common.py` provides unified access but both files still exist
-- **Frontend-backend element template duplication** — `ai_commands.py` `_get_element_template()` and `elements.js` `create*()` define identical geometries; modifying one requires updating the other
-- **Frontend-backend simulation duplication** — `circuit.js` (client-side UI) and `ai_commands.py` (server-side AI verify) implement identical gate logic; both needed but should be kept in sync
-- **Frontend coupling:** `app.js` imports from `chat.js` at module level (potential circular refs)
-- **Mixed comment languages** (Chinese + English in same files, inconsistent)
+- **AI config redundancy** — `ai_config.json` + `agent_config.yaml` coexist with overlapping model settings; `_common.py` provides unified access but both files still exist
+- **Frontend-backend duplication (element templates)** — `ai_commands.py` `_get_element_template()` and `elements.js` `create*()` define identical geometries; changing one **requires** updating the other
+- **Frontend-backend duplication (simulation)** — `circuit.js` (client-side) and `ai_commands.py` (server-side) implement identical gate logic; both needed but must be kept in sync
+- **Frontend coupling** — `chat.js` imports from `app.js` (potential circular ref risk)
+- **Mixed comment languages** — Chinese + English in same files, inconsistent
 - **No error boundaries** in JS — canvas operations assume valid state
-- **PowerShell encoding pitfall:** `Set-Content` defaults to system ANSI (Windows-1252) — corrupts UTF-8 Chinese text; use `WriteAllText` with explicit UTF8
-- **No `as any`/`@ts-ignore`/`@ts-expect-error`** in JS — type safety enforced by convention
+- **PowerShell encoding pitfall** — `Set-Content` defaults to Windows-1252, corrupts UTF-8 Chinese text; use `[System.IO.File]::WriteAllText` with explicit UTF8
 - **`turing_to_arduino/` uses `print()`** instead of `logging` for debug output
+- **`retry.py`** has a dead `def wrapper(...)` at the end (incomplete decorator attempt)
 
 ## Commands
 
@@ -129,6 +139,7 @@ pip install -r requirements.txt   # install deps
 # NOTE: `python app.py` does NOT stop on its own once started.
 #       Do NOT start the server yourself or force-kill it mid-session.
 # python app.py                   # dev server (http://localhost:5000)
+python code_stats.py             # line count statistics
 # No test/build/CI commands exist
 ```
 

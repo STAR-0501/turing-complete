@@ -10,16 +10,45 @@ from __future__ import annotations
 
 import glob
 import json
-import logging
 import os
 import tempfile
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 # ──────────────────────────────────────────────
 # Atomic file I/O
 # ──────────────────────────────────────────────
+
+
+def _atomic_write(path: str, write_func) -> None:
+    """原子写入的通用实现：临时文件 + os.replace。
+
+    Args:
+        path: 目标文件路径。
+        write_func: 接受一个已打开的文件对象并写入内容的可调用对象。
+    """
+    for stale in glob.glob(f"{path}.tmp.*"):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    dir_name = os.path.dirname(path) or os.getcwd()
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=dir_name,
+        prefix=f".{os.path.basename(path)}.tmp.",
+        delete=False,
+    ) as f:
+        write_func(f)
+        f.flush()
+        os.fsync(f.fileno())
+        tmp_path = f.name
+    try:
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def atomic_write_json(path: str, data: Any) -> None:
@@ -29,29 +58,7 @@ def atomic_write_json(path: str, data: Any) -> None:
         path: Destination file path.
         data: JSON-serializable data to write.
     """
-    for stale in glob.glob(f"{path}.tmp.*"):
-        try:
-            os.remove(stale)
-        except OSError:
-            pass
-    dir_name = os.path.dirname(path) or os.getcwd()
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=dir_name,
-        prefix=f".{os.path.basename(path)}.tmp.",
-        delete=False,
-    ) as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())
-        tmp_path = f.name
-    try:
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
+    _atomic_write(path, lambda f: json.dump(data, f, indent=2, ensure_ascii=False))
 
 
 def atomic_write_text(path: str, content: str) -> None:
@@ -61,29 +68,7 @@ def atomic_write_text(path: str, content: str) -> None:
         path: Destination file path.
         content: Text content to write.
     """
-    for stale in glob.glob(f"{path}.tmp.*"):
-        try:
-            os.remove(stale)
-        except OSError:
-            pass
-    dir_name = os.path.dirname(path) or os.getcwd()
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=dir_name,
-        prefix=f".{os.path.basename(path)}.tmp.",
-        delete=False,
-    ) as f:
-        f.write(content)
-        f.flush()
-        os.fsync(f.fileno())
-        tmp_path = f.name
-    try:
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
+    _atomic_write(path, lambda f: f.write(content))
 
 
 # ──────────────────────────────────────────────

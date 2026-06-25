@@ -65,3 +65,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Project-Specific Reminders
+
+- **AGENTS.md is authoritative** — always consult it before editing project files
+- **Simulation logic is duplicated** — `circuit.js` (frontend) and `ai_commands.py` (backend); change both
+- **Element templates are duplicated** — `elements.js` and `ai_commands._get_element_template()`; change both
+- **No tests exist** — manual verification required; no `pytest` or npm test commands
+- **UTF-8 is critical** — use `[System.IO.File]::WriteAllText` never `Set-Content` in PowerShell
+- **Dual-format commands** — text format AND JSON format commands in AI_INSTRUCTIONS.md must stay in sync
