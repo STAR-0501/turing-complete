@@ -401,12 +401,10 @@ export function calculateCircuit(elements, wires) {
               ? outputStates[wire.start.portIndex]
               : outputStates[0] || false;
         } else if (startElement.type === 'BYTE_INPUT') {
-          // BYTE_INPUT 元件根据 portStates 获取各输出端口状态
+          // BYTE_INPUT 元件根据 portId 查找索引获取端口状态
           const portStates = startElement.portStates || [];
-          wireState =
-            wire.start.portIndex !== undefined && wire.start.portIndex < portStates.length
-              ? portStates[wire.start.portIndex]
-              : false;
+          const outIdx = startElement.outputs.findIndex((p) => p.id === wire.start.portId);
+          wireState = outIdx >= 0 && outIdx < portStates.length ? portStates[outIdx] : false;
         } else {
           wireState = startElement.state;
         }
@@ -426,10 +424,8 @@ export function calculateCircuit(elements, wires) {
               : outputStates[0] || false;
         } else if (endElement.type === 'BYTE_INPUT') {
           const portStates = endElement.portStates || [];
-          wireState =
-            wire.end.portIndex !== undefined && wire.end.portIndex < portStates.length
-              ? portStates[wire.end.portIndex]
-              : false;
+          const outIdx = endElement.outputs.findIndex((p) => p.id === wire.end.portId);
+          wireState = outIdx >= 0 && outIdx < portStates.length ? portStates[outIdx] : false;
         } else {
           wireState = endElement.state;
         }

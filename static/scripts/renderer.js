@@ -101,7 +101,7 @@ export function render(
     const isByteElement = element.type === 'BYTE_INPUT' || element.type === 'BYTE_OUTPUT';
     let elementColor;
     if (isByteElement) {
-      elementColor = '#4488ff';
+      elementColor = '#3399ff';
     } else {
       elementColor = elementState ? '#00ff00' : '#ff0000';
     }
@@ -113,13 +113,13 @@ export function render(
     if (isMultiSelected) {
       // 多选高亮 - 使用青色边框
       ctx.fillStyle = isByteElement
-        ? 'rgba(68, 136, 255, 0.2)'
+        ? 'rgba(51, 153, 255, 0.2)'
         : `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.2)`;
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
     } else {
       ctx.fillStyle = isByteElement
-        ? 'rgba(68, 136, 255, 0.1)'
+        ? 'rgba(51, 153, 255, 0.1)'
         : `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.1)`;
       ctx.strokeStyle = elementColor;
       ctx.lineWidth = 1;
@@ -220,8 +220,13 @@ export function render(
     for (const input of element.inputs) {
       const portX = element.x + input.x;
       const portY = element.y + input.y;
-      // 输入端口状态与元件状态一致
-      ctx.fillStyle = elementColor;
+      // BYTE_OUTPUT 输入端口根据 portStates 显示红绿
+      let inputPortColor = elementColor;
+      if (element.type === 'BYTE_OUTPUT' && element.portStates) {
+        const idx = element.inputs.indexOf(input);
+        inputPortColor = element.portStates[idx] ? '#00ff00' : '#ff0000';
+      }
+      ctx.fillStyle = inputPortColor;
       ctx.beginPath();
       ctx.arc(portX, portY, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -244,12 +249,8 @@ export function render(
         portState = element.state || false;
       }
 
-      // BYTE 元件端口使用蓝色，非 BYTE 元件使用红绿
-      if (element.type === 'BYTE_INPUT' || element.type === 'BYTE_OUTPUT') {
-        ctx.fillStyle = portState ? '#66aaff' : '#224488';
-      } else {
-        ctx.fillStyle = portState ? '#00ff00' : '#ff0000';
-      }
+      // 所有端口统一使用红绿信号色
+      ctx.fillStyle = portState ? '#00ff00' : '#ff0000';
       ctx.beginPath();
       ctx.arc(portX, portY, 5, 0, Math.PI * 2);
       ctx.fill();
