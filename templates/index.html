@@ -18,9 +18,11 @@
             <button id="btn-not"><span>非门</span><span>5</span></button>
             <button id="btn-input"><span>输入</span><span>6</span></button>
             <button id="btn-output"><span>输出</span><span>7</span></button>
-            <button id="btn-delete"><span>删除</span><span>8</span></button>
-            <button id="btn-clear"><span>清空</span><span>9</span></button>
-            <button id="btn-grid"><span>网格</span><span>0</span></button>
+            <button id="btn-byte-input"><span>字节入</span><span>8</span></button>
+            <button id="btn-byte-output"><span>字节出</span><span>9</span></button>
+            <button id="btn-delete"><span>删除</span><span>0</span></button>
+            <button id="btn-clear"><span>清空</span></button>
+            <button id="btn-grid"><span>网格</span></button>
             <button id="btn-undo"><span>撤销</span><span>Ctrl+Z</span></button>
             <button id="btn-redo"><span>重做</span><span>Ctrl+Y</span></button>
             <button id="btn-wire-anim" class="active"><span>✨动画</span></button>
@@ -141,6 +143,18 @@
                 <div class="modal-buttons">
                     <button id="cancel-comment" class="btn-cancel">取消</button>
                     <button id="confirm-comment" class="btn-confirm">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 字节值设置弹窗 -->
+        <div id="byte-value-modal" class="modal">
+            <div class="modal-content">
+                <h3>设置字节输入值</h3>
+                <input type="number" id="byte-value-input" min="0" max="255" value="0" autocomplete="off">
+                <div class="modal-buttons">
+                    <button id="cancel-byte-value" class="btn-cancel">取消</button>
+                    <button id="confirm-byte-value" class="btn-confirm">确定</button>
                 </div>
             </div>
         </div>

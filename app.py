@@ -602,7 +602,7 @@ def _parse_commands_payload(commands_str):
                     # 此处移除严格类型检查，以允许自定义模块名
                     # 或者检查是否在允许的基础类型中，或交由 CircuitManager 处理
                     params = {
-                        'type': element_type if element_type in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT'} else _clean_token(parts[1]),
+                        'type': element_type if element_type in {'AND', 'OR', 'NOT', 'INPUT', 'OUTPUT', 'BYTE_INPUT', 'BYTE_OUTPUT'} else _clean_token(parts[1]),
                         'x': float(_clean_token(parts[2])),
                         'y': float(_clean_token(parts[3]))
                     }

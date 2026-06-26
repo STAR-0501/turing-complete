@@ -12,7 +12,7 @@
 | `circuit.js` | 376 | Gate evaluation and propagation: `calculateCircuit()`, `getInputSourceState()`, `hasInputConnection()` |
 | `renderer.js` | 329 | Canvas drawing: elements (boxes with text labels), wires (colored by signal), signal animation, selection overlays, grid, paste preview |
 | `chat.js` | 420 | Agent sidebar UI: SSE streaming, textarea input (`Ctrl+Enter` to send), conversation selector, resize handle, "AI注释"/"AI整理" prompt suggestions |
-| `elements.js` | 226 | Element factory functions: `createANDGate()`, `createORGate()`, `createNOTGate()`, `createInputBlock()`, `createOutputBlock()`, `createFunctionBlock()`, `createModuleBlock()` |
+| `elements.js` | 269 | Element factory functions: `createANDGate()`, `createORGate()`, `createNOTGate()`, `createInputBlock()`, `createOutputBlock()`, `createByteInput()`, `createByteOutput()`, `createFunctionBlock()`, `createModuleBlock()` |
 | `utils.js` | 42 | Utility functions: `generateId()`, `distance()`, `isPointOnWire()` |
 
 ## Module Dependency Graph

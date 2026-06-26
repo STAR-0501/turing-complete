@@ -188,6 +188,12 @@ async function init() {
         case 'OUTPUT':
           document.getElementById('btn-output').classList.add('active');
           break;
+        case 'BYTE_INPUT':
+          document.getElementById('btn-byte-input').classList.add('active');
+          break;
+        case 'BYTE_OUTPUT':
+          document.getElementById('btn-byte-output').classList.add('active');
+          break;
       }
       document.getElementById('status-bar').textContent = `点击画布放置 ${type} 元件`;
     };
@@ -200,6 +206,8 @@ async function init() {
   document.getElementById('btn-not').addEventListener('click', addElementButtonHandler('NOT'));
   document.getElementById('btn-input').addEventListener('click', addElementButtonHandler('INPUT'));
   document.getElementById('btn-output').addEventListener('click', addElementButtonHandler('OUTPUT'));
+  document.getElementById('btn-byte-input').addEventListener('click', addElementButtonHandler('BYTE_INPUT'));
+  document.getElementById('btn-byte-output').addEventListener('click', addElementButtonHandler('BYTE_OUTPUT'));
 
   // 工具按钮
   document
@@ -366,6 +374,7 @@ async function init() {
 
   // 初始化注释功能
   initCommentModal();
+  initByteValueModal();
 
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleKeyDown);
@@ -377,6 +386,8 @@ async function init() {
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
       // Ctrl/Meta 系快捷键（全选、复制、粘贴等）全部放行
       if (e.ctrlKey || e.metaKey) return;
+      // 字节值输入框放行所有按键
+      if (target.id === 'byte-value-input') return;
       // 只阻止数字键 1-0 切换工具
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
@@ -505,13 +516,13 @@ async function init() {
         document.getElementById('btn-output').click();
         break;
       case '8':
-        document.getElementById('btn-delete').click();
+        document.getElementById('btn-byte-input').click();
         break;
       case '9':
-        document.getElementById('btn-clear').click();
+        document.getElementById('btn-byte-output').click();
         break;
       case '0':
-        document.getElementById('btn-grid').click();
+        document.getElementById('btn-delete').click();
         break;
       case 'z':
         if (e.ctrlKey) {
@@ -1148,11 +1159,21 @@ function handleMouseDown(e) {
     }
 
     if (clickedElement) {
-      // 右键点击了元件，显示注释输入框（修改）
-      // 从 elements 数组中获取最新的元素引用
+      // 右键点击了元件
       const targetElement = elements.find((el) => el.id === clickedElement.id);
       if (!targetElement) return;
 
+      // BYTE_INPUT: 显示字节值设置弹窗
+      if (targetElement.type === 'BYTE_INPUT') {
+        selectedElement = targetElement;
+        selectedWire = null;
+        selectedElements = [];
+        showByteValueModal(targetElement);
+        render( ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera, );
+        return;
+      }
+
+      // 其他元件：显示注释输入框
       selectedElement = targetElement;
       selectedWire = null;
       selectedElements = [];
@@ -2836,6 +2857,60 @@ function showCommentModal(element) {
   commentModal.classList.add('show');
   isEditingComment = true;
   commentInput.focus();
+}
+
+/**
+ * 初始化字节值设置弹窗
+ */
+function initByteValueModal() {
+  const modal = document.getElementById('byte-value-modal');
+  const input = document.getElementById('byte-value-input');
+  const confirmBtn = document.getElementById('confirm-byte-value');
+  const cancelBtn = document.getElementById('cancel-byte-value');
+
+  confirmBtn.addEventListener('click', () => {
+    if (selectedElement && selectedElement.type === 'BYTE_INPUT') {
+      const el = elements.find((e) => e.id === selectedElement.id);
+      if (el) {
+        let val = parseInt(input.value, 10);
+        if (isNaN(val)) val = 0;
+        if (val < 0) val = 0;
+        if (val > 255) val = 255;
+        el.byteValue = val;
+        saveState();
+        elements = calculateCircuit(elements, wires);
+        render(ctx, elements, wires, selectedElement, selectedWire, null, selectedElements, [], null, false, zoom, camera);
+        document.getElementById('status-bar').textContent = `字节输入值已设为 ${val}`;
+      }
+    }
+    modal.classList.remove('show');
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    modal.classList.remove('show');
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      confirmBtn.click();
+    } else if (e.key === 'Escape') {
+      cancelBtn.click();
+    }
+  });
+}
+
+/**
+ * 显示字节值设置弹窗
+ * @param {object} element - BYTE_INPUT 元件
+ */
+function showByteValueModal(element) {
+  const el = elements.find((e) => e.id === element.id) || element;
+  const modal = document.getElementById('byte-value-modal');
+  const input = document.getElementById('byte-value-input');
+  input.value = el.byteValue !== undefined ? el.byteValue : 0;
+  modal.classList.add('show');
+  input.focus();
+  input.select();
 }
 
 /**

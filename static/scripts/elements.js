@@ -126,6 +126,80 @@ export function createOutputBlock(x, y) {
 }
 
 /**
+ * 创建字节输入器元件
+ * 拥有 8 个输出端口（D0-D7），存储一个字节数值并输出各位信号
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
+ * @returns {object} 字节输入器元件对象
+ */
+export function createByteInput(x, y) {
+  const PORT_SPACING = 20;
+  const height = 180;
+  const outputs = [];
+  for (let i = 0; i < 8; i++) {
+    outputs.push({
+      id: generateId(),
+      x: 105,
+      y: 20 + i * PORT_SPACING,
+      realX: 105,
+      realY: 20 + i * PORT_SPACING,
+    });
+  }
+  return {
+    id: generateId(),
+    type: 'BYTE_INPUT',
+    x,
+    y,
+    width: 100,
+    height: height,
+    realWidth: 100,
+    realHeight: height,
+    inputs: [],
+    outputs: outputs,
+    byteValue: 0,
+    state: false,
+    comment: '',
+  };
+}
+
+/**
+ * 创建字节显示器元件
+ * 拥有 8 个输入端口（D0-D7），读取各位信号并显示对应十进制数值
+ * @param {number} x - x 坐标
+ * @param {number} y - y 坐标
+ * @returns {object} 字节显示器元件对象
+ */
+export function createByteOutput(x, y) {
+  const PORT_SPACING = 20;
+  const height = 180;
+  const inputs = [];
+  for (let i = 0; i < 8; i++) {
+    inputs.push({
+      id: generateId(),
+      x: -5,
+      y: 20 + i * PORT_SPACING,
+      realX: -5,
+      realY: 20 + i * PORT_SPACING,
+    });
+  }
+  return {
+    id: generateId(),
+    type: 'BYTE_OUTPUT',
+    x,
+    y,
+    width: 100,
+    height: height,
+    realWidth: 100,
+    realHeight: height,
+    inputs: inputs,
+    outputs: [],
+    byteValue: 0,
+    state: false,
+    comment: '',
+  };
+}
+
+/**
  * 创建模块元件
  * @param {number} x - x 坐标
  * @param {number} y - y 坐标
@@ -206,6 +280,10 @@ export function createElement(type, x, y, options = {}) {
       return createInputBlock(x, y);
     case 'OUTPUT':
       return createOutputBlock(x, y);
+    case 'BYTE_INPUT':
+      return createByteInput(x, y);
+    case 'BYTE_OUTPUT':
+      return createByteOutput(x, y);
     case 'FUNCTION':
       return createFunctionElement(
         x,

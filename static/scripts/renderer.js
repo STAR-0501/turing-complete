@@ -98,7 +98,13 @@ export function render(
   for (const element of elements) {
     // 确定元件状态
     const elementState = element.state || false;
-    const elementColor = elementState ? '#00ff00' : '#ff0000';
+    const isByteElement = element.type === 'BYTE_INPUT' || element.type === 'BYTE_OUTPUT';
+    let elementColor;
+    if (isByteElement) {
+      elementColor = '#4488ff';
+    } else {
+      elementColor = elementState ? '#00ff00' : '#ff0000';
+    }
 
     // 检查是否被多选选中
     const isMultiSelected = selectedElements.includes(element);
@@ -106,11 +112,15 @@ export function render(
     // 绘制元件背景
     if (isMultiSelected) {
       // 多选高亮 - 使用青色边框
-      ctx.fillStyle = `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.2)`;
+      ctx.fillStyle = isByteElement
+        ? 'rgba(68, 136, 255, 0.2)'
+        : `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.2)`;
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
     } else {
-      ctx.fillStyle = `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.1)`;
+      ctx.fillStyle = isByteElement
+        ? 'rgba(68, 136, 255, 0.1)'
+        : `rgba(${elementState ? '0, 255, 0' : '255, 0, 0'}, 0.1)`;
       ctx.strokeStyle = elementColor;
       ctx.lineWidth = 1;
     }
@@ -158,6 +168,40 @@ export function render(
       case 'OUTPUT':
         ctx.fillText('OUT', element.x + element.width / 2, element.y + element.height / 2);
         break;
+      case 'BYTE_INPUT':
+        // 绘制 BYTE_INPUT 边框（双线）
+        ctx.strokeStyle = elementColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(element.x, element.y, element.width, element.height);
+        // 绘制字节数值
+        ctx.fillStyle = '#ffff00';
+        ctx.font = 'bold 28px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const inVal = (element.byteValue !== undefined ? element.byteValue : 0);
+        ctx.fillText(inVal.toString(), element.x + element.width / 2, element.y + element.height / 2 - 6);
+        // 绘制 "BIN" 标签
+        ctx.fillStyle = elementColor;
+        ctx.font = '10px Arial';
+        ctx.fillText('BIN', element.x + element.width / 2, element.y + element.height / 2 + 20);
+        break;
+      case 'BYTE_OUTPUT':
+        // 绘制 BYTE_OUTPUT 边框（双线）
+        ctx.strokeStyle = elementColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(element.x, element.y, element.width, element.height);
+        // 绘制字节数值
+        ctx.fillStyle = '#ffff00';
+        ctx.font = 'bold 28px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const outVal = (element.byteValue !== undefined ? element.byteValue : 0);
+        ctx.fillText(outVal.toString(), element.x + element.width / 2, element.y + element.height / 2 - 6);
+        // 绘制 "BOUT" 标签
+        ctx.fillStyle = elementColor;
+        ctx.font = '10px Arial';
+        ctx.fillText('BOUT', element.x + element.width / 2, element.y + element.height / 2 + 20);
+        break;
       case 'FUNCTION':
         // 绘制模块块边框
         ctx.strokeStyle = elementColor;
@@ -192,13 +236,20 @@ export function render(
       if (element.type === 'FUNCTION' && element.outputStates) {
         const outputIndex = element.outputs.indexOf(output);
         portState = element.outputStates[outputIndex] || false;
+      } else if (element.type === 'BYTE_INPUT' && element.portStates) {
+        const outputIndex = element.outputs.indexOf(output);
+        portState = element.portStates[outputIndex] || false;
       } else {
         // 非模块元件：输出端口状态与元件状态一致
         portState = element.state || false;
       }
 
-      // 根据端口状态显示不同颜色
-      ctx.fillStyle = portState ? '#00ff00' : '#ff0000';
+      // BYTE 元件端口使用蓝色，非 BYTE 元件使用红绿
+      if (element.type === 'BYTE_INPUT' || element.type === 'BYTE_OUTPUT') {
+        ctx.fillStyle = portState ? '#66aaff' : '#224488';
+      } else {
+        ctx.fillStyle = portState ? '#00ff00' : '#ff0000';
+      }
       ctx.beginPath();
       ctx.arc(portX, portY, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -280,6 +331,12 @@ export function render(
         case 'OUTPUT':
           ctx.font = 'bold ' + Math.max(10, Math.min(22, height * 0.35)) + 'px sans-serif';
           ctx.fillText('OUT', x + width / 2, y + height / 2);
+          break;
+        case 'BYTE_INPUT':
+        case 'BYTE_OUTPUT':
+          ctx.font = 'bold ' + Math.max(14, Math.min(28, height * 0.25)) + 'px monospace';
+          const bv = (template.byteValue !== undefined ? template.byteValue : 0);
+          ctx.fillText(bv.toString(), x + width / 2, y + height / 2);
           break;
         case 'FUNCTION':
           ctx.font = 'bold ' + Math.max(8, Math.min(14, height * 0.25)) + 'px sans-serif';

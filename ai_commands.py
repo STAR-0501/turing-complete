@@ -222,6 +222,34 @@ class CircuitManager:
                 "inputs": [{"id": generate_id(), "x": -5, "y": 30, "realX": -5, "realY": 30}],
                 "outputs": []
             }
+        if element_type == 'BYTE_INPUT':
+            port_spacing = 20
+            height = 180
+            outputs = [
+                {"id": generate_id(), "x": 105, "y": 20 + i * port_spacing,
+                 "realX": 105, "realY": 20 + i * port_spacing}
+                for i in range(8)
+            ]
+            return {
+                "width": 100, "height": height,
+                "realWidth": 100, "realHeight": height,
+                "inputs": [],
+                "outputs": outputs
+            }
+        if element_type == 'BYTE_OUTPUT':
+            port_spacing = 20
+            height = 180
+            inputs = [
+                {"id": generate_id(), "x": -5, "y": 20 + i * port_spacing,
+                 "realX": -5, "realY": 20 + i * port_spacing}
+                for i in range(8)
+            ]
+            return {
+                "width": 100, "height": height,
+                "realWidth": 100, "realHeight": height,
+                "inputs": inputs,
+                "outputs": []
+            }
 
         modules = self._load_modules()
         mod = next((f for f in modules if f.get(
@@ -472,7 +500,8 @@ class CircuitManager:
         def _get_output_value(src_el, src_port_id):
             if not src_el:
                 return False
-            if src_el.get("type") == "FUNCTION":
+            el_type = src_el.get("type")
+            if el_type == "FUNCTION":
                 outputs = src_el.get("outputs") or []
                 out_idx = None
                 for i, p in enumerate(outputs):
@@ -483,6 +512,17 @@ class CircuitManager:
                     output_states = src_el.get("outputStates") or []
                     if out_idx < len(output_states):
                         return bool(output_states[out_idx])
+            elif el_type == "BYTE_INPUT":
+                outputs = src_el.get("outputs") or []
+                out_idx = None
+                for i, p in enumerate(outputs):
+                    if p.get("id") == src_port_id:
+                        out_idx = i
+                        break
+                if out_idx is not None:
+                    port_states = src_el.get("portStates") or []
+                    if out_idx < len(port_states):
+                        return bool(port_states[out_idx])
             return bool(src_el.get("state", False))
 
         for w in wires:
@@ -555,6 +595,34 @@ class CircuitManager:
                     return True
         return False
 
+    def _calc_byte_input_state(self, el, ctx: SimulationContext) -> bool:
+        """字节输入器：将 byteValue 分解为 8 个输出位信号。"""
+        port_states = []
+        bv = el.get("byteValue") or 0
+        for i in range(8):
+            port_states.append(bool(bv & (1 << i)))
+        el["portStates"] = port_states
+        return False
+
+    def _calc_byte_output_state(self, el, ctx: SimulationContext) -> bool:
+        """字节显示器：读取 8 个输入位，合并计算 byteValue。"""
+        port_states = []
+        byte_val = 0
+        for i, p in enumerate(el.get("inputs", [])):
+            if i >= 8:
+                break
+            bit_state = False
+            if self._has_input_connection(ctx.wires, el.get("id"), p.get("id")):
+                v = self._get_input_source_state(
+                    ctx.elements, ctx.wires, el.get("id"), p.get("id"))
+                bit_state = bool(v) if v is not None else False
+            port_states.append(bit_state)
+            if bit_state:
+                byte_val |= (1 << i)
+        el["byteValue"] = byte_val
+        el["portStates"] = port_states
+        return False
+
     def _simulate_elements_until_stable(self, elements, wires, function_cache, max_iters=50, depth=0):
         ctx = SimulationContext(
             elements=elements, wires=wires, function_cache=function_cache, depth=depth)
@@ -562,7 +630,9 @@ class CircuitManager:
             "AND": self._calc_and_state,
             "OR": self._calc_or_state,
             "NOT": self._calc_not_state,
-            "OUTPUT": self._calc_output_state
+            "OUTPUT": self._calc_output_state,
+            "BYTE_INPUT": self._calc_byte_input_state,
+            "BYTE_OUTPUT": self._calc_byte_output_state,
         }
         for _ in range(max_iters):
             changed = False

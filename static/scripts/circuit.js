@@ -31,6 +31,15 @@ function getInputSourceState(elements, wires, targetElementId, targetPortId) {
           }
           return outputStates.length > 0 ? outputStates[0] : sourceElement.state;
         }
+        if (sourceElement.type === 'BYTE_INPUT') {
+          const outputs = sourceElement.outputs || [];
+          const outIdx = outputs.findIndex((p) => p.id === wire.start.portId);
+          const portStates = sourceElement.portStates || [];
+          if (outIdx >= 0 && outIdx < portStates.length) {
+            return portStates[outIdx];
+          }
+          return false;
+        }
         return sourceElement.state;
       }
     }
@@ -46,6 +55,15 @@ function getInputSourceState(elements, wires, targetElementId, targetPortId) {
             return outputStates[outIdx];
           }
           return outputStates.length > 0 ? outputStates[0] : sourceElement.state;
+        }
+        if (sourceElement.type === 'BYTE_INPUT') {
+          const outputs = sourceElement.outputs || [];
+          const outIdx = outputs.findIndex((p) => p.id === wire.end.portId);
+          const portStates = sourceElement.portStates || [];
+          if (outIdx >= 0 && outIdx < portStates.length) {
+            return portStates[outIdx];
+          }
+          return false;
         }
         return sourceElement.state;
       }
@@ -180,6 +198,32 @@ function calculateModuleElement(moduleElement, elements, wires, functionCache = 
           }
         }
         newState = inputTrue;
+      } else if (element.type === 'BYTE_INPUT') {
+        // 字节输入器：将 byteValue 分解为 8 个输出位
+        const portStates = [];
+        const bv = element.byteValue || 0;
+        for (let i = 0; i < 8; i++) {
+          portStates.push((bv & (1 << i)) !== 0);
+        }
+        element.portStates = portStates;
+        newState = false;
+      } else if (element.type === 'BYTE_OUTPUT') {
+        // 字节显示器：读取 8 个输入位合并为 byteValue
+        const portStates = [];
+        let byteVal = 0;
+        for (let i = 0; i < element.inputs.length && i < 8; i++) {
+          const input = element.inputs[i];
+          let bitState = false;
+          if (hasInputConnection(subWires, element.id, input.id)) {
+            const s = getInputSourceState(subElements, subWires, element.id, input.id);
+            bitState = s === true;
+          }
+          portStates.push(bitState);
+          if (bitState) byteVal |= (1 << i);
+        }
+        element.byteValue = byteVal;
+        element.portStates = portStates;
+        newState = false;
       } else if (element.type === 'FUNCTION') {
         // 递归计算嵌套的模块元件
         const oldOutputStates = element.outputStates || [];
@@ -294,6 +338,32 @@ export function calculateCircuit(elements, wires) {
           }
         }
         newState = inputTrue;
+      } else if (element.type === 'BYTE_INPUT') {
+        // 字节输入器：将 byteValue 分解为 8 个输出位
+        const portStates = [];
+        const bv = element.byteValue || 0;
+        for (let i = 0; i < 8; i++) {
+          portStates.push((bv & (1 << i)) !== 0);
+        }
+        element.portStates = portStates;
+        newState = false;
+      } else if (element.type === 'BYTE_OUTPUT') {
+        // 字节显示器：读取 8 个输入位合并为 byteValue
+        const portStates = [];
+        let byteVal = 0;
+        for (let i = 0; i < element.inputs.length && i < 8; i++) {
+          const input = element.inputs[i];
+          let bitState = false;
+          if (hasInputConnection(wires, element.id, input.id)) {
+            const s = getInputSourceState(elements, wires, element.id, input.id);
+            bitState = s === true;
+          }
+          portStates.push(bitState);
+          if (bitState) byteVal |= (1 << i);
+        }
+        element.byteValue = byteVal;
+        element.portStates = portStates;
+        newState = false;
       } else if (element.type === 'FUNCTION') {
         // 模块元件：计算内部电路
         const oldOutputStates = element.outputStates || [];
@@ -330,6 +400,13 @@ export function calculateCircuit(elements, wires) {
             wire.start.portIndex !== undefined && wire.start.portIndex < outputStates.length
               ? outputStates[wire.start.portIndex]
               : outputStates[0] || false;
+        } else if (startElement.type === 'BYTE_INPUT') {
+          // BYTE_INPUT 元件根据 portStates 获取各输出端口状态
+          const portStates = startElement.portStates || [];
+          wireState =
+            wire.start.portIndex !== undefined && wire.start.portIndex < portStates.length
+              ? portStates[wire.start.portIndex]
+              : false;
         } else {
           wireState = startElement.state;
         }
@@ -347,6 +424,12 @@ export function calculateCircuit(elements, wires) {
             wire.end.portIndex !== undefined && wire.end.portIndex < outputStates.length
               ? outputStates[wire.end.portIndex]
               : outputStates[0] || false;
+        } else if (endElement.type === 'BYTE_INPUT') {
+          const portStates = endElement.portStates || [];
+          wireState =
+            wire.end.portIndex !== undefined && wire.end.portIndex < portStates.length
+              ? portStates[wire.end.portIndex]
+              : false;
         } else {
           wireState = endElement.state;
         }

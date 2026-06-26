@@ -41,7 +41,7 @@ WIRE g1 0 g2 1
 
 | 工具名 | 文本格式 | JSON 示例 | 说明 |
 |--------|----------|-----------|------|
-| add_element | `ADD <type> <x> <y> [alias]` | `{"tool":"add_element","params":{"type":"AND","x":240,"y":60,"alias":"g1"}}` | 添加元件。type: AND/OR/NOT/INPUT/OUTPUT/MODULE |
+| add_element | `ADD <type> <x> <y> [alias]` | `{"tool":"add_element","params":{"type":"AND","x":240,"y":60,"alias":"g1"}}` | 添加元件。type: AND/OR/NOT/INPUT/OUTPUT/BYTE_INPUT/BYTE_OUTPUT/MODULE |
 | add_wire | `WIRE <from> <idx> <to> <idx>` | `{"tool":"add_wire","params":{"from_ref":"g1","from_port_idx":0,"to_ref":"g2","to_port_idx":1}}` | 连接端口（索引从 0 开始） |
 | move_element | `MOVE <id> <x> <y>` | `{"tool":"move_element","params":{"id":"abc123","x":300,"y":100}}` | 移动元件位置 |
 | remove_element | `DEL <id>` | `{"tool":"remove_element","params":{"id":"abc123"}}` | 删除元件及关联导线 |
@@ -285,7 +285,57 @@ WIRE A 0 g1 1
 ---
 
 %%SCENARIO:always%%
-## 6. 模块系统
+## 6. 字节元件（BYTE_INPUT / BYTE_OUTPUT）
+
+字节元件分为两种——**字节输入器（BYTE_INPUT）**和**字节显示器（BYTE_OUTPUT）**，用于在电路中以 8 位二进制形式处理和查看字节数值。
+
+### 6.1 BYTE_INPUT（字节输入器）
+
+- **右侧 8 个输出端口**：D0（最上，LSB）到 D7（最下，MSB）
+- **方框内黄色大字**：显示当前存储的十进制数值（0~255）
+- **底部标签**：`BIN`
+- **设置数值**：右键点击元件，在弹出的弹窗中输入 0~255 的数值
+- **仿真行为**：将 byteValue 按位输出到 8 个端口（D(i) = (byteValue >> i) & 1）
+
+### 6.2 BYTE_OUTPUT（字节显示器）
+
+- **左侧 8 个输入端口**：D0（最上，LSB）到 D7（最下，MSB）
+- **方框内黄色大字**：显示当前 8 位输入组合对应的十进制数值（0~255）
+- **底部标签**：`BOUT`
+- **仿真行为**：读取 8 个输入位，合并计算 byteValue
+
+### 6.3 指令用法
+
+```
+ADD BYTE_INPUT 400 200
+ADD BYTE_OUTPUT 600 200
+```
+
+在 AI 指令中，两种字节元件使用标准 `ADD` 语法。alias 参数可用于后续引用。
+
+### 6.4 数值计算规则
+
+```
+byteValue = (D0 ? 1 : 0) | (D1 ? 2 : 0) | (D2 ? 4 : 0) | ... | (D7 ? 128 : 0)
+```
+
+D0 是最低位（LSB），D7 是最高位（MSB）。未连接的输入端口视为 0。
+
+### 6.5 典型场景
+
+- **信号源**：用 BYTE_INPUT 生成一个 8 位数值，输出到数据总线
+- **数值显示**：将计数器或 ALU 的 8 位输出接入 BYTE_OUTPUT，直观查看数值
+- **模块内部使用**：两种字节元件均可嵌套在自定义模块（FUNCTION）内部
+
+### 6.6 注意事项
+
+- BYTE_INPUT 有 8 个输出端口，BYTE_OUTPUT 有 8 个输入端口，两者均不驱动信号传播（`state` 恒为 `false`）
+- 端口索引 0 = D0 (LSB, 权重 1)，端口索引 7 = D7 (MSB, 权重 128)
+- 导线连接时必须按正确的端口索引连接：索引 0 对应最上方端口
+
+---
+
+## 7. 模块系统
 
 1. 搭建包含 INPUT 和 OUTPUT 的子电路
 2. `DEFINE_MODULE <name>` 封装为模块
@@ -298,7 +348,7 @@ WIRE A 0 g1 1
 ---
 
 %%SCENARIO:always%%
-## 7. 自治执行流程
+## 8. 自治执行流程
 
 1. **分类**：系统先对用户消息做快速分类（circuit / chat）
 2. **circuit 模式** 进入五阶段循环（Think → Plan → Build → Observe → Sum）：
